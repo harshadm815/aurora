@@ -61,7 +61,7 @@ class FileReaderTool(BaseTool):
     def __init__(self):
         super().__init__("FileReader")
 
-    def execute(self):
+    def execute(self, **_):
         return "file contents"
 
 

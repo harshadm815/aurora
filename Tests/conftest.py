@@ -17,6 +17,14 @@ class FakeProvider(BaseProvider):
         return self.reply
 
 
+@pytest.fixture(autouse=True)
+def isolated_database(tmp_path, monkeypatch):
+    """Every test gets its own database; the real aurora_memory.db is never touched."""
+    from aurora.config import settings
+
+    monkeypatch.setattr(settings, "DATABASE_PATH", tmp_path / "aurora_test.db")
+
+
 @pytest.fixture
 def fake_provider():
     return FakeProvider()

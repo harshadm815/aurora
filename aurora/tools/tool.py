@@ -2,6 +2,7 @@ from abc import ABC, abstractmethod
 from typing import ClassVar
 
 from aurora.kernel.permissions import Permission
+from aurora.tools.result import ToolResult
 
 
 class BaseTool(ABC):
@@ -10,6 +11,9 @@ class BaseTool(ABC):
 
     Tools list the permissions they need in ``required_permissions``;
     the ToolManager refuses to run a tool unless all are granted.
+
+    ``execute`` receives the router's arguments as keyword arguments and
+    returns a ToolResult.
     """
 
     required_permissions: ClassVar[tuple[Permission, ...]] = ()
@@ -18,7 +22,7 @@ class BaseTool(ABC):
         self.name = name
 
     @abstractmethod
-    def execute(self, *args, **kwargs):
+    def execute(self, **arguments) -> ToolResult:
         """
         Executes the tool.
         """

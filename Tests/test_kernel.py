@@ -11,7 +11,6 @@ from aurora.kernel.context import KernelContext
 from aurora.kernel.permissions import Permission, PermissionDeniedError, PermissionManager
 from aurora.plugins.plugin import BasePlugin
 from aurora.plugins.plugin_manager import PluginManager
-from aurora.plugins.weather_plugin import WeatherPlugin
 
 
 class GoodService(BaseService):
@@ -161,14 +160,13 @@ def test_plugin_can_publish_events():
     assert received[0].data == 21.5
 
 
-def test_weather_plugin_needs_network_grant():
+def test_network_plugin_needs_network_grant():
     manager = PluginManager()
-    weather = WeatherPlugin()
-    manager.register(weather)
+    manager.register(RecordingPlugin("Feed", needs=[Permission.NETWORK]))
 
     manager.initialize_all()
 
-    assert manager.status() == {"Weather": "Disabled"}
+    assert manager.status() == {"Feed": "Disabled"}
 
 
 def test_duplicate_plugin_rejected():
@@ -256,22 +254,21 @@ def test_engine_publishes_lifecycle_and_message_events_in_order(fake_provider):
 
 def test_engine_plugins_follow_kernel_lifecycle(fake_provider):
     engine = make_engine(
-        fake_provider, permissions=PermissionManager({"Weather": ["network"]})
+        fake_provider, permissions=PermissionManager({"Feed": ["network"]})
     )
-    engine.register_plugin(WeatherPlugin())
+    engine.register_plugin(RecordingPlugin("Feed", needs=[Permission.NETWORK]))
 
     engine.start()
-    assert engine.status() == {
-        "running": True,
-        "services": {"Brain": "Running"},
-        "plugins": {"Weather": "Running"},
-    }
+    status = engine.status()
+    assert status["running"] is True
+    assert status["services"] == {"Brain": "Running"}
+    assert status["plugins"] == {"Feed": "Running"}
 
     with pytest.raises(RuntimeError):
         engine.register_plugin(RecordingPlugin("Late"))
 
     engine.shutdown()
-    assert engine.status()["plugins"] == {"Weather": "Stopped"}
+    assert engine.status()["plugins"] == {"Feed": "Stopped"}
 
 
 def test_start_and_shutdown_are_idempotent(fake_provider):
@@ -309,7 +306,7 @@ def test_brain_service_errors_when_provider_unavailable(fake_provider):
     assert engine.status()["services"] == {"Brain": "Error"}
 
 
-def test_engine_routes_each_message_but_brain_still_answers(fake_provider):
+def test_engine_publishes_route_decision(fake_provider):
     from aurora.routing.intent import Intent
 
     engine = make_engine(fake_provider)
@@ -317,8 +314,7 @@ def test_engine_routes_each_message_but_brain_still_answers(fake_provider):
     engine.events.subscribe(topics.ROUTE_DECIDED, routes.append)
     engine.start()
 
-    reply = engine.process_message("12 * (7 + 3)")
+    engine.process_message("12 * (7 + 3)")
 
-    assert reply == "Test reply."  # Tool execution arrives in Milestone 4.
     assert engine.last_route.intent is Intent.CALCULATOR
     assert routes[0].data["arguments"] == {"expression": "12 * (7 + 3)"}

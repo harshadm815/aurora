@@ -8,7 +8,7 @@ model names, paths or versions.
 from pathlib import Path
 
 APP_NAME = "AURORA"
-VERSION = "0.7.0"
+VERSION = "0.8.0"
 
 USER_NAME = "Harry"
 
@@ -44,4 +44,19 @@ ROUTE_CLARIFY_MARGIN = 0.1
 #     PERMISSION_GRANTS = {
 #         "Weather": ["network"],
 #     }
-PERMISSION_GRANTS: dict[str, list[str]] = {}
+#
+# The built-in tools are granted only what they need. Remove a line to
+# switch that capability off.
+PERMISSION_GRANTS: dict[str, list[str]] = {
+    "Remember": ["memory.write"],
+    "Recall": ["memory.read"],
+    "Forget": ["memory.read", "memory.write"],
+    "Weather": ["network"],   # Sends place names to open-meteo.com.
+}
+
+# Weather
+#
+# Used when you ask "what's the weather?" without naming a place.
+# None means AURORA will ask which place you mean.
+DEFAULT_LOCATION: str | None = None
+WEATHER_TIMEOUT_SECONDS = 10

@@ -1,4 +1,5 @@
 import logging
+import re
 
 from aurora.brain.brain import Brain
 from aurora.config import settings
@@ -8,15 +9,24 @@ from aurora.events.bus import EventBus
 from aurora.kernel.context import KernelContext
 from aurora.kernel.permissions import PermissionManager
 from aurora.kernel.service_manager import ServiceManager
+from aurora.memory.manager import MemoryManager
 from aurora.plugins.plugin import BasePlugin
 from aurora.plugins.plugin_manager import PluginManager
 from aurora.routing.decision import RouteDecision
 from aurora.routing.router import IntentRouter
 from aurora.services.brain_service import BrainService
+from aurora.tool_plugins.registry import default_tools
+from aurora.tools.executor import ToolExecutor
+from aurora.tools.result import ToolResult
+from aurora.tools.tool import BaseTool
+from aurora.tools.tool_manager import ToolManager
 
 logger = logging.getLogger(__name__)
 
 SOURCE = "Kernel"
+
+_YES = re.compile(r"^(?:y|yes|yeah|yep|sure|ok|okay|confirm|do it|go ahead)[.!]*$", re.I)
+_NO = re.compile(r"^(?:n|no|nope|cancel|stop|don'?t|never ?mind)[.!]*$", re.I)
 
 
 class AuroraEngine:
@@ -27,6 +37,10 @@ class AuroraEngine:
     perform reasoning itself. It does not print; the user
     interface (main.py) owns all terminal output.
 
+    Message flow:
+        pending confirmation? → yes/no handled
+        route → clarify | tool | Brain
+
     Startup order:   services → plugins → ``kernel.started``
     Shutdown order:  ``kernel.stopping`` → plugins → services → ``kernel.stopped``
     """
@@ -35,6 +49,8 @@ class AuroraEngine:
         self,
         brain: Brain | None = None,
         permissions: PermissionManager | None = None,
+        memory: MemoryManager | None = None,
+        tools: list[BaseTool] | None = None,
     ):
         # Shared kernel facilities
         self.events = EventBus()
@@ -45,6 +61,16 @@ class AuroraEngine:
         self.conversation = Conversation()
         self.router = IntentRouter()
         self.last_route: RouteDecision | None = None
+        self.memory = memory or MemoryManager()
+
+        # Tools
+        self.tool_manager = ToolManager(self.permissions)
+        for tool in (default_tools(self.memory) if tools is None else tools):
+            self.tool_manager.register(tool)
+        self.executor = ToolExecutor(self.tool_manager, self.events)
+
+        # An action waiting for the user's yes/no: (tool name, result).
+        self.pending: tuple[str, ToolResult] | None = None
 
         # Kernel managers
         self.service_manager = ServiceManager(self.events)
@@ -82,6 +108,8 @@ class AuroraEngine:
         logger.info("Kernel online: %s", self.status())
         self.events.emit(topics.KERNEL_STARTED, self.status(), source=SOURCE)
 
+    # --- Messages -----------------------------------------------------------
+
     def process_message(self, message: str) -> str:
 
         if not self.running:
@@ -92,14 +120,11 @@ class AuroraEngine:
         self.conversation.add_user(message)
         self.events.emit(topics.MESSAGE_RECEIVED, message, source=SOURCE)
 
-        # Routing decides what *should* handle the message. Until tool
-        # execution exists (Milestone 4) the Brain still answers everything;
-        # the decision is logged and published so it can be observed.
-        self.last_route = self.route(message)
+        response = self._answer_pending(message)
 
-        response = self.brain.ask(
-            self.conversation.history()
-        )
+        if response is None:
+            self.last_route = self.route(message)
+            response = self._handle(self.last_route)
 
         self.conversation.add_assistant(
             response
@@ -107,6 +132,52 @@ class AuroraEngine:
         self.events.emit(topics.RESPONSE_GENERATED, response, source=SOURCE)
 
         return response
+
+    def _answer_pending(self, message: str) -> str | None:
+        """Handles a yes/no to a pending action. Returns None if there wasn't one."""
+        if self.pending is None:
+            return None
+
+        name, pending = self.pending
+        self.pending = None
+        text = message.strip()
+
+        if _YES.match(text):
+            self.events.emit(topics.CONFIRMATION_ANSWERED, {"tool": name, "approved": True}, source=SOURCE)
+            return self.executor.confirm(name, pending).message
+
+        self.events.emit(topics.CONFIRMATION_ANSWERED, {"tool": name, "approved": False}, source=SOURCE)
+
+        if _NO.match(text):
+            return "Okay, I won't do that."
+
+        # Anything else cancels the pending action and is handled normally.
+        logger.info("Pending %s action cancelled by a new message", name)
+        return None
+
+    def _handle(self, decision: RouteDecision) -> str:
+
+        if decision.needs_clarification:
+            return self._clarifying_question(decision)
+
+        if self.executor.can_handle(decision):
+            result = self.executor.execute(decision)
+            if result.needs_confirmation:
+                name = self.executor.tool_for(decision)
+                self.pending = (name, result)
+                self.events.emit(topics.CONFIRMATION_REQUESTED, {"tool": name}, source=SOURCE)
+            return result.message
+
+        return self.brain.ask(
+            self.conversation.history()
+        )
+
+    @staticmethod
+    def _clarifying_question(decision: RouteDecision) -> str:
+        options = [alt.intent.value for alt in decision.alternatives if alt.uses_tool][:2]
+        if len(options) == 2:
+            return f"Did you want me to use {options[0]} or {options[1]}? Could you rephrase?"
+        return "I didn't catch that. Could you say it another way?"
 
     def route(self, message: str) -> RouteDecision:
         """Returns (and publishes) the routing decision for a message."""
@@ -122,14 +193,28 @@ class AuroraEngine:
     def clear_conversation(self):
 
         self.conversation.clear()
+        self.pending = None
         logger.info("Conversation cleared")
         self.events.emit(topics.CONVERSATION_CLEARED, source=SOURCE)
+
+    # --- Status ---------------------------------------------------------------
+
+    def tool_status(self) -> dict:
+        status = {}
+        for tool in self.tool_manager.tools.values():
+            missing = self.permissions.missing(tool.name, tool.required_permissions)
+            status[tool.name] = (
+                "Ready" if not missing
+                else "Blocked (needs " + ", ".join(p.value for p in missing) + ")"
+            )
+        return status
 
     def status(self) -> dict:
         return {
             "running": self.running,
             "services": self.service_manager.status(),
             "plugins": self.plugin_manager.status(),
+            "tools": self.tool_status(),
         }
 
     def shutdown(self):

@@ -1,4 +1,5 @@
 import logging
+import sys
 
 from aurora.config import settings
 from aurora.kernel.engine import AuroraEngine
@@ -19,6 +20,8 @@ def print_status(status: dict) -> None:
         print(f"  plugin   {name:<12} {state}")
     if not plugins:
         print("  plugins  none registered")
+    for name, state in status.get("tools", {}).items():
+        print(f"  tool     {name:<12} {state}")
     print()
 
 
@@ -38,6 +41,14 @@ def print_route(decision) -> None:
 
 
 def main():
+    # Make sure characters like ° and – display correctly on Windows,
+    # including when output is piped or redirected.
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, ValueError):
+            pass
+
     setup_logging()
 
     engine = AuroraEngine()

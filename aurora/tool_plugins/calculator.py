@@ -10,6 +10,7 @@ from a user or an LLM can never execute code.
 import ast
 import operator
 
+from aurora.tools.result import ToolResult
 from aurora.tools.tool import BaseTool
 
 MAX_EXPRESSION_LENGTH = 200
@@ -99,10 +100,20 @@ class CalculatorTool(BaseTool):
     def __init__(self):
         super().__init__("Calculator")
 
-    def execute(self, expression):
+    def execute(self, expression: str = "", **_) -> ToolResult:
 
         try:
-            return evaluate(expression)
-
+            value = evaluate(expression)
         except CalculationError as error:
-            return f"Invalid expression: {error}"
+            return ToolResult(False, f"I couldn't calculate that: {error}")
+
+        return ToolResult(True, f"{expression} = {format_number(value)}", value)
+
+
+def format_number(value: int | float) -> str:
+    """Shows 2.5 as 2.5, 3.0 as 3, and avoids float noise like 0.30000000000000004."""
+    if isinstance(value, float):
+        if value.is_integer():
+            return str(int(value))
+        return f"{value:.10g}"
+    return str(value)

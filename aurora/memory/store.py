@@ -20,8 +20,10 @@ class MemoryStore:
     - Delete facts.
     """
 
-    def __init__(self, database_path: str | Path = settings.DATABASE_PATH):
-        self.database_path = database_path
+    def __init__(self, database_path: str | Path | None = None):
+        # Resolved at call time (not import time) so tests can point
+        # settings.DATABASE_PATH at a temporary file.
+        self.database_path = database_path or settings.DATABASE_PATH
         self._create_database()
 
     def _connect(self):

@@ -24,3 +24,8 @@ RESPONSE_GENERATED = "conversation.response_generated"
 CONVERSATION_CLEARED = "conversation.cleared"
 
 PERMISSION_DENIED = "permission.denied"
+
+TOOL_EXECUTED = "tool.executed"
+TOOL_FAILED = "tool.failed"
+CONFIRMATION_REQUESTED = "tool.confirmation_requested"
+CONFIRMATION_ANSWERED = "tool.confirmation_answered"

@@ -1,5 +1,36 @@
 # Changelog
 
+## 0.8.0 — Milestone 4: Tool execution (2026-11-04)
+
+### Added
+- Route decisions are now acted on: tool intents run the matching tool
+  and the tool's reply is returned without involving the language model.
+- `ToolExecutor` (intent to tool) and `ToolResult` (success, message,
+  data, optional confirmation).
+- Memory tools: Remember, Recall (keyword matching with "related"
+  results), Forget (asks for confirmation before deleting).
+- Weather tool using Open-Meteo (no API key): current conditions, today,
+  tomorrow, this week, this weekend. Reports failures instead of guessing.
+- Confirmation flow for consequential actions: yes runs it, no cancels,
+  anything else cancels and is handled normally; `clear` cancels too.
+- Default least-privilege grants for the built-in tools; `status` shows
+  each tool as Ready or Blocked.
+- `DEFAULT_LOCATION` and `WEATHER_TIMEOUT_SECONDS` settings.
+- Events: `tool.executed`, `tool.failed`, `tool.confirmation_requested`,
+  `tool.confirmation_answered`; `permission.denied` is now published.
+- Tests use an isolated database automatically. 176 tests.
+
+### Changed
+- `BaseTool.execute(**arguments)` returns a `ToolResult`. The calculator
+  replies like `12 * (7 + 3) = 120`.
+- `MemoryStore` resolves its database path when created, not at import.
+- Terminal output is forced to UTF-8 so ° and – display correctly.
+- `httpx` added to `Requirements.txt` (already installed as an Ollama
+  dependency).
+
+### Removed
+- `WeatherPlugin` placeholder (replaced by the Weather tool).
+
 ## 0.7.0 — Milestone 3: RouteDecision (2026-11-04)
 
 ### Added

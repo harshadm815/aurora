@@ -1,6 +1,6 @@
 # AURORA Architecture
 
-Version: 0.7.0
+Version: 0.8.0
 Status: Describes what exists in the code today. Planned components are listed separately at the end.
 
 ---
@@ -21,6 +21,10 @@ AuroraEngine  (aurora/kernel/engine.py)
    ├── PermissionManager ────┤── KernelContext (what plugins may use)
    ├── Conversation ── Personality (system prompt)
    ├── IntentRouter ── RouteDecision (published as routing.decided)
+   ├── ToolExecutor ── ToolManager (permission-checked)
+   │      ├── Calculator
+   │      ├── Remember / Recall / Forget ── MemoryManager ── SQLite
+   │      └── Weather ── Open-Meteo (network)
    ├── ServiceManager ── publishes service.* events
    │      └── BrainService ── Brain ── OllamaProvider ── Ollama (tinyllama)
    └── PluginManager ── receives KernelContext, publishes plugin.* events
@@ -60,7 +64,9 @@ and `status` reports it instead of claiming all systems are operational.
   `health_data`, `hardware_control`.
 - Grants are per component name and come only from
   `settings.PERMISSION_GRANTS`. An unknown permission name there is an
-  error at startup.
+  error at startup. By default only the built-in tools are granted, each
+  with just what it needs (see the Tools table).
+- `status` lists every tool as `Ready` or `Blocked (needs ...)`.
 - Plugins and tools declare `required_permissions`. A plugin missing any
   of them is **blocked** (never initialized, `plugin.blocked` event,
   warning in the terminal). A tool missing any of them raises
@@ -103,14 +109,47 @@ engine.register_plugin(RoomSensorPlugin())
 
 1. `main.py` reads a line from the user.
 2. `AuroraEngine.process_message()` appends it to the `Conversation`.
-3. The `IntentRouter` produces a `RouteDecision`, which is logged and
-   published as `routing.decided`. **It does not change what happens
-   yet**: tool execution is Milestone 4.
-4. The engine sends the full history (system prompt + turns) to the `Brain`.
-5. The `Brain` forwards it to its provider (`OllamaProvider`).
-6. The reply is appended to the conversation and returned to `main.py`.
+3. If an action is waiting for confirmation, "yes" runs it, "no" cancels
+   it, and anything else cancels it and is handled as a new message.
+4. Otherwise the `IntentRouter` produces a `RouteDecision`
+   (published as `routing.decided`), and:
+   - `clarify`: AURORA asks the user to rephrase.
+   - A tool intent with a registered tool: the `ToolExecutor` runs it
+     and the tool's own message is the reply. **The language model is not
+     involved**, so computed or retrieved facts reach the user unchanged.
+   - Anything else: the full history goes to the `Brain`.
+5. The reply (from a tool or the Brain) is appended to the conversation,
+   so the Brain sees tool answers as context in later turns.
 
-Memory and tools are **not** in this flow yet.
+## Tools
+
+| Tool | Intent | Needs | What it does |
+|---|---|---|---|
+| Calculator | `calculator` | none | Safe arithmetic, e.g. `12 * (7 + 3) = 120` |
+| Remember | `remember` | `memory.write` | Stores an explicit note ("remember that ...") as a `Note` fact |
+| Recall | `recall` | `memory.read` | Keyword lookup. Only memories containing **every** keyword count as an answer; partial matches are listed separately as "related" |
+| Forget | `forget` | `memory.read`, `memory.write` | Lists matching memories and **asks for confirmation** before deleting (including exact duplicates) |
+| Weather | `weather` | `network` | Open-Meteo: current conditions and today, tomorrow, this week, this weekend |
+
+A tool returns a `ToolResult` (`aurora/tools/result.py`): `success`,
+`message` (the reply), `data`, and optionally `confirm`, a function the
+kernel only calls after the user says yes. This is the pattern for every
+future consequential action (deleting, controlling hardware).
+
+Failures are always reported, never papered over by the language model:
+
+- Missing permission: explains which permission and where to grant it.
+- Tool crash: "The X tool failed unexpectedly (...)" and a `tool.failed` event.
+- Weather service down, slow, or place not found: says so, and
+  "I won't guess the weather."
+
+`WeatherPlugin` (a placeholder) was removed; weather is now a tool.
+
+### Privacy note
+
+The Weather tool sends the place name (then its coordinates) to
+open-meteo.com. Nothing else leaves the machine. Remove `"Weather"` from
+`PERMISSION_GRANTS` to switch this off.
 
 ## Routing
 
@@ -169,12 +208,12 @@ the message to the Brain.
 | `aurora.providers` | `base_provider.py`, `ollama_provider.py` | Model backends behind one `chat(messages)` interface | Yes |
 | `aurora.conversation` | `conversation.py` | Working memory: message history for the current session | Yes |
 | `aurora.personality` | `personality.py` | AURORA's system prompt | Yes |
-| `aurora.plugins` | `plugin.py`, `plugin_manager.py`, `weather_plugin.py` | Plugin lifecycle with permission checks. `WeatherPlugin` is a placeholder (needs `network`, no data source) | Yes (none registered) |
-| `aurora.memory` | `store.py`, `manager.py` | Long-term memory in SQLite: add, search, edit, delete, exact-duplicate check | No |
+| `aurora.plugins` | `plugin.py`, `plugin_manager.py` | Plugin lifecycle with permission checks | Yes (none registered) |
+| `aurora.memory` | `store.py`, `manager.py` | Long-term memory in SQLite: add, search, keyword recall, edit, delete, exact-duplicate check | Yes (through tools) |
 | `aurora.knowledge` | `fact.py`, `extractor.py` | `Fact` data model; rule-based `FactExtractor` (two patterns) | No |
 | `aurora.routing` | `intent.py`, `decision.py`, `router.py` | Scored rule-based `IntentRouter` returning a structured `RouteDecision` | Yes (observed only) |
-| `aurora.tools` | `tool.py`, `tool_manager.py` | Tool interface and registry; checks `required_permissions` on every call | No |
-| `aurora.tool_plugins` | `calculator.py` | Calculator using a safe AST evaluator (no `eval`) | No |
+| `aurora.tools` | `tool.py`, `tool_manager.py`, `result.py`, `executor.py` | Tool interface, permission-checked registry, `ToolResult`, intent-to-tool execution | Yes |
+| `aurora.tool_plugins` | `calculator.py`, `memory_tools.py`, `weather.py`, `registry.py` | The built-in tools and `default_tools()` | Yes |
 | `aurora.events` | `event.py`, `bus.py`, `topics.py` | Publish/subscribe with error isolation; standard event names | Yes |
 
 ## Design rules
@@ -215,8 +254,10 @@ temporary database instead of `aurora_memory.db`.
 
 | Gap | Milestone |
 |---|---|
-| Route decisions are not acted on: the Brain answers everything, so arithmetic is still done (badly) by TinyLlama | 4: Tool Execution |
-| No weather data source; `Weather` target has nothing behind it | 4: Tool Execution |
+| Memory is only used when asked explicitly; facts aren't extracted from conversation or given to the Brain automatically | 5: Intelligent Memory |
+| Recall is keyword matching; "where do I study?" won't find "I go to college in Pune" | 5: Intelligent Memory |
+| No internet search or file/document reading tools | 7: Knowledge and Research |
+| One tool per message; no multi-step requests ("weather in Pune and Delhi") | 6: Planning Engine |
 | Routing is rule-based English only; no LLM fallback for unusual phrasing | Later, once a model good at structured output is available |
 | Fact extraction is two string rules and splits on the first "is"/"like" in the sentence | 5: Intelligent Memory |
 | No automatic memory retrieval, evaluation, or conflict resolution | 5: Intelligent Memory |

@@ -48,10 +48,20 @@ def test_rejects_invalid_or_dangerous_input(expression):
         evaluate(expression)
 
 
-def test_tool_returns_message_instead_of_raising():
-    result = CalculatorTool().execute("1 / 0")
+def test_tool_returns_failure_instead_of_raising():
+    result = CalculatorTool().execute(expression="1 / 0")
 
-    assert result.startswith("Invalid expression")
+    assert result.success is False
+    assert "Division by zero" in result.message
+
+
+@pytest.mark.parametrize(
+    "expression, message",
+    [("12 * (7 + 3)", "12 * (7 + 3) = 120"), ("10 / 4", "10 / 4 = 2.5"),
+     ("6 / 2", "6 / 2 = 3"), ("0.1 + 0.2", "0.1 + 0.2 = 0.3")],
+)
+def test_tool_message(expression, message):
+    assert CalculatorTool().execute(expression=expression).message == message
 
 
 def test_tool_manager_runs_calculator_case_insensitively():
@@ -59,7 +69,7 @@ def test_tool_manager_runs_calculator_case_insensitively():
     manager.register(CalculatorTool())
 
     assert manager.list_tools() == ["calculator"]
-    assert manager.execute("Calculator", "12 * (7 + 3)") == 120
+    assert manager.execute("Calculator", expression="12 * (7 + 3)").data == 120
 
 
 def test_tool_manager_unknown_tool():

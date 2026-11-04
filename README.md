@@ -29,7 +29,7 @@ but are not yet connected to the conversation. See
 .venv\Scripts\python.exe main.py
 ```
 
-Commands: `status` shows system status, `clear` resets the conversation, `exit` shuts down.
+Commands: `status` shows system status, `route <message>` shows how a message would be routed, `clear` resets the conversation, `exit` shuts down.
 Logs are written to `Logs/aurora.log`.
 
 ## Test

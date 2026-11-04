@@ -1,6 +1,6 @@
 # AURORA Architecture
 
-Version: 0.6.0
+Version: 0.7.0
 Status: Describes what exists in the code today. Planned components are listed separately at the end.
 
 ---
@@ -20,6 +20,7 @@ AuroraEngine  (aurora/kernel/engine.py)
    ├── EventBus ─────────────┐
    ├── PermissionManager ────┤── KernelContext (what plugins may use)
    ├── Conversation ── Personality (system prompt)
+   ├── IntentRouter ── RouteDecision (published as routing.decided)
    ├── ServiceManager ── publishes service.* events
    │      └── BrainService ── Brain ── OllamaProvider ── Ollama (tinyllama)
    └── PluginManager ── receives KernelContext, publishes plugin.* events
@@ -102,11 +103,59 @@ engine.register_plugin(RoomSensorPlugin())
 
 1. `main.py` reads a line from the user.
 2. `AuroraEngine.process_message()` appends it to the `Conversation`.
-3. The engine sends the full history (system prompt + turns) to the `Brain`.
-4. The `Brain` forwards it to its provider (`OllamaProvider`).
-5. The reply is appended to the conversation and returned to `main.py`.
+3. The `IntentRouter` produces a `RouteDecision`, which is logged and
+   published as `routing.decided`. **It does not change what happens
+   yet**: tool execution is Milestone 4.
+4. The engine sends the full history (system prompt + turns) to the `Brain`.
+5. The `Brain` forwards it to its provider (`OllamaProvider`).
+6. The reply is appended to the conversation and returned to `main.py`.
 
-Memory, routing and tools are **not** in this flow yet.
+Memory and tools are **not** in this flow yet.
+
+## Routing
+
+`IntentRouter.route(message)` (`aurora/routing/router.py`) returns a
+`RouteDecision` (`aurora/routing/decision.py`):
+
+| Field | Meaning |
+|---|---|
+| `intent` | `conversation`, `calculator`, `weather`, `remember`, `recall`, `forget`, `clarify` |
+| `confidence` | 0.0–1.0 |
+| `target` | Component to handle it: `Brain`, `Calculator`, `Weather`, `Memory`, or `None` for clarify |
+| `arguments` | Read-only, e.g. `{"expression": "12 * (7 + 3)"}`, `{"location": "Pune", "when": "tomorrow"}`, `{"content": "..."}`, `{"query": "..."}` |
+| `reason` | Why, for logs |
+| `alternatives` | The other candidates, best first |
+
+How it decides:
+
+1. Strip polite/wake-word prefixes ("Aurora, please can you …").
+2. Every rule (calculator, weather, remember, forget, recall) returns a
+   scored candidate or nothing. A rule that crashes is logged and skipped.
+3. A default `conversation` candidate is added at
+   `settings.ROUTE_CONVERSATION_CONFIDENCE` (0.5). A tool only wins if its
+   rule is more confident than that.
+4. If the two best tool candidates differ by less than
+   `settings.ROUTE_CLARIFY_MARGIN` (0.1), the result is `clarify`.
+   Explicit memory commands ("remember that …", "forget …") are exempt:
+   whatever follows the command is content, not a competing request.
+
+Rules are conservative on purpose. Examples:
+
+| Message | Intent |
+|---|---|
+| `what is 5 plus 3?` | calculator `5 + 3` (0.95) |
+| `I need 3/4 cup of flour` | conversation (calculator kept as a 0.45 alternative) |
+| `this is well-known`, `2004-11-04`, `555-1234`, URLs | conversation |
+| `what's the weather in Pune tomorrow?` | weather, Pune, tomorrow (0.9) |
+| `what is the temperature in my room?` | conversation (indoor; a sensor question, not weather) |
+| `remember that my exam is on Friday` | remember (0.95) |
+| `I can't remember the formula` | conversation |
+| `my favourite colour is blue` | conversation (automatic extraction is Milestone 5) |
+| `what is my favourite colour?` | recall (0.75) |
+| `forget it` | conversation ("never mind") |
+
+Type `route <message>` in the terminal to see a decision without sending
+the message to the Brain.
 
 ## Packages
 
@@ -123,7 +172,7 @@ Memory, routing and tools are **not** in this flow yet.
 | `aurora.plugins` | `plugin.py`, `plugin_manager.py`, `weather_plugin.py` | Plugin lifecycle with permission checks. `WeatherPlugin` is a placeholder (needs `network`, no data source) | Yes (none registered) |
 | `aurora.memory` | `store.py`, `manager.py` | Long-term memory in SQLite: add, search, edit, delete, exact-duplicate check | No |
 | `aurora.knowledge` | `fact.py`, `extractor.py` | `Fact` data model; rule-based `FactExtractor` (two patterns) | No |
-| `aurora.routing` | `intent.py`, `router.py` | Keyword-based `IntentRouter` returning an `Intent` enum | No |
+| `aurora.routing` | `intent.py`, `decision.py`, `router.py` | Scored rule-based `IntentRouter` returning a structured `RouteDecision` | Yes (observed only) |
 | `aurora.tools` | `tool.py`, `tool_manager.py` | Tool interface and registry; checks `required_permissions` on every call | No |
 | `aurora.tool_plugins` | `calculator.py` | Calculator using a safe AST evaluator (no `eval`) | No |
 | `aurora.events` | `event.py`, `bus.py`, `topics.py` | Publish/subscribe with error isolation; standard event names | Yes |
@@ -166,8 +215,9 @@ temporary database instead of `aurora_memory.db`.
 
 | Gap | Milestone |
 |---|---|
-| Router returns a bare enum; `-` or `/` anywhere routes to the calculator | 3: RouteDecision |
-| Router, tools and memory are not called from the engine | 4: Tool Execution |
+| Route decisions are not acted on: the Brain answers everything, so arithmetic is still done (badly) by TinyLlama | 4: Tool Execution |
+| No weather data source; `Weather` target has nothing behind it | 4: Tool Execution |
+| Routing is rule-based English only; no LLM fallback for unusual phrasing | Later, once a model good at structured output is available |
 | Fact extraction is two string rules and splits on the first "is"/"like" in the sentence | 5: Intelligent Memory |
 | No automatic memory retrieval, evaluation, or conflict resolution | 5: Intelligent Memory |
 | Permission grants are static config; no prompt to ask the user at runtime | Later, with physical-action tools (11) |

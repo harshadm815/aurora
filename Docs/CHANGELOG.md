@@ -1,5 +1,33 @@
 # Changelog
 
+## 0.7.0 — Milestone 3: RouteDecision (2026-11-04)
+
+### Added
+- `RouteDecision`: intent, confidence, target, read-only arguments,
+  reason and ranked alternatives.
+- New intents: `remember`, `recall`, `forget`, `clarify` (replacing the
+  vague `memory`, `reasoning`, `unknown`).
+- Router extracts arguments: calculator expression (including "plus",
+  "times", "x", "^"), weather location and time, memory content/query.
+- Clarification when two tool candidates are nearly tied.
+- Engine routes every message and publishes `routing.decided`;
+  `route <message>` command in the terminal.
+- Routing thresholds in `settings.py`.
+- 56 routing tests.
+
+### Fixed
+- Messages containing `-` or `/` (hyphenated words, URLs, dates, phone
+  numbers) no longer route to the calculator.
+- "I can't remember…" and statements like "my favourite colour is blue"
+  are no longer treated as memory commands.
+- Indoor/device temperatures and non-questions ("Purple Rain is my
+  favourite song") are not routed to weather.
+
+### Not changed
+- The Brain still answers every message; decisions are observed only
+  until Milestone 4.
+
+
 ## 0.6.0 — Milestone 2: Complete kernel (2026-11-04)
 
 ### Added

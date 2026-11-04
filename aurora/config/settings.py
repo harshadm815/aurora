@@ -8,7 +8,7 @@ model names, paths or versions.
 from pathlib import Path
 
 APP_NAME = "AURORA"
-VERSION = "0.6.0"
+VERSION = "0.7.0"
 
 USER_NAME = "Harry"
 
@@ -25,6 +25,15 @@ LOG_FILE = LOG_DIR / "aurora.log"
 # Logging
 DEBUG = True
 LOG_LEVEL = "DEBUG" if DEBUG else "INFO"
+
+# Routing
+#
+# A tool rule must be more confident than this to beat a normal
+# conversational answer from the Brain.
+ROUTE_CONVERSATION_CONFIDENCE = 0.5
+# If the two best tool candidates are closer than this, AURORA asks
+# what was meant instead of guessing.
+ROUTE_CLARIFY_MARGIN = 0.1
 
 # Permissions
 #

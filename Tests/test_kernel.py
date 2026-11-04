@@ -245,6 +245,7 @@ def test_engine_publishes_lifecycle_and_message_events_in_order(fake_provider):
         topics.SERVICE_STARTED,
         topics.KERNEL_STARTED,
         topics.MESSAGE_RECEIVED,
+        topics.ROUTE_DECIDED,
         topics.RESPONSE_GENERATED,
         topics.CONVERSATION_CLEARED,
         topics.KERNEL_STOPPING,
@@ -306,3 +307,18 @@ def test_brain_service_errors_when_provider_unavailable(fake_provider):
     engine.start()
 
     assert engine.status()["services"] == {"Brain": "Error"}
+
+
+def test_engine_routes_each_message_but_brain_still_answers(fake_provider):
+    from aurora.routing.intent import Intent
+
+    engine = make_engine(fake_provider)
+    routes = []
+    engine.events.subscribe(topics.ROUTE_DECIDED, routes.append)
+    engine.start()
+
+    reply = engine.process_message("12 * (7 + 3)")
+
+    assert reply == "Test reply."  # Tool execution arrives in Milestone 4.
+    assert engine.last_route.intent is Intent.CALCULATOR
+    assert routes[0].data["arguments"] == {"expression": "12 * (7 + 3)"}

@@ -10,6 +10,8 @@ from aurora.kernel.permissions import PermissionManager
 from aurora.kernel.service_manager import ServiceManager
 from aurora.plugins.plugin import BasePlugin
 from aurora.plugins.plugin_manager import PluginManager
+from aurora.routing.decision import RouteDecision
+from aurora.routing.router import IntentRouter
 from aurora.services.brain_service import BrainService
 
 logger = logging.getLogger(__name__)
@@ -41,6 +43,8 @@ class AuroraEngine:
 
         # Core components
         self.conversation = Conversation()
+        self.router = IntentRouter()
+        self.last_route: RouteDecision | None = None
 
         # Kernel managers
         self.service_manager = ServiceManager(self.events)
@@ -88,6 +92,11 @@ class AuroraEngine:
         self.conversation.add_user(message)
         self.events.emit(topics.MESSAGE_RECEIVED, message, source=SOURCE)
 
+        # Routing decides what *should* handle the message. Until tool
+        # execution exists (Milestone 4) the Brain still answers everything;
+        # the decision is logged and published so it can be observed.
+        self.last_route = self.route(message)
+
         response = self.brain.ask(
             self.conversation.history()
         )
@@ -98,6 +107,17 @@ class AuroraEngine:
         self.events.emit(topics.RESPONSE_GENERATED, response, source=SOURCE)
 
         return response
+
+    def route(self, message: str) -> RouteDecision:
+        """Returns (and publishes) the routing decision for a message."""
+        decision = self.router.route(message)
+        logger.info(
+            "Route: %s (%.2f) -> %s %s",
+            decision.intent.value, decision.confidence,
+            decision.target, dict(decision.arguments),
+        )
+        self.events.emit(topics.ROUTE_DECIDED, decision.to_dict(), source=SOURCE)
+        return decision
 
     def clear_conversation(self):
 

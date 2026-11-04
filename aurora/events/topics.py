@@ -19,6 +19,7 @@ PLUGIN_FAILED = "plugin.failed"
 PLUGIN_SHUTDOWN = "plugin.shutdown"
 
 MESSAGE_RECEIVED = "conversation.message_received"
+ROUTE_DECIDED = "routing.decided"
 RESPONSE_GENERATED = "conversation.response_generated"
 CONVERSATION_CLEARED = "conversation.cleared"
 

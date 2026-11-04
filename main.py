@@ -22,6 +22,21 @@ def print_status(status: dict) -> None:
     print()
 
 
+def print_route(decision) -> None:
+    print(f"\n  intent      {decision.intent.value}")
+    print(f"  confidence  {decision.confidence:.2f}")
+    print(f"  target      {decision.target or '-'}")
+    for key, value in decision.arguments.items():
+        print(f"  {key:<11} {value}")
+    print(f"  reason      {decision.reason}")
+    if decision.alternatives:
+        others = ", ".join(
+            f"{alt.intent.value} {alt.confidence:.2f}" for alt in decision.alternatives
+        )
+        print(f"  also        {others}")
+    print()
+
+
 def main():
     setup_logging()
 
@@ -36,7 +51,8 @@ def main():
     print(f"{settings.APP_NAME} v{settings.VERSION} online.")
     print("Type 'exit' to shut down.")
     print("Type 'clear' to clear the conversation.")
-    print("Type 'status' to see system status.\n")
+    print("Type 'status' to see system status.")
+    print("Type 'route <message>' to see how a message would be routed.\n")
 
     try:
         while True:
@@ -55,6 +71,10 @@ def main():
 
             if user_input.lower() == "status":
                 print_status(engine.status())
+                continue
+
+            if user_input.lower().startswith("route "):
+                print_route(engine.route(user_input[6:]))
                 continue
 
             try:

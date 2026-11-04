@@ -1,38 +1,346 @@
-from aurora.routing.intent import Intent
+"""
+Rule-based intent router.
 
+Each rule looks at a message and either returns a scored RouteDecision
+or ``None``. The router collects every candidate, adds a default
+"conversation" candidate, and picks the best one. If the two best tool
+candidates are nearly tied, it asks for clarification instead of
+guessing.
+
+Rules are deliberately conservative: a message only goes to a tool
+when it clearly asks for one. Everything else goes to the Brain.
+"""
+
+import logging
+import re
+from collections.abc import Callable
+
+from aurora.config import settings
+from aurora.routing import decision as targets
+from aurora.routing.decision import RouteDecision
+from aurora.routing.intent import Intent
+from aurora.tool_plugins.calculator import CalculationError, evaluate
+
+logger = logging.getLogger(__name__)
+
+Rule = Callable[[str, str], RouteDecision | None]
+
+# --- Shared text helpers ----------------------------------------------------
+
+# Polite / wake-word prefixes that don't change what is being asked.
+_PREFIX = re.compile(
+    r"^(?:(?:hey|ok|okay|hi)\s+)?(?:aurora[\s,:]+)?"
+    r"(?:please\s+)?"
+    r"(?:(?:can|could|would|will)\s+you\s+(?:please\s+)?)?",
+    re.IGNORECASE,
+)
+
+_TRAILING = re.compile(r"[\s?.!]+$")
+
+
+def _strip_prefix(text: str) -> str:
+    return _PREFIX.sub("", text, count=1).strip()
+
+
+def _clean(value: str) -> str:
+    return _TRAILING.sub("", value).strip()
+
+
+# --- Calculator -------------------------------------------------------------
+
+_WORD_OPERATORS = [
+    (re.compile(r"\bto the power of\b", re.I), "**"),
+    (re.compile(r"\bmultiplied by\b", re.I), "*"),
+    (re.compile(r"\bdivided by\b", re.I), "/"),
+    (re.compile(r"\btimes\b", re.I), "*"),
+    (re.compile(r"\bplus\b", re.I), "+"),
+    (re.compile(r"\bminus\b", re.I), "-"),
+    (re.compile(r"\bmod(?:ulo)?\b", re.I), "%"),
+    (re.compile(r"(?<=\d)\s*[x×]\s*(?=[\d(])", re.I), "*"),
+    (re.compile(r"÷"), "/"),
+    (re.compile(r"\^"), "**"),  # People write 2^3 for powers (Python's ^ is XOR).
+]
+
+_CALC_LEAD = re.compile(
+    r"^(?:what(?:'s|\s+is)|calculate|compute|evaluate|solve|how\s+much\s+is)\s+",
+    re.IGNORECASE,
+)
+
+# A run of characters that could be arithmetic.
+_EXPRESSION = re.compile(r"[-+(]*[\d.][\d.\s+\-*/%()]*[\d)]")
+
+# At least one binary operator between two operands.
+_HAS_OPERATOR = re.compile(r"[\d)]\s*(?:\*\*|[+\-*/%])\s*[-+(]*[\d.(]")
+
+# Things that look like arithmetic but aren't: dates, times, phone numbers.
+_NOT_MATH = re.compile(
+    r"^\d{1,4}([-/.])\d{1,2}\1\d{1,4}$"      # 2026-11-04, 04/11/2026
+    r"|^\d{3,}-\d{3,}(?:-\d+)*$"              # 555-1234, 020-555-1234
+)
+
+
+def _normalize_math(text: str) -> str:
+    for pattern, symbol in _WORD_OPERATORS:
+        text = pattern.sub(f" {symbol} ", text)
+    return text
+
+
+def calculator_rule(original: str, body: str) -> RouteDecision | None:
+    text = _normalize_math(body)
+    lead = _CALC_LEAD.match(text)
+    remainder = _clean(text[lead.end():] if lead else text)
+
+    best = None
+    for match in _EXPRESSION.finditer(text):
+        span = match.group().strip()
+        if not _HAS_OPERATOR.search(span) or _NOT_MATH.match(span):
+            continue
+        try:
+            evaluate(span)
+        except CalculationError:
+            continue
+        if best is None or len(span) > len(best):
+            best = span
+
+    if best is None:
+        return None
+
+    expression = " ".join(best.split())
+
+    if remainder == best:
+        return RouteDecision(
+            Intent.CALCULATOR, 0.95, targets.CALCULATOR,
+            {"expression": expression},
+            "The message is an arithmetic expression.",
+        )
+
+    # Arithmetic inside a longer sentence ("I need 3/4 cup of flour") is
+    # more likely conversation; keep it as a low-confidence alternative.
+    return RouteDecision(
+        Intent.CALCULATOR, 0.45, targets.CALCULATOR,
+        {"expression": expression},
+        "The message contains arithmetic inside other text.",
+    )
+
+
+# --- Weather ----------------------------------------------------------------
+
+_WEATHER_STRONG = re.compile(r"\b(?:weather|forecast)\b", re.I)
+
+_WEATHER_WEAK = re.compile(
+    r"\b(?:rain(?:ing|y)?|snow(?:ing|y)?|sunny|cloudy|windy|humid(?:ity)?|"
+    r"temperature|umbrella|how\s+(?:hot|cold|warm)\s+is\s+it)\b",
+    re.I,
+)
+
+# Indoor / body / device temperatures are not weather.
+_NOT_WEATHER = re.compile(
+    r"\b(?:room|inside|indoors?|bedroom|house|home\s+sensor|sensor|cpu|gpu|"
+    r"laptop|computer|body|fever|oven|fridge|water)\b",
+    re.I,
+)
+
+_QUESTION = re.compile(
+    r"\?\s*$|^(?:is|will|what|how|do|does|should|whats|what's|tell\s+me)\b", re.I
+)
+
+_TIME_WORDS = r"(?:today|tomorrow|tonight|this|next|now|right\s+now|on|the|later)"
+
+_LOCATION = re.compile(
+    rf"\b(?:in|for|at|near)\s+(?!{_TIME_WORDS}\b)"
+    rf"(?P<location>[a-z][a-z .'-]*?)"
+    rf"(?=\s+{_TIME_WORDS}\b|\s*[?.!,]|\s*$)",
+    re.I,
+)
+
+_WHEN = re.compile(
+    r"\b(today|tomorrow|tonight|this\s+week(?:end)?|next\s+week|right\s+now|now)\b", re.I
+)
+
+
+def weather_rule(original: str, body: str) -> RouteDecision | None:
+    if _NOT_WEATHER.search(body):
+        return None
+
+    if _WEATHER_STRONG.search(body):
+        confidence, reason = 0.9, "The message mentions the weather or a forecast."
+    elif _WEATHER_WEAK.search(body) and _QUESTION.search(body):
+        confidence, reason = 0.7, "The message asks about weather conditions."
+    else:
+        return None
+
+    arguments = {}
+    location = _LOCATION.search(body)
+    if location:
+        arguments["location"] = location.group("location").strip()
+    when = _WHEN.search(body)
+    arguments["when"] = " ".join(when.group(1).lower().split()) if when else "now"
+
+    return RouteDecision(Intent.WEATHER, confidence, targets.WEATHER, arguments, reason)
+
+
+# --- Memory -----------------------------------------------------------------
+
+_REMEMBER = re.compile(
+    r"^(?:remember|note|don'?t\s+forget|do\s+not\s+forget|keep\s+in\s+mind|make\s+a\s+note)"
+    r"(?:\s+that)?[\s,:]+(?P<content>.+)$",
+    re.I | re.S,
+)
+
+_QUESTION_WORD = re.compile(r"^(?:what|when|where|who|how|why|which|my)\b", re.I)
+
+_FORGET = re.compile(
+    r"^forget(?:\s+(?:about|that))?\s+(?P<query>.+)$", re.I | re.S
+)
+
+_DELETE_MEMORY = re.compile(
+    r"^(?:delete|erase|remove)\s+(?:the\s+|my\s+|your\s+|that\s+)?"
+    r"(?:memory|memories|note|notes|fact|facts)\s*(?:about|of|on|that|saying)?\s*(?P<query>.*)$",
+    re.I | re.S,
+)
+
+# "forget it" / "forget that" mean "never mind", not "delete a memory".
+_NEVER_MIND = re.compile(r"^(?:it|that|this|about\s+it|it\s+then)$", re.I)
+
+_RECALL_PATTERNS = [
+    (re.compile(r"\bwhat\s+do\s+you\s+(?:know|remember)\s+about\s+(?P<query>.+)$", re.I), 0.9),
+    (re.compile(r"\bwhat\s+(?:i\s+told\s+you|have\s+i\s+told\s+you|did\s+i\s+(?:tell\s+you|say))\s+about\s+(?P<query>.+)$", re.I), 0.9),
+    (re.compile(r"^(?:do|did)\s+you\s+remember\s+(?P<query>.+)$", re.I), 0.85),
+    (re.compile(r"^(?:what|who|where|when|which)(?:'s|\s+is|\s+are|\s+was|\s+were)\s+my\s+(?P<query>.+)$", re.I), 0.75),
+]
+
+
+def remember_rule(original: str, body: str) -> RouteDecision | None:
+    match = _REMEMBER.match(body)
+    if not match:
+        return None
+
+    content = _clean(match.group("content"))
+
+    # "Remember what I told you about X?" is a question, not a command.
+    if body.rstrip().endswith("?") and _QUESTION_WORD.match(content):
+        recalled = recall_rule(original, content)
+        query = recalled.arguments["query"] if recalled else content
+        return RouteDecision(
+            Intent.RECALL, 0.85, targets.MEMORY, {"query": query},
+            "The user asks AURORA to recall something.",
+        )
+
+    return RouteDecision(
+        Intent.REMEMBER, 0.95, targets.MEMORY, {"content": content},
+        "The user explicitly asked AURORA to remember something.",
+    )
+
+
+def forget_rule(original: str, body: str) -> RouteDecision | None:
+    match = _FORGET.match(body) or _DELETE_MEMORY.match(body)
+    if not match:
+        return None
+
+    query = _clean(match.group("query"))
+    if not query or _NEVER_MIND.match(query):
+        return None
+
+    return RouteDecision(
+        Intent.FORGET, 0.95, targets.MEMORY, {"query": query},
+        "The user explicitly asked AURORA to forget something.",
+    )
+
+
+def recall_rule(original: str, body: str) -> RouteDecision | None:
+    for pattern, confidence in _RECALL_PATTERNS:
+        match = pattern.search(body)
+        if match:
+            return RouteDecision(
+                Intent.RECALL, confidence, targets.MEMORY,
+                {"query": _clean(match.group("query"))},
+                "The user asks about something they may have told AURORA.",
+            )
+    return None
+
+
+# Commands addressed to AURORA's memory. Anything else in the message
+# ("remember that the weather in Pune was great") is the thing to store,
+# not a competing request, so these never trigger clarification.
+_EXPLICIT_COMMANDS = {Intent.REMEMBER, Intent.FORGET}
+
+DEFAULT_RULES: tuple[Rule, ...] = (
+    calculator_rule,
+    weather_rule,
+    remember_rule,
+    forget_rule,
+    recall_rule,
+)
+
+
+# --- Router -----------------------------------------------------------------
 
 class IntentRouter:
+    """
+    Turns a message into a RouteDecision.
 
-    def route(
+    The decision with the highest confidence wins. The default
+    conversation candidate has ``settings.ROUTE_CONVERSATION_CONFIDENCE``,
+    so a tool only wins when its rule is more confident than that.
+    """
+
+    def __init__(
         self,
-        message: str
-    ) -> Intent:
+        rules: tuple[Rule, ...] = DEFAULT_RULES,
+        conversation_confidence: float = settings.ROUTE_CONVERSATION_CONFIDENCE,
+        clarify_margin: float = settings.ROUTE_CLARIFY_MARGIN,
+    ):
+        self.rules = tuple(rules)
+        self.conversation_confidence = conversation_confidence
+        self.clarify_margin = clarify_margin
 
-        text = message.lower()
+    def route(self, message: str) -> RouteDecision:
 
-        if any(
-            op in text
-            for op in [
-                "+",
-                "-",
-                "*",
-                "/"
-            ]
+        original = (message or "").strip()
+
+        if not original:
+            return RouteDecision(Intent.CLARIFY, 1.0, None, {}, "The message is empty.")
+
+        body = _strip_prefix(original) or original
+
+        candidates = []
+        for rule in self.rules:
+            try:
+                result = rule(original, body)
+            except Exception:
+                logger.exception("Routing rule %s failed", getattr(rule, "__name__", rule))
+                continue
+            if result is not None:
+                candidates.append(result)
+
+        candidates.append(
+            RouteDecision(
+                Intent.CONVERSATION, self.conversation_confidence, targets.BRAIN, {},
+                "No tool clearly matched; the Brain should answer.",
+            )
+        )
+
+        candidates.sort(key=lambda d: d.confidence, reverse=True)
+        best, others = candidates[0], tuple(candidates[1:])
+
+        tools = [c for c in candidates if c.uses_tool]
+        if (
+            len(tools) >= 2
+            and best.uses_tool
+            and best.intent not in _EXPLICIT_COMMANDS
+            and tools[0].intent is not tools[1].intent
+            and tools[0].confidence - tools[1].confidence < self.clarify_margin
         ):
-            return Intent.CALCULATOR
+            decision = RouteDecision(
+                Intent.CLARIFY, best.confidence, None, {},
+                f"Ambiguous between {tools[0].intent.value} and {tools[1].intent.value}.",
+                tuple(candidates),
+            )
+        else:
+            decision = RouteDecision(
+                best.intent, best.confidence, best.target, best.arguments,
+                best.reason, others,
+            )
 
-        if "weather" in text:
-            return Intent.WEATHER
-
-        if any(
-            word in text
-            for word in [
-                "remember",
-                "memory",
-                "my favourite",
-                "my favorite"
-            ]
-        ):
-            return Intent.MEMORY
-
-        return Intent.REASONING
+        logger.debug("Routed %r -> %s", original, decision.to_dict())
+        return decision

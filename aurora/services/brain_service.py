@@ -4,11 +4,17 @@ from aurora.kernel.service import BaseService
 
 
 class BrainService(BaseService):
+    """
+    Owns AURORA's single Brain instance.
 
-    def __init__(self):
+    Other components get the Brain through this service rather than
+    creating their own.
+    """
+
+    def __init__(self, brain: Brain | None = None):
         super().__init__("Brain")
 
-        self.brain = Brain()
+        self.brain = brain or Brain()
 
     def start(self):
         self.state = ServiceState.RUNNING

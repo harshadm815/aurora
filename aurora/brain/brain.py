@@ -1,11 +1,16 @@
+from aurora.providers.base_provider import BaseProvider
 from aurora.providers.ollama_provider import OllamaProvider
 
 
 class Brain:
+    """
+    Reasoning and language. Delegates to a model provider, so the
+    provider can be swapped (or faked in tests) without touching callers.
+    """
 
-    def __init__(self):
+    def __init__(self, provider: BaseProvider | None = None):
 
-        self.provider = OllamaProvider()
+        self.provider = provider or OllamaProvider()
 
     def ask(self, messages):
 

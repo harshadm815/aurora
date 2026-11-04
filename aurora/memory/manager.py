@@ -7,8 +7,8 @@ class MemoryManager:
     High-level interface for AURORA's long-term memory.
     """
 
-    def __init__(self):
-        self.store = MemoryStore()
+    def __init__(self, store: MemoryStore | None = None):
+        self.store = store or MemoryStore()
 
     def remember(self, fact: Fact) -> int:
         """

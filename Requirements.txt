@@ -1,0 +1,5 @@
+# Runtime
+ollama==0.6.2
+
+# Development
+pytest==9.2.0

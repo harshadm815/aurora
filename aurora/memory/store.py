@@ -1,6 +1,8 @@
 import sqlite3
 from datetime import datetime
+from pathlib import Path
 
+from aurora.config import settings
 from aurora.knowledge.fact import Fact
 
 
@@ -18,7 +20,7 @@ class MemoryStore:
     - Delete facts.
     """
 
-    def __init__(self, database_path="aurora_memory.db"):
+    def __init__(self, database_path: str | Path = settings.DATABASE_PATH):
         self.database_path = database_path
         self._create_database()
 

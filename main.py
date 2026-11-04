@@ -7,6 +7,21 @@ from aurora.utils.log import setup_logging
 logger = logging.getLogger("aurora.main")
 
 
+def print_status(status: dict) -> None:
+    services = status["services"]
+    plugins = status["plugins"]
+    healthy = all(state == "Running" for state in services.values())
+
+    print("\nAURORA: " + ("All systems operational." if healthy else "Some systems need attention."))
+    for name, state in services.items():
+        print(f"  service  {name:<12} {state}")
+    for name, state in plugins.items():
+        print(f"  plugin   {name:<12} {state}")
+    if not plugins:
+        print("  plugins  none registered")
+    print()
+
+
 def main():
     setup_logging()
 
@@ -20,7 +35,8 @@ def main():
 
     print(f"{settings.APP_NAME} v{settings.VERSION} online.")
     print("Type 'exit' to shut down.")
-    print("Type 'clear' to clear the conversation.\n")
+    print("Type 'clear' to clear the conversation.")
+    print("Type 'status' to see system status.\n")
 
     try:
         while True:
@@ -35,6 +51,10 @@ def main():
             if user_input.lower() == "clear":
                 engine.clear_conversation()
                 print("AURORA: Conversation cleared.\n")
+                continue
+
+            if user_input.lower() == "status":
+                print_status(engine.status())
                 continue
 
             try:

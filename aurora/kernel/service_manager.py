@@ -1,5 +1,7 @@
 import logging
 
+from aurora.events import topics
+from aurora.events.bus import EventBus
 from aurora.kernel.lifecycle import ServiceState
 from aurora.kernel.service import BaseService
 
@@ -14,7 +16,8 @@ class ServiceManager:
     it does not stop the other services.
     """
 
-    def __init__(self):
+    def __init__(self, events: EventBus | None = None):
+        self.events = events or EventBus()
         self.services: dict[str, BaseService] = {}
 
     def register(self, service: BaseService):
@@ -29,15 +32,26 @@ class ServiceManager:
         except KeyError:
             raise KeyError(f"Service '{name}' is not registered.") from None
 
+    def _emit(self, name, service, **data):
+        self.events.emit(
+            name, {"service": service.name, **data}, source="ServiceManager"
+        )
+
     def start_all(self):
         for service in self.services.values():
+            if service.state is ServiceState.RUNNING:
+                continue
             service.state = ServiceState.STARTING
             try:
                 service.start()
-                logger.info("Service started: %s", service.name)
-            except Exception:
+            except Exception as error:
                 service.state = ServiceState.ERROR
                 logger.exception("Service failed to start: %s", service.name)
+                self._emit(topics.SERVICE_FAILED, service, error=str(error))
+                continue
+
+            logger.info("Service started: %s", service.name)
+            self._emit(topics.SERVICE_STARTED, service)
 
     def stop_all(self):
         # Stop in reverse order of registration.
@@ -47,10 +61,14 @@ class ServiceManager:
             service.state = ServiceState.STOPPING
             try:
                 service.stop()
-                logger.info("Service stopped: %s", service.name)
-            except Exception:
+            except Exception as error:
                 service.state = ServiceState.ERROR
                 logger.exception("Service failed to stop: %s", service.name)
+                self._emit(topics.SERVICE_FAILED, service, error=str(error))
+                continue
+
+            logger.info("Service stopped: %s", service.name)
+            self._emit(topics.SERVICE_STOPPED, service)
 
     def status(self):
         return {

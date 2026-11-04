@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.6.0 — Milestone 2: Complete kernel (2026-11-04)
+
+### Added
+- `PermissionManager`: deny-by-default, per-component permissions for
+  memory, filesystem, network, camera, microphone, sensors, health data
+  and hardware control. Grants come from `settings.PERMISSION_GRANTS`.
+- Plugins and tools declare `required_permissions`. Plugins missing a
+  grant are blocked; tools missing a grant raise `PermissionDeniedError`.
+- `KernelContext`: plugins receive the event bus and permissions (not
+  the whole engine) and can `publish()` events and `require()` permissions.
+- Kernel publishes lifecycle, service, plugin and conversation events
+  (`aurora/events/topics.py`).
+- `status` command in the terminal; `engine.status()`.
+- `engine.register_plugin()`.
+- Provider health check: the Brain service reports `Error` if Ollama is
+  unreachable or the model isn't installed.
+
+### Changed
+- `EventBus` isolates failing subscribers, validates events, supports
+  `"*"` wildcard subscriptions and `unsubscribe()`.
+- `Event` gains `source` and is immutable.
+- Engine `start()` / `shutdown()` are idempotent; plugins shut down in
+  reverse order.
+- `ToolManager` rejects duplicate tool names.
+
+
 ## 0.5.0 — Milestone 1: Architecture cleanup (2026-11-04)
 
 ### Changed

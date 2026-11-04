@@ -17,6 +17,10 @@ class BrainService(BaseService):
         self.brain = brain or Brain()
 
     def start(self):
+        # Fails (and the ServiceManager marks this service ERROR) if the
+        # model backend isn't available, so status never claims a
+        # working Brain that can't answer.
+        self.brain.provider.health_check()
         self.state = ServiceState.RUNNING
 
     def stop(self):

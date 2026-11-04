@@ -8,7 +8,7 @@ model names, paths or versions.
 from pathlib import Path
 
 APP_NAME = "AURORA"
-VERSION = "0.5.0"
+VERSION = "0.6.0"
 
 USER_NAME = "Harry"
 
@@ -25,3 +25,14 @@ LOG_FILE = LOG_DIR / "aurora.log"
 # Logging
 DEBUG = True
 LOG_LEVEL = "DEBUG" if DEBUG else "INFO"
+
+# Permissions
+#
+# Every plugin and tool is denied everything unless it is listed here.
+# Keys are component names, values are permission names from
+# aurora/kernel/permissions.py, for example:
+#
+#     PERMISSION_GRANTS = {
+#         "Weather": ["network"],
+#     }
+PERMISSION_GRANTS: dict[str, list[str]] = {}

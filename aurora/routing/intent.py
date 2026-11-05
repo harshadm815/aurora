@@ -10,4 +10,7 @@ class Intent(Enum):
     REMEMBER = "remember"           # Store something the user explicitly asked to keep.
     RECALL = "recall"               # Retrieve something from long-term memory.
     FORGET = "forget"               # Delete something from long-term memory.
+    KNOWLEDGE = "knowledge"         # Look a topic up in an encyclopedia.
+    PAPERS = "papers"               # Find research papers.
+    DOCUMENTS = "documents"         # List, search or read the user's documents.
     CLARIFY = "clarify"             # Too ambiguous: ask the user what they meant.

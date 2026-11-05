@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.11.0 — Milestone 7: Knowledge and research (2026-11-05)
+
+### Added
+- Wikipedia tool: encyclopedia summaries with the article link
+  ("tell me about black holes", "who is Stephen Hawking?",
+  "what is a neutron star?"). Needs `RESEARCH_CONTACT` (Wikimedia refuses
+  requests without contact details).
+- arXiv tool: up to 5 papers with authors, dates and links; newest first
+  for "recent / latest" ("Find recent discoveries about exoplanets").
+- Documents tool: list, search and read .txt, .md and .pdf files in
+  `Documents/` only, with file and PDF page citations.
+- New intents `knowledge`, `papers`, `documents` and routing rules that
+  don't take over calculator, weather, memory or small-talk questions.
+- `aurora/tools/untrusted.py`: cleaning and shortening of outside text.
+- Settings: `RESEARCH_CONTACT`, `RESEARCH_TIMEOUT_SECONDS`,
+  `RESEARCH_MAX_CHARS`, `ARXIV_MAX_RESULTS`, `DOCUMENTS_DIR`,
+  `DOCUMENT_MAX_BYTES`, `DOCUMENT_READ_CHARS`; grants for the new tools.
+- `pypdf` dependency. 339 tests (1 skipped on Windows: symlinks need admin).
+
+### Changed
+- Tool results given to the Brain are labelled as data, never instructions.
+- `Documents/` is in `.gitignore`.
+
+### Fixed
+- `ToolManager.execute()` crashed when a tool argument was called `name`.
+
 ## 0.10.0 — Milestone 6: Planning engine (2026-11-05)
 
 ### Added

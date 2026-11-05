@@ -10,6 +10,9 @@ BRAIN = "Brain"
 CALCULATOR = "Calculator"
 WEATHER = "Weather"
 MEMORY = "Memory"
+WIKIPEDIA = "Wikipedia"
+ARXIV = "arXiv"
+DOCUMENTS = "Documents"
 
 
 @dataclass(frozen=True, eq=True)

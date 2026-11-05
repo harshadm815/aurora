@@ -2,7 +2,9 @@ import httpx
 
 from aurora.memory.manager import MemoryManager
 from aurora.tool_plugins.calculator import CalculatorTool
+from aurora.tool_plugins.documents import DocumentsTool
 from aurora.tool_plugins.memory_tools import ForgetTool, RecallTool, RememberTool
+from aurora.tool_plugins.research import ArxivTool, WikipediaTool
 from aurora.tool_plugins.weather import WeatherTool
 from aurora.tools.tool import BaseTool
 
@@ -18,4 +20,7 @@ def default_tools(
         RecallTool(memory),
         ForgetTool(memory),
         WeatherTool(http_client),
+        WikipediaTool(http_client),
+        ArxivTool(http_client),
+        DocumentsTool(),
     ]

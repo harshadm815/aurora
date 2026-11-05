@@ -17,6 +17,9 @@ INTENT_TOOLS = {
     Intent.REMEMBER: "Remember",
     Intent.RECALL: "Recall",
     Intent.FORGET: "Forget",
+    Intent.KNOWLEDGE: "Wikipedia",
+    Intent.PAPERS: "arXiv",
+    Intent.DOCUMENTS: "Documents",
 }
 
 SOURCE = "ToolExecutor"

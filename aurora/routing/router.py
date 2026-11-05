@@ -269,6 +269,135 @@ def recall_rule(original: str, body: str) -> RouteDecision | None:
     return None
 
 
+# --- Research ---------------------------------------------------------------
+
+# Topics that look like "what is X" but are about AURORA, the user, or small talk.
+_NOT_A_TOPIC = re.compile(
+    r"^(?:(?:the\s+)?(?:time|date|day|matter|plan|point|deal)|up|new|wrong|happening|going\s+on|"
+    r"(?:you|your|yourself|i|i'm|me|my|we|us|our|he|she|his|her|they|them|their|"
+    r"it|its|this|that|these|those|there|here)\b.*|"
+    r"the\s+weather\b.*|weather\b.*|today|tomorrow)$",
+    re.I,
+)
+
+_KNOWLEDGE_STRONG = re.compile(
+    r"^(?:tell\s+me\s+about|look\s+up|search\s+(?:wikipedia|wiki)\s+for|wiki(?:pedia)?|"
+    r"who\s+(?:is|was|were|are))\s+(?P<topic>.+)$",
+    re.I,
+)
+
+_KNOWLEDGE_WEAK = re.compile(
+    r"^(?:what(?:'s|\s+is|\s+are|\s+was|\s+were)|define|definition\s+of)\s+(?P<topic>.+)$",
+    re.I,
+)
+
+_RESEARCH_WORDS = r"(?:research\s+)?(?:papers?|articles?|research|studies|preprints?|publications?|discoveries|findings)"
+
+_PAPERS = re.compile(
+    rf"^(?:(?:find|search(?:\s+for)?|show(?:\s+me)?|get|list|look\s+for|are\s+there(?:\s+any)?|any|"
+    rf"what\s+are(?:\s+the|\s+some)?|tell\s+me\s+(?:about\s+)?(?:the\s+)?)\s+)?"
+    rf"(?:(?P<recent>recent|latest|new)\s+)?(?:arxiv\s+)?{_RESEARCH_WORDS}\s+"
+    rf"(?:on|about|regarding|into|in|for)\s+(?P<topic>.+)$",
+    re.I,
+)
+
+_RECENT = re.compile(r"\b(?:recent|latest|new|this\s+year|newest)\b", re.I)
+
+_ARTICLES = re.compile(r"^(?:an?|the)\s+", re.I)
+
+
+def _topic(value: str) -> str:
+    return _ARTICLES.sub("", _clean(value)).strip()
+
+
+def papers_rule(original: str, body: str) -> RouteDecision | None:
+    match = _PAPERS.match(_clean(body))
+    if not match:
+        return None
+    topic = _topic(match.group("topic"))
+    if not topic or _NOT_A_TOPIC.match(topic):
+        return None
+    return RouteDecision(
+        Intent.PAPERS, 0.9, targets.ARXIV,
+        {"topic": topic, "recent": bool(match.group("recent") or _RECENT.search(body))},
+        "The user asks for research papers on a topic.",
+    )
+
+
+def knowledge_rule(original: str, body: str) -> RouteDecision | None:
+    text = _clean(body)
+    match = _KNOWLEDGE_STRONG.match(text)
+    confidence = 0.8
+    if not match:
+        match = _KNOWLEDGE_WEAK.match(text)
+        confidence = 0.6
+    if not match:
+        return None
+
+    topic = _topic(match.group("topic"))
+    if not topic or len(topic) < 3 or _NOT_A_TOPIC.match(topic) or len(topic.split()) > 8:
+        return None
+    if any(ch.isdigit() for ch in topic) and _HAS_OPERATOR.search(topic):
+        return None  # "what is 2 + 2" belongs to the calculator.
+
+    return RouteDecision(
+        Intent.KNOWLEDGE, confidence, targets.WIKIPEDIA, {"topic": topic},
+        "The user asks what or who something is.",
+    )
+
+
+_DOC_WORDS = r"(?:documents?|docs|notes|files|papers|pdfs?)"
+
+_DOC_LIST = re.compile(
+    rf"^(?:list|show(?:\s+me)?|what\s+are|which\s+are)\s+(?:all\s+)?(?:of\s+)?my\s+{_DOC_WORDS}$"
+    rf"|^what\s+{_DOC_WORDS}\s+do\s+i\s+have$",
+    re.I,
+)
+
+_DOC_SEARCH = re.compile(
+    rf"^(?:search|look\s+through|check)\s+(?:in\s+)?my\s+{_DOC_WORDS}\s+(?:for|about)\s+(?P<query>.+)$"
+    rf"|^(?:find|search\s+for|look\s+for)\s+(?P<query2>.+?)\s+in\s+my\s+{_DOC_WORDS}$"
+    rf"|^what\s+(?:do|does)\s+my\s+{_DOC_WORDS}\s+say\s+about\s+(?P<query3>.+)$",
+    re.I,
+)
+
+_DOC_READ = re.compile(
+    r"^(?:read|open|show(?:\s+me)?)\s+(?:my\s+)?(?:(?:document|file|notes?)\s+)?"
+    r"(?P<name>[\w .()'-]+\.(?:txt|md|pdf))$",
+    re.I,
+)
+
+
+def documents_rule(original: str, body: str) -> RouteDecision | None:
+    text = _clean(body)
+
+    if _DOC_LIST.match(text):
+        return RouteDecision(
+            Intent.DOCUMENTS, 0.9, targets.DOCUMENTS, {"action": "list"},
+            "The user asks which documents they have.",
+        )
+
+    match = _DOC_SEARCH.match(text)
+    if match:
+        query = match.group("query") or match.group("query2") or match.group("query3")
+        return RouteDecision(
+            Intent.DOCUMENTS, 0.95, targets.DOCUMENTS,
+            {"action": "search", "query": _clean(query)},
+            "The user asks to search their documents.",
+        )
+
+    # File names keep their case and extension, so match on the original text.
+    match = _DOC_READ.match(_clean(_strip_prefix(original)))
+    if match:
+        return RouteDecision(
+            Intent.DOCUMENTS, 0.95, targets.DOCUMENTS,
+            {"action": "read", "name": match.group("name").strip()},
+            "The user asks to read one of their documents.",
+        )
+
+    return None
+
+
 # Commands addressed to AURORA's memory. Anything else in the message
 # ("remember that the weather in Pune was great") is the thing to store,
 # not a competing request, so these never trigger clarification.
@@ -280,6 +409,9 @@ DEFAULT_RULES: tuple[Rule, ...] = (
     remember_rule,
     forget_rule,
     recall_rule,
+    papers_rule,
+    knowledge_rule,
+    documents_rule,
 )
 
 

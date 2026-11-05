@@ -1,6 +1,7 @@
 # Runtime
 ollama==0.6.2
 httpx==0.28.1
+pypdf==6.21.4
 
 # Development
 pytest==9.2.0

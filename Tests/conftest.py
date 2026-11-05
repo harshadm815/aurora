@@ -23,6 +23,8 @@ def isolated_database(tmp_path, monkeypatch):
     from aurora.config import settings
 
     monkeypatch.setattr(settings, "DATABASE_PATH", tmp_path / "aurora_test.db")
+    # Likewise the real Documents folder is never read by tests.
+    monkeypatch.setattr(settings, "DOCUMENTS_DIR", tmp_path / "Documents")
 
 
 @pytest.fixture

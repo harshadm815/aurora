@@ -8,7 +8,7 @@ model names, paths or versions.
 from pathlib import Path
 
 APP_NAME = "AURORA"
-VERSION = "0.10.0"
+VERSION = "0.11.0"
 
 USER_NAME = "Harry"
 
@@ -73,7 +73,28 @@ PERMISSION_GRANTS: dict[str, list[str]] = {
     # Learns facts from conversation and gives relevant ones to the Brain.
     "AutoMemory": ["memory.read", "memory.write"],
     "Weather": ["network"],   # Sends place names to open-meteo.com.
+    "Wikipedia": ["network"],  # Sends the topic to en.wikipedia.org.
+    "arXiv": ["network"],      # Sends the topic to export.arxiv.org.
+    # Reads .txt/.md/.pdf files, only inside DOCUMENTS_DIR.
+    "Documents": ["filesystem.read"],
 }
+
+# Research
+#
+# Wikipedia refuses requests that don't include contact details (an email
+# address or a web page URL). Whatever you put here is sent to Wikipedia
+# and arXiv with each lookup. Leave it empty to keep Wikipedia switched off.
+RESEARCH_CONTACT: str = ""
+RESEARCH_TIMEOUT_SECONDS = 15
+# Longest encyclopedia summary shown.
+RESEARCH_MAX_CHARS = 700
+ARXIV_MAX_RESULTS = 5
+
+# Documents: the only folder AURORA may read files from.
+DOCUMENTS_DIR = PROJECT_ROOT / "Documents"
+DOCUMENT_MAX_BYTES = 20_000_000
+# How much of a document "read <file>" shows.
+DOCUMENT_READ_CHARS = 1500
 
 # Weather
 #

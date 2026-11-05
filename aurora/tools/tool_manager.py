@@ -21,7 +21,9 @@ class ToolManager:
     def get(self, name: str):
         return self.tools.get(name.lower())
 
-    def execute(self, name: str, *args, **kwargs):
+    def execute(self, name: str, /, *args, **kwargs):
+        # ``name`` is positional-only so a tool argument called "name"
+        # (e.g. the document to read) can't collide with it.
 
         tool = self.get(name)
 

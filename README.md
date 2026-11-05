@@ -23,6 +23,13 @@ but are not yet connected to the conversation. See
    .venv\Scripts\python.exe -m pip install -r Requirements.txt
    ```
 
+3. Optional:
+   - Put .txt, .md or .pdf files in `Documents/` for AURORA to list,
+     search and read. It can't read files anywhere else.
+   - To use Wikipedia, set `RESEARCH_CONTACT` in
+     `aurora/config/settings.py` to an email address or web page.
+     Wikimedia requires this, and it is sent with each lookup.
+
 ## Run
 
 ```

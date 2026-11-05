@@ -36,6 +36,10 @@ MESSAGES = [
     "yes",
     "what is 7731 * 2?",
     "what's the weather in Quillhaven?",
+    "tell me about Zorblax",
+    "find recent papers on Quillhaven",
+    "search my notes for Fennimore",
+    "read Zorblax.txt",
     "route me somewhere",
     "",
 ]

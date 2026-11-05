@@ -1,6 +1,6 @@
 # AURORA Architecture
 
-Version: 0.10.0
+Version: 0.11.0
 Status: Describes what exists in the code today. Planned components are listed separately at the end.
 
 ---
@@ -25,7 +25,10 @@ AuroraEngine  (aurora/kernel/engine.py)
    ├── ToolExecutor ── ToolManager (permission-checked)
    │      ├── Calculator
    │      ├── Remember / Recall / Forget ── MemoryManager ── SQLite
-   │      └── Weather ── Open-Meteo (network)
+   │      ├── Weather ── Open-Meteo (network)
+   │      ├── Wikipedia ── en.wikipedia.org (network, needs RESEARCH_CONTACT)
+   │      ├── arXiv ── export.arxiv.org (network)
+   │      └── Documents ── Documents/ folder only (filesystem.read)
    ├── ServiceManager ── publishes service.* events
    │      └── BrainService ── Brain ── OllamaProvider ── Ollama (tinyllama)
    │                                    (timeout + reply length cap)
@@ -140,6 +143,9 @@ engine.register_plugin(RoomSensorPlugin())
 | Recall | `recall` | `memory.read` | Keyword lookup. Only memories containing **every** keyword count as an answer; partial matches are listed separately as "related" |
 | Forget | `forget` | `memory.read`, `memory.write` | Lists matching memories and **asks for confirmation** before deleting (including exact duplicates) |
 | Weather | `weather` | `network` | Open-Meteo: current conditions and today, tomorrow, this week, this weekend |
+| Wikipedia | `knowledge` | `network` | Encyclopedia summary ("tell me about black holes", "who is …", "what is a neutron star") with a link to the article |
+| arXiv | `papers` | `network` | Up to 5 papers with authors, dates and links; newest first for "recent / latest", otherwise most relevant |
+| Documents | `documents` | `filesystem.read` | List, search (with file and PDF page citations) and read .txt, .md and .pdf files in `Documents/` only |
 
 A tool returns a `ToolResult` (`aurora/tools/result.py`): `success`,
 `message` (the reply), `data`, and optionally `confirm`, a function the
@@ -155,11 +161,34 @@ Failures are always reported, never papered over by the language model:
 
 `WeatherPlugin` (a placeholder) was removed; weather is now a tool.
 
+### Research and documents
+
+- **Untrusted content.** Text from Wikipedia, arXiv and your files is
+  cleaned (control and text-direction characters removed), shortened,
+  shown with its source, and never obeyed. When it is passed to the Brain
+  inside a plan, the context says to treat it as data, not instructions.
+- **No summaries by the model.** AURORA shows Wikipedia's own summary,
+  paper listings and the exact passages from your documents. TinyLlama
+  is not asked to summarise them, because it distorts facts.
+- **Documents folder only.** The Documents tool opens only .txt, .md and
+  .pdf files that it found by listing `settings.DOCUMENTS_DIR`
+  (`I:\Aurora\Documents`). It never opens a path you type, ignores links
+  pointing outside the folder and skips files over 20 MB. The folder is
+  in `.gitignore`.
+- **Wikipedia needs contact details.** Wikimedia refuses requests that
+  don't include an email address or web page. Set `RESEARCH_CONTACT` in
+  `settings.py`; until then the Wikipedia tool explains this instead of
+  failing.
+- **No general web search yet.** Every reliable provider needs an
+  account and API key. A web search tool can be added the same way as
+  the others when one is chosen.
+
 ### Privacy note
 
 The Weather tool sends the place name (then its coordinates) to
-open-meteo.com. Nothing else leaves the machine. Remove `"Weather"` from
-`PERMISSION_GRANTS` to switch this off.
+open-meteo.com. The Wikipedia and arXiv tools send only the topic, plus
+`RESEARCH_CONTACT` if you set it. Nothing else leaves the machine.
+Remove a tool's line from `PERMISSION_GRANTS` to switch it off.
 
 ## Planning
 
@@ -261,8 +290,8 @@ the message to the Brain.
 | `aurora.knowledge` | `fact.py` | The `Fact` data model | Yes |
 | `aurora.routing` | `intent.py`, `decision.py`, `router.py` | Scored rule-based `IntentRouter` returning a structured `RouteDecision` | Yes |
 | `aurora.planning` | `plan.py`, `planner.py` | Splits a message into steps; the engine runs them | Yes |
-| `aurora.tools` | `tool.py`, `tool_manager.py`, `result.py`, `executor.py` | Tool interface, permission-checked registry, `ToolResult`, intent-to-tool execution | Yes |
-| `aurora.tool_plugins` | `calculator.py`, `memory_tools.py`, `weather.py`, `registry.py` | The built-in tools and `default_tools()` | Yes |
+| `aurora.tools` | `tool.py`, `tool_manager.py`, `result.py`, `executor.py`, `untrusted.py` | Tool interface, permission-checked registry, `ToolResult`, intent-to-tool execution, cleaning of outside text | Yes |
+| `aurora.tool_plugins` | `calculator.py`, `memory_tools.py`, `weather.py`, `research.py`, `documents.py`, `registry.py` | The built-in tools and `default_tools()` | Yes |
 | `aurora.events` | `event.py`, `bus.py`, `topics.py` | Publish/subscribe with error isolation; standard event names | Yes |
 
 ## Design rules
@@ -307,7 +336,9 @@ temporary database instead of `aurora_memory.db`.
 
 | Gap | Milestone |
 |---|---|
-| No internet search or file/document reading tools | 7: Knowledge and Research |
+| No general web search (needs a provider with an API key) | When a provider is chosen |
+| No NASA / astronomy databases, no source cross-checking between results | Later research work |
+| Document search matches words, not meaning; scanned PDFs (images) have no readable text | Semantic search / OCR later |
 | Recall matches words, not meaning ("hometown" won't find "From: Nagpur") | Semantic search, when it fits in 4 GB RAM |
 | Only semantic memory; no episodic, procedural or associative (knowledge graph) memory | Later memory work |
 | TinyLlama often ignores or garbles the memory context it is given | A stronger model (hardware-dependent) |

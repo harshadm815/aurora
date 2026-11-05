@@ -28,6 +28,8 @@ CONVERSATION_CLEARED = "conversation.cleared"
 
 MEMORY_LEARNED = "memory.learned"
 
+MOTION_DETECTED = "vision.motion_detected"
+
 PERMISSION_DENIED = "permission.denied"
 
 TOOL_EXECUTED = "tool.executed"

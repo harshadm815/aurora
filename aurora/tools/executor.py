@@ -20,6 +20,7 @@ INTENT_TOOLS = {
     Intent.KNOWLEDGE: "Wikipedia",
     Intent.PAPERS: "arXiv",
     Intent.DOCUMENTS: "Documents",
+    Intent.VISION: "Camera",
 }
 
 SOURCE = "ToolExecutor"

@@ -236,7 +236,14 @@ def documents(tmp_path):
 def test_list_documents(documents):
     result = documents.execute(action="list")
 
-    assert result.data == ["ideas.txt", "notes.md", "papers/thesis.pdf"]
+    assert result.data == ["ideas.txt", "notes.md", "papers/thesis.pdf", "photo.jpg"]
+
+
+def test_unreadable_image(documents):
+    result = documents.execute(action="read", name="photo.jpg")   # Not really a JPEG.
+
+    assert result.success is False
+    assert "can't open photo.jpg as an image" in result.message
 
 
 def test_search_text_files(documents):

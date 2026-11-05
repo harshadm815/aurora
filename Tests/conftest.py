@@ -39,6 +39,22 @@ def no_network(monkeypatch):
     monkeypatch.setattr(socket, "create_connection", blocked)
 
 
+@pytest.fixture(autouse=True)
+def no_camera_or_microphone(monkeypatch):
+    """Tests must never open the real webcam or microphone; they use fakes."""
+    from aurora.vision.camera import Camera, VisionUnavailable
+    from aurora.voice.listener import MicrophoneSource, VoiceUnavailable
+
+    def camera_blocked(self, *args, **kwargs):
+        raise VisionUnavailable("Tests must not open the real camera; inject a fake.")
+
+    def microphone_blocked(self, *args, **kwargs):
+        raise VoiceUnavailable("Tests must not open the real microphone; inject a fake.")
+
+    monkeypatch.setattr(Camera, "__init__", camera_blocked)
+    monkeypatch.setattr(MicrophoneSource, "__init__", microphone_blocked)
+
+
 @pytest.fixture
 def fake_provider():
     return FakeProvider()

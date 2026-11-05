@@ -13,6 +13,7 @@ MEMORY = "Memory"
 WIKIPEDIA = "Wikipedia"
 ARXIV = "arXiv"
 DOCUMENTS = "Documents"
+CAMERA = "Camera"
 
 
 @dataclass(frozen=True, eq=True)

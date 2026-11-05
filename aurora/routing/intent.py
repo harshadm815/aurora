@@ -13,4 +13,5 @@ class Intent(Enum):
     KNOWLEDGE = "knowledge"         # Look a topic up in an encyclopedia.
     PAPERS = "papers"               # Find research papers.
     DOCUMENTS = "documents"         # List, search or read the user's documents.
+    VISION = "vision"               # Look through the camera, or read text in front of it.
     CLARIFY = "clarify"             # Too ambiguous: ask the user what they meant.

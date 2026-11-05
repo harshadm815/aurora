@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.13.0 — Milestone 9: Vision (2026-11-05)
+
+### Added
+- Camera tool: "what do you see?" (objects, with a person's position) and
+  "read this" (printed text). One picture per request, never saved;
+  the terminal shows when the camera is on.
+- Object detection with NanoDet-Plus (OpenCV model zoo, Apache-2.0) on the
+  CPU; 80 everyday object classes. People are counted, never identified.
+- OCR with RapidOCR (offline).
+- `watch` command: motion alerts with time and objects in view, 10 s
+  cooldown, Ctrl+C to stop; `vision.motion_detected` event.
+- Images (.jpg, .png, .bmp, .webp) in `Documents/`: "read photo.jpg"
+  reports objects and text.
+- `vision` intent and routing; `Camera` component with the `camera`
+  permission; vision settings; `opencv-python` and `rapidocr-onnxruntime`
+  in Requirements.txt.
+- Tests can never open the real camera or microphone (fixture).
+- 390 tests (1 skipped on Windows).
+
 ## 0.12.0 — Milestone 8: Voice (2026-11-05)
 
 ### Added

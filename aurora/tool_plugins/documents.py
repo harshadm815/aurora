@@ -28,7 +28,9 @@ from aurora.tools.untrusted import clean_text, one_line, shorten
 
 logger = logging.getLogger(__name__)
 
-EXTENSIONS = {".txt", ".md", ".pdf"}
+TEXT_EXTENSIONS = {".txt", ".md", ".pdf"}
+IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
+EXTENSIONS = TEXT_EXTENSIONS | IMAGE_EXTENSIONS
 MAX_PDF_PAGES = 300
 MAX_RESULTS = 5
 
@@ -53,9 +55,10 @@ class DocumentsTool(BaseTool):
 
     required_permissions = (Permission.FILESYSTEM_READ,)
 
-    def __init__(self, folder: Path | None = None):
+    def __init__(self, folder: Path | None = None, analyzer=None):
         super().__init__("Documents")
         self._folder = folder
+        self._analyzer = analyzer   # VisionAnalyzer, created when first needed.
         self._cache: dict[tuple[str, float], list[Passage]] = {}
 
     @property
@@ -98,7 +101,9 @@ class DocumentsTool(BaseTool):
             return self._cache[key]
 
         name = self._name(path)
-        if path.suffix.lower() == ".pdf":
+        if path.suffix.lower() in IMAGE_EXTENSIONS:
+            passages = []   # Images aren't searched; "read <image>" analyses them.
+        elif path.suffix.lower() == ".pdf":
             passages = self._pdf_passages(path, name)
         else:
             text = clean_text(path.read_text(encoding="utf-8", errors="replace"))
@@ -127,7 +132,7 @@ class DocumentsTool(BaseTool):
             return ToolResult(
                 False,
                 f"Your documents folder doesn't exist yet. Create {self.folder} "
-                "and put .txt, .md or .pdf files in it.",
+                "and put .txt, .md, .pdf or image files in it.",
             )
 
         try:
@@ -140,11 +145,35 @@ class DocumentsTool(BaseTool):
             logger.exception("Documents %s failed", action)
             return ToolResult(False, f"I couldn't read your documents ({type(error).__name__}).")
 
+    def read_image(self, path: Path) -> ToolResult:
+        """Objects and text in an image, analysed on this computer."""
+        import cv2
+        import numpy as np
+
+        from aurora.vision.analyzer import VisionAnalyzer
+        from aurora.vision.camera import VisionUnavailable
+
+        image = cv2.imdecode(np.fromfile(str(path), dtype=np.uint8), cv2.IMREAD_COLOR)
+        if image is None:
+            return ToolResult(False, f"I can't open {self._name(path)} as an image.")
+
+        try:
+            self._analyzer = self._analyzer or VisionAnalyzer()
+            objects, _ = self._analyzer.objects(image)
+            text, lines = self._analyzer.text(image)
+        except VisionUnavailable as error:
+            return ToolResult(False, str(error))
+
+        message = f"{self._name(path)}: {objects}"
+        if lines:
+            message += "\n" + text
+        return ToolResult(True, message, {"objects": objects, "text": lines})
+
     def list(self) -> ToolResult:
         files, skipped = self.files()
         if not files:
             note = f" ({len(skipped)} skipped)" if skipped else ""
-            return ToolResult(True, f"There are no .txt, .md or .pdf files in {self.folder}{note}.", [])
+            return ToolResult(True, f"There are no documents or images in {self.folder}{note}.", [])
 
         lines = [f"  - {self._name(p)} ({p.stat().st_size / 1024:.0f} KB)" for p in files]
         message = f"Your documents ({len(files)}):\n" + "\n".join(lines)
@@ -195,6 +224,9 @@ class DocumentsTool(BaseTool):
             return ToolResult(False, f"Several documents match: {names}. Which one?")
 
         path = candidates[0]
+        if path.suffix.lower() in IMAGE_EXTENSIONS:
+            return self.read_image(path)
+
         passages = self.passages(path)
         text = "\n\n".join(p.text for p in passages)
         if not text:

@@ -54,6 +54,17 @@ def print_plan(plan) -> None:
     print()
 
 
+def watch(engine, camera_tool) -> None:
+    from aurora.vision.camera import VisionUnavailable
+    from aurora.vision.watch import Watcher
+
+    analyzer = camera_tool.analyzer if camera_tool is not None else None
+    try:
+        Watcher(engine, analyzer=analyzer).run()
+    except VisionUnavailable as error:
+        print(f"AURORA: {error}\n")
+
+
 class VoiceControls:
     """Creates the voice parts on first use, so AURORA starts fast without them."""
 
@@ -123,9 +134,16 @@ def main():
     print("Type 'status' to see system status.")
     print("Type 'route <message>' to see how a message would be routed.")
     print("Type 'plan <message>' to see how a message would be split into steps.")
-    print("Type 'listen' to ask by voice, 'voice on' for hands-free, 'speak on/off' to hear replies.\n")
+    print("Type 'listen' to ask by voice, 'voice on' for hands-free, 'speak on/off' to hear replies.")
+
+    print("Type 'watch' to have AURORA watch the room for motion (Ctrl+C stops it).\n")
 
     voice = VoiceControls(engine)
+
+    # Show when the camera turns on and off for "what do you see?" / "read this".
+    camera_tool = engine.tool_manager.get("Camera")
+    if camera_tool is not None:
+        camera_tool.notify = print
 
     try:
         while True:
@@ -156,6 +174,10 @@ def main():
 
             if user_input.lower() in ("listen", "voice on"):
                 voice.run(user_input.lower())
+                continue
+
+            if user_input.lower() == "watch":
+                watch(engine, camera_tool)
                 continue
 
             if user_input.lower() in ("speak on", "speak off"):

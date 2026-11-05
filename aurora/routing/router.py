@@ -363,7 +363,7 @@ _DOC_SEARCH = re.compile(
 
 _DOC_READ = re.compile(
     r"^(?:read|open|show(?:\s+me)?)\s+(?:my\s+)?(?:(?:document|file|notes?)\s+)?"
-    r"(?P<name>[\w .()'-]+\.(?:txt|md|pdf))$",
+    r"(?P<name>[\w .()'-]+\.(?:txt|md|pdf|jpe?g|png|bmp|webp))$",
     re.I,
 )
 
@@ -398,6 +398,40 @@ def documents_rule(original: str, body: str) -> RouteDecision | None:
     return None
 
 
+# --- Vision -------------------------------------------------------------------
+
+_LOOK = re.compile(
+    r"^(?:what\s+(?:do|can)\s+you\s+see|look(?:\s+around)?|take\s+a\s+look(?:\s+around)?|"
+    r"what(?:'s|\s+is)\s+in\s+front\s+of\s+(?:you|me|the\s+camera)|"
+    r"(?:is|are)\s+(?:there\s+)?any(?:one|body)\s+(?:there|here|in\s+the\s+room|in\s+front\s+of\s+you)|"
+    r"who(?:'s|\s+is)\s+(?:there|here|in\s+the\s+room)|how\s+many\s+people\s+(?:are\s+)?(?:there|here|in\s+the\s+room)|"
+    r"describe\s+(?:what\s+you\s+see|the\s+room|the\s+scene|your\s+surroundings)|use\s+(?:the|your)\s+camera)$",
+    re.I,
+)
+
+_READ_TEXT = re.compile(
+    r"^(?:read\s+(?:this|that|it|the\s+text|this\s+text|this\s+page|the\s+page|the\s+sign|"
+    r"what\s+i'?m\s+holding|what\s+i\s+am\s+holding)|what\s+does\s+(?:this|that|it)\s+say|"
+    r"can\s+you\s+read\s+(?:this|that|it))$",
+    re.I,
+)
+
+
+def vision_rule(original: str, body: str) -> RouteDecision | None:
+    text = _clean(body)
+    if _LOOK.match(text):
+        return RouteDecision(
+            Intent.VISION, 0.95, targets.CAMERA, {"action": "look"},
+            "The user asks what the camera sees.",
+        )
+    if _READ_TEXT.match(text):
+        return RouteDecision(
+            Intent.VISION, 0.95, targets.CAMERA, {"action": "read"},
+            "The user asks AURORA to read text in front of the camera.",
+        )
+    return None
+
+
 # Commands addressed to AURORA's memory. Anything else in the message
 # ("remember that the weather in Pune was great") is the thing to store,
 # not a competing request, so these never trigger clarification.
@@ -412,6 +446,7 @@ DEFAULT_RULES: tuple[Rule, ...] = (
     papers_rule,
     knowledge_rule,
     documents_rule,
+    vision_rule,
 )
 
 

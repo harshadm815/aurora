@@ -1,6 +1,6 @@
 # AURORA Architecture
 
-Version: 0.12.0
+Version: 0.13.0
 Status: Describes what exists in the code today. Planned components are listed separately at the end.
 
 ---
@@ -29,7 +29,8 @@ AuroraEngine  (aurora/kernel/engine.py)
    │      ├── Weather ── Open-Meteo (network)
    │      ├── Wikipedia ── en.wikipedia.org (network, needs RESEARCH_CONTACT)
    │      ├── arXiv ── export.arxiv.org (network)
-   │      └── Documents ── Documents/ folder only (filesystem.read)
+   │      ├── Documents ── Documents/ folder only (filesystem.read); images analysed too
+   │      └── Camera ── webcam, one picture per request (camera)
    ├── ServiceManager ── publishes service.* events
    │      └── BrainService ── Brain ── OllamaProvider ── Ollama (tinyllama)
    │                                    (timeout + reply length cap)
@@ -234,6 +235,46 @@ Settings: `VOICE_MODEL_DIR`, `VOICE_INPUT_DEVICE`, `VOICE_LISTEN_SECONDS`,
 `VOICE_END_SILENCE`, `VOICE_RATE`, `VOICE_NAME` ("Zira" or "David"),
 `VOICE_MAX_SPOKEN_CHARS`, `VOICE_CORRECTIONS`.
 
+## Vision
+
+`aurora/vision/` adds the camera, all processed on this computer:
+
+| You say / type | What happens |
+|---|---|
+| what do you see? · is anyone in the room? · describe the room | One picture → objects: "I can see a person in the middle, a laptop and two cups." |
+| read this · what does this say? | One picture → printed text (OCR) |
+| read photo.jpg | Objects and text in an image from `Documents/` (no camera) |
+| `watch` | Motion alerts with the time and what's in view, until Ctrl+C |
+
+Components:
+
+- **Camera** (`camera.py`): OpenCV, DirectShow backend. Opened for one
+  picture and released, or for the duration of `watch`. The terminal
+  shows "📷 Camera on… / Camera off." Pictures are never saved.
+- **Object detection** (`detector.py`): NanoDet-Plus from OpenCV's model
+  zoo (Apache-2.0, 3.8 MB, `Models/object_detection_nanodet_2022nov.onnx`),
+  80 COCO classes, CPU only via `cv2.dnn`. Outputs at strides 8/16/32 are
+  paired by shape and decoded (distribution focal loss → box distances),
+  then non-maximum suppression.
+- **Text** (`analyzer.TextReader`): RapidOCR (ONNX, offline). Loads on
+  first use (~4 s); each recognised line is cleaned as untrusted text.
+- **Scene description** (`analyzer.describe`): built from the detections,
+  with positions for a single person (left / middle / right). No
+  captioning model: one that describes scenes freely needs more than
+  1.5 GB of RAM.
+- **Motion** (`motion.py`): difference from a slowly updated background;
+  2 % of the picture changing counts. `watch` waits
+  `VISION_MOTION_COOLDOWN` (10 s) between alerts and publishes
+  `vision.motion_detected` (no image data).
+
+**People are only counted, never identified.** There is no face
+recognition. The camera needs the `camera` permission for the `Camera`
+component; logs record only how many objects were detected.
+
+Settings: `VISION_CAMERA_INDEX`, `VISION_DETECTOR_MODEL`,
+`VISION_MIN_CONFIDENCE`, `VISION_OCR_MIN_CONFIDENCE`,
+`VISION_MOTION_THRESHOLD`, `VISION_MOTION_COOLDOWN`.
+
 ## Planning
 
 `Planner.plan(message)` (`aurora/planning/planner.py`) returns a `Plan`
@@ -334,6 +375,7 @@ the message to the Brain.
 | `aurora.knowledge` | `fact.py` | The `Fact` data model | Yes |
 | `aurora.routing` | `intent.py`, `decision.py`, `router.py` | Scored rule-based `IntentRouter` returning a structured `RouteDecision` | Yes |
 | `aurora.planning` | `plan.py`, `planner.py` | Splits a message into steps; the engine runs them | Yes |
+| `aurora.vision` | `camera.py`, `detector.py`, `analyzer.py`, `motion.py`, `watch.py` | Webcam, object detection, OCR, scene description, motion watch | Yes (Camera tool, `watch`) |
 | `aurora.voice` | `listener.py`, `speaker.py`, `session.py` | Offline speech recognition with wake word, text-to-speech, voice conversations | Yes (from `main.py`, on demand) |
 | `aurora.tools` | `tool.py`, `tool_manager.py`, `result.py`, `executor.py`, `untrusted.py` | Tool interface, permission-checked registry, `ToolResult`, intent-to-tool execution, cleaning of outside text | Yes |
 | `aurora.tool_plugins` | `calculator.py`, `memory_tools.py`, `weather.py`, `research.py`, `documents.py`, `registry.py` | The built-in tools and `default_tools()` | Yes |
@@ -383,6 +425,7 @@ temporary database instead of `aurora_memory.db`.
 |---|---|
 | No general web search (needs a provider with an API key) | When a provider is chosen |
 | No NASA / astronomy databases, no source cross-checking between results | Later research work |
+| Vision recognises 80 everyday object classes only; no free-form scene descriptions, no recording or face recognition (by design) | Larger models need more RAM |
 | The small speech model misses uncommon names and places ("Pune" → "pony"); no voice profiles or barge-in (interrupting AURORA while it speaks) | Larger model / later voice work |
 | Document search matches words, not meaning; scanned PDFs (images) have no readable text | Semantic search / OCR later |
 | Recall matches words, not meaning ("hometown" won't find "From: Nagpur") | Semantic search, when it fits in 4 GB RAM |

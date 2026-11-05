@@ -55,6 +55,8 @@ _SEPARATE_ONLY = {
     Intent.FORGET: "To delete memories, ask me in a separate message (for example: \"forget my exam\").",
     Intent.DEVICES: "To control a device, ask me in a separate message so you can confirm it "
                     "(for example: \"turn on the desk light\").",
+    Intent.RESEARCH: "For a research session, ask me in a separate message "
+                     "(for example: \"continue my research on dark matter\").",
 }
 
 # "And what's 3+3?" -> "what's 3+3?"

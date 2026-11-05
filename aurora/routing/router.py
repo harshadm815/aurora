@@ -594,6 +594,33 @@ def reminders_rule(original: str, body: str) -> RouteDecision | None:
     return None
 
 
+# --- Research sessions ----------------------------------------------------------
+
+_RESEARCH_SESSION = [
+    re.compile(r"^(?:help\s+me\s+)?(?:continue|resume|pick\s+up)\s+(?:with\s+)?(?:my\s+)?research\s+"
+               r"(?:on|into|about|in)\s+(?P<topic>.+)$", re.I),
+    re.compile(r"^(?:help\s+me\s+)?(?:continue|resume|pick\s+up)\s+(?:with\s+)?my\s+(?P<topic>.+?)\s+research$", re.I),
+    re.compile(r"^help\s+me\s+(?:with\s+)?(?:my\s+)?research\s+(?:on|into|about|in)\s+(?P<topic>.+)$", re.I),
+    re.compile(r"^(?:start|begin|open|run)\s+(?:a\s+)?research\s+(?:project|session)\s+(?:on|into|about)\s+(?P<topic>.+)$", re.I),
+    re.compile(r"^what(?:'s|s|\s+is)\s+new\s+in\s+my\s+research\s+(?:on|into|about)\s+(?P<topic>.+)$", re.I),
+]
+_RESEARCH_LIST = re.compile(r"^(?:list|show(?:\s+me)?|what\s+are)\s+(?:my\s+)?research\s+projects$", re.I)
+
+
+def research_session_rule(original: str, body: str) -> RouteDecision | None:
+    text = _clean(body)
+    if _RESEARCH_LIST.match(text):
+        return RouteDecision(Intent.RESEARCH, 0.95, targets.RESEARCH, {"action": "list"},
+                             "The user asks for their research projects.")
+    for pattern in _RESEARCH_SESSION:
+        match = pattern.match(text)
+        if match:
+            return RouteDecision(Intent.RESEARCH, 0.95, targets.RESEARCH,
+                                 {"action": "session", "topic": _topic(match.group("topic"))},
+                                 "The user wants to work on a research topic.")
+    return None
+
+
 # --- Vision -------------------------------------------------------------------
 
 _LOOK = re.compile(
@@ -647,6 +674,7 @@ DEFAULT_RULES: tuple[Rule, ...] = (
     health_rule,
     devices_rule,
     reminders_rule,
+    research_session_rule,
 )
 
 

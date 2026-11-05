@@ -1,6 +1,6 @@
 # AURORA Architecture
 
-Version: 0.15.0
+Version: 0.16.0
 Status: Describes what exists in the code today. Planned components are listed separately at the end.
 
 ---
@@ -34,7 +34,8 @@ AuroraEngine  (aurora/kernel/engine.py)
    │      ├── Sensors ─┐
    │      ├── Health ──┴── SensorHub ── ESP32 over Wi-Fi / Simulator; sensor_data.db
    │      ├── Devices ── DeviceController ── simulated / ESP32 relay (token)
-   │      └── Reminders ── ReminderScheduler (this session)
+   │      ├── Reminders ── ReminderScheduler (this session)
+   │      └── Research ── research team (agents) ── uses the tools above
    ├── ServiceManager ── publishes service.* events
    │      └── BrainService ── Brain ── OllamaProvider ── Ollama (tinyllama)
    │                                    (timeout + reply length cap)
@@ -351,6 +352,33 @@ at a time and 24 hours ahead. They are shown, not spoken: the Windows
 speech engine must only be used from the main thread. Reminder text is
 never logged.
 
+## Multi-agent research
+
+"AURORA, help me continue my research on black hole cosmogenesis" starts a
+research session run by a team of specialist agents (`aurora/agents/`):
+
+| Agent | Job | Uses |
+|---|---|---|
+| 🧠 Memory agent | Your research log for the topic (last session, papers already seen) and related memories | Research log, Recall tool |
+| 📄 Documents agent | Notes that mention the topic, used whole; open questions ("…?", "Open question:", "TODO:") | Documents tool |
+| 🔭 Research agent | Wikipedia background (left out, with a note, if the closest article is off-topic); newest matching arXiv papers, marked **[NEW]** if not seen in an earlier session | Wikipedia, arXiv tools |
+| 🧩 Analyst agent | Which papers share meaningful words with your notes; up to four concrete next steps (which paper to read, a search for each open question) | Blackboard only |
+| ✅ Reviewer agent | Which sources answered, what is missing, drops anything without a link, marks the report incomplete when a source failed | Blackboard only |
+
+- A `Coordinator` runs them in order on a shared `Blackboard`, shows each
+  agent's progress, and keeps going if one agent fails.
+- Agents call tools **through the ToolManager**, so every tool keeps its
+  own permission (e.g. no `network` → "Wikipedia is switched off").
+- **Nothing in the report is written by the language model.** Everything
+  is quoted from a named source, so it can be checked. The agents are
+  deterministic because TinyLlama can't reason reliably and a second model
+  wouldn't fit in 4 GB; the `Agent` interface allows a model-backed agent
+  later.
+- At the end AURORA asks "Save this session to your research log?"; only
+  on yes is it recorded (tables `research_projects` / `research_sessions`
+  in `aurora_memory.db`). "list my research projects" shows them.
+- Research sessions are never part of a multi-step plan.
+
 ## Planning
 
 `Planner.plan(message)` (`aurora/planning/planner.py`) returns a `Plan`
@@ -451,6 +479,7 @@ the message to the Brain.
 | `aurora.knowledge` | `fact.py` | The `Fact` data model | Yes |
 | `aurora.routing` | `intent.py`, `decision.py`, `router.py` | Scored rule-based `IntentRouter` returning a structured `RouteDecision` | Yes |
 | `aurora.planning` | `plan.py`, `planner.py` | Splits a message into steps; the engine runs them | Yes |
+| `aurora.agents` | `base.py`, `research_agents.py`, `research_session.py`, `research_log.py` | Agent framework, research team, coordinator, research log | Yes (Research tool) |
 | `aurora.devices` | `device.py`, `drivers.py`, `controller.py` | Device definitions, limits, simulated / ESP32 drivers, checks, rate limit, audit | Yes (Devices tool) |
 | `aurora.automation` | `reminders.py` | Session reminders and timers | Yes (Reminders tool) |
 | `aurora.sensors` | `reading.py`, `sources.py`, `store.py`, `hub.py` | Sensor readings, validation, ESP32 / simulated sources, history with separate health storage | Yes (Sensors and Health tools) |
@@ -505,6 +534,7 @@ temporary database instead of `aurora_memory.db`.
 | No general web search (needs a provider with an API key) | When a provider is chosen |
 | No NASA / astronomy databases, no source cross-checking between results | Later research work |
 | ESP32 firmware (sensors and devices) not yet tested on hardware; no background monitoring, trends or alerts from sensors; no wearable (sleep) support | Later sensor work |
+| Research agents match words, not meaning; no free-form reasoning or summarising (needs a stronger model); no deleting research projects by voice/text yet | Later |
 | No rule-based automations ("turn on the fan when it's above 28 °C"): they would act without a per-change confirmation, so they need their own safety design | Later automation work |
 | Reminders are lost when AURORA closes and are not spoken | Later |
 | Vision recognises 80 everyday object classes only; no free-form scene descriptions, no recording or face recognition (by design) | Larger models need more RAM |

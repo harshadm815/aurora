@@ -81,6 +81,11 @@ class AuroraEngine:
         self.tool_manager = ToolManager(self.permissions)
         for tool in (default_tools(self.memory) if tools is None else tools):
             self.tool_manager.register(tool)
+        # Tools that coordinate other tools (the research team) get the manager,
+        # so every call they make still goes through the permission checks.
+        for tool in self.tool_manager.tools.values():
+            if hasattr(tool, "attach_tools"):
+                tool.attach_tools(self.tool_manager)
         self.executor = ToolExecutor(self.tool_manager, self.events)
 
         # An action waiting for the user's yes/no: (tool name, result).

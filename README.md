@@ -3,10 +3,16 @@
 A modular personal AI assistant that runs a local language model through
 [Ollama](https://ollama.com).
 
-Current stage: early prototype. Text conversation with a local model
-works; long-term memory, routing and tools exist as separate components
-but are not yet connected to the conversation. See
-[Docs/ARCHITECTURE.md](Docs/ARCHITECTURE.md).
+Current stage: working prototype of all twelve roadmap milestones.
+AURORA chats with a local model, remembers facts about you, routes
+requests to verified tools (calculator, weather, Wikipedia, arXiv, your
+documents), plans multi-step requests, listens and speaks offline, sees
+through the webcam, reads room and health sensors (simulated until the
+ESP32 is built), switches devices only after you confirm, sets reminders,
+and runs a team of research agents. Everything runs on a 4 GB laptop.
+
+See [Docs/ARCHITECTURE.md](Docs/ARCHITECTURE.md) for how it works and
+its "Known gaps" table for what's not done yet.
 
 ## Setup (Windows)
 

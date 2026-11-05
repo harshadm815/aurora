@@ -8,7 +8,7 @@ model names, paths or versions.
 from pathlib import Path
 
 APP_NAME = "AURORA"
-VERSION = "0.15.0"
+VERSION = "0.16.0"
 
 USER_NAME = "Harry"
 
@@ -87,6 +87,9 @@ PERMISSION_GRANTS: dict[str, list[str]] = {
     "Health": ["sensors", "health_data"],
     # Switching devices. Every change still asks you to confirm.
     "Devices": ["hardware_control"],
+    # The research team: reads your research log and saves sessions you approve.
+    # (The tools it uses keep their own permissions.)
+    "Research": ["memory.read", "memory.write"],
 }
 
 # Research

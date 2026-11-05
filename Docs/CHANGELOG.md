@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.16.0 — Milestone 12: Multi-agent intelligence (2026-11-05)
+
+### Added
+- Agent framework (`aurora/agents/base.py`): agents with one job each, a
+  shared blackboard, and a coordinator that shows progress and survives a
+  failing agent. Agents use tools through the ToolManager, so permissions
+  still apply.
+- Research team: memory, documents, research, analyst and reviewer agents.
+  "help me continue my research on <topic>" produces a sourced report:
+  your notes and open questions, Wikipedia background, newest matching
+  arXiv papers marked [NEW] since your last session, papers related to
+  your notes, concrete next steps, and a review of which sources answered.
+- Research log: sessions are saved only after you say yes;
+  "list my research projects".
+- `research` intent, `Research` permission component.
+- 505 tests (1 skipped on Windows).
+
+### Found in a live run, fixed
+- Notes were only used where a line contained the topic's words; a note
+  that mentions the topic is now used whole.
+- Wikipedia's closest article can be off-topic; it is now left out with
+  a note instead of shown as background.
+- Common words ("across") and stems ("acros") were shown as matches;
+  matches now ignore everyday words and are shown as written.
+
 ## 0.15.0 — Milestone 11: Automation (2026-11-05)
 
 ### Added

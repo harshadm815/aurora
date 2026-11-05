@@ -18,6 +18,7 @@ SENSORS = "Sensors"
 HEALTH = "Health"
 DEVICES = "Devices"
 REMINDERS = "Reminders"
+RESEARCH = "Research"
 
 
 @dataclass(frozen=True, eq=True)

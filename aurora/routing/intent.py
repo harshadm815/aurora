@@ -18,4 +18,5 @@ class Intent(Enum):
     HEALTH = "health"               # The user's own heart rate / blood oxygen.
     DEVICES = "devices"             # Control or check a smart device (always confirmed).
     REMINDER = "reminder"           # Set, list or cancel reminders and timers.
+    RESEARCH = "research"           # A research session run by the agent team.
     CLARIFY = "clarify"             # Too ambiguous: ask the user what they meant.

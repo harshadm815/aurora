@@ -25,6 +25,7 @@ INTENT_TOOLS = {
     Intent.HEALTH: "Health",
     Intent.DEVICES: "Devices",
     Intent.REMINDER: "Reminders",
+    Intent.RESEARCH: "Research",
 }
 
 SOURCE = "ToolExecutor"

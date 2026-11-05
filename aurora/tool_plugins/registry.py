@@ -5,6 +5,7 @@ from aurora.tool_plugins.calculator import CalculatorTool
 from aurora.tool_plugins.camera import CameraTool
 from aurora.tool_plugins.devices import DevicesTool
 from aurora.tool_plugins.reminders import RemindersTool
+from aurora.tool_plugins.research_assistant import ResearchAssistantTool
 from aurora.tool_plugins.documents import DocumentsTool
 from aurora.tool_plugins.memory_tools import ForgetTool, RecallTool, RememberTool
 from aurora.tool_plugins.research import ArxivTool, WikipediaTool
@@ -34,4 +35,5 @@ def default_tools(
         HealthTool(hub),
         DevicesTool(client=http_client),
         RemindersTool(),
+        ResearchAssistantTool(),
     ]

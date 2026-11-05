@@ -140,6 +140,11 @@ def main():
 
     voice = VoiceControls(engine)
 
+    # Show which research agent is working during a research session.
+    research_tool = engine.tool_manager.get("Research")
+    if research_tool is not None:
+        research_tool.progress = print
+
     # Reminders fire in the background: show them, then restore the prompt.
     reminders_tool = engine.tool_manager.get("Reminders")
     if reminders_tool is not None:

@@ -146,10 +146,15 @@ class ObjectDetector:
         detections = []
         for index in np.array(keep).flatten():
             x1, y1, x2, y2 = boxes[index]
-            # Back from the padded 416x416 image to the original picture.
-            box = tuple(float(v) for v in (
-                (x1 - left) / scale, (y1 - top) / scale, (x2 - left) / scale, (y2 - top) / scale,
-            ))
+            # Back from the padded 416x416 image to the original picture,
+            # kept inside its edges.
+            height, width = image.shape[:2]
+            box = (
+                float(min(max((x1 - left) / scale, 0), width)),
+                float(min(max((y1 - top) / scale, 0), height)),
+                float(min(max((x2 - left) / scale, 0), width)),
+                float(min(max((y2 - top) / scale, 0), height)),
+            )
             detections.append(Detection(COCO_LABELS[int(classes[index])], float(scores[index]), box))
 
         return sorted(detections, key=lambda d: d.confidence, reverse=True)

@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.12.0 — Milestone 8: Voice (2026-11-05)
+
+### Added
+- Offline voice (`aurora/voice/`): Vosk speech recognition (small English
+  model) and Windows text-to-speech (pyttsx3).
+- `listen` (one request by voice), `voice on` (hands-free with the wake
+  word "Aurora"; ends on "stop listening" or Ctrl+C), `speak on/off`.
+- Wake word via a grammar-restricted recogniser; requests after the wake
+  word are followed until the speaker pauses.
+- Transcript clean-up: wake-word removal, spoken numbers to digits for
+  arithmetic, user corrections (`VOICE_CORRECTIONS`).
+- Speech-friendly replies: no links, units spelled out, long replies cut
+  with "The rest is on screen."
+- `Voice` component with the `microphone` permission; the microphone is
+  open only while listening and closed while AURORA speaks. Audio is
+  never saved; transcripts are never logged.
+- Voice settings; `vosk`, `sounddevice`, `pyttsx3` in Requirements.txt.
+- Tests: fakes for the session logic, plus real-speech tests that have
+  Windows read phrases into Vosk (skipped where unavailable).
+- Tests can no longer open network connections (`no_network` fixture).
+- 368 tests (1 skipped on Windows).
+
 ## 0.11.1 — Personal settings (2026-11-05)
 
 ### Added

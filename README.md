@@ -31,6 +31,11 @@ but are not yet connected to the conversation. See
      That file isn't tracked by git and overrides `settings.py`.
      Wikimedia requires this, and it is sent with each lookup.
 
+4. Optional, for voice (`listen`, `voice on`, `speak on`):
+   download `vosk-model-small-en-us-0.15.zip` from
+   https://alphacephei.com/vosk/models and unzip it into `Models/`, so
+   that `Models/vosk-model-small-en-us-0.15/am` exists.
+
 ## Run
 
 ```

@@ -27,6 +27,18 @@ def isolated_database(tmp_path, monkeypatch):
     monkeypatch.setattr(settings, "DOCUMENTS_DIR", tmp_path / "Documents")
 
 
+@pytest.fixture(autouse=True)
+def no_network(monkeypatch):
+    """Tests must never reach a real service (Wikipedia, arXiv, Open-Meteo, Ollama)."""
+    import socket
+
+    def blocked(*args, **kwargs):
+        raise RuntimeError("Tests must not use the network; inject a fake client.")
+
+    monkeypatch.setattr(socket.socket, "connect", blocked)
+    monkeypatch.setattr(socket, "create_connection", blocked)
+
+
 @pytest.fixture
 def fake_provider():
     return FakeProvider()

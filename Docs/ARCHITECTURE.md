@@ -1,6 +1,6 @@
 # AURORA Architecture
 
-Version: 0.11.0
+Version: 0.12.0
 Status: Describes what exists in the code today. Planned components are listed separately at the end.
 
 ---
@@ -13,7 +13,8 @@ independent components. Each component has one responsibility and can be
 tested on its own.
 
 ```
-main.py  (terminal UI: all printing and input)
+main.py  (terminal UI: all printing and input; voice commands)
+   │  └── VoiceSession ── Listener (Vosk, offline) + Speaker (Windows voices)
    │
    ▼
 AuroraEngine  (aurora/kernel/engine.py)
@@ -191,6 +192,48 @@ open-meteo.com. The Wikipedia and arXiv tools send only the topic, plus
 `RESEARCH_CONTACT` if you set it. Nothing else leaves the machine.
 Remove a tool's line from `PERMISSION_GRANTS` to switch it off.
 
+## Voice
+
+`aurora/voice/` adds speaking and listening. Everything runs offline:
+Vosk (`Models/vosk-model-small-en-us-0.15`, about 70 MB on disk) for
+speech recognition, and the voices built into Windows (SAPI5, via pyttsx3)
+for speech.
+
+| Command | What happens |
+|---|---|
+| `listen` | The microphone opens for one request (up to 10 s, ends when you pause), AURORA answers on screen and aloud, the microphone closes |
+| `voice on` | Hands-free: AURORA waits for "Aurora", answers, and waits again until you say "stop listening" (or "stop", "goodbye") or press Ctrl+C |
+| `speak on` / `speak off` | Also read typed replies aloud |
+
+How it works:
+
+- **Wake word.** A second Vosk recogniser restricted to a tiny grammar
+  ("aurora", "hey aurora", "okay aurora") listens continuously. It is
+  cheap and doesn't fire on ordinary speech. When it fires, the same
+  audio is transcribed in full and AURORA keeps listening until no new
+  words arrive for `VOICE_END_SILENCE` (1.2 s), so "Aurora, what's twelve
+  times seven?" in one breath works, and so does "Aurora" … "Yes?" … request.
+- **Transcript clean-up.** The wake word (and how the model mishears it,
+  e.g. "or aura") is removed; spoken numbers become digits when the
+  sentence contains an arithmetic word ("twelve times seven" → `12 times 7`;
+  "which one is it" is left alone); `VOICE_CORRECTIONS` fixes words the
+  small model mishears, e.g. `{"pony": "Pune"}`.
+- **Spoken replies** drop links and source lines, spell out units
+  ("27°C" → "27 degrees Celsius") and stop after about 500 characters with
+  "The rest is on screen."
+- **Privacy and control.** The microphone (permission `microphone` for the
+  component `Voice`) opens only after `listen` or `voice on`, the terminal
+  shows when it is on and off, and it is closed while AURORA speaks so it
+  never hears itself. Audio is processed in memory, never saved, and
+  transcripts are never logged.
+- **Voice is optional.** The packages and model load only on the first
+  voice command; without them AURORA works as before and explains what's
+  missing.
+
+Settings: `VOICE_MODEL_DIR`, `VOICE_INPUT_DEVICE`, `VOICE_LISTEN_SECONDS`,
+`VOICE_END_SILENCE`, `VOICE_RATE`, `VOICE_NAME` ("Zira" or "David"),
+`VOICE_MAX_SPOKEN_CHARS`, `VOICE_CORRECTIONS`.
+
 ## Planning
 
 `Planner.plan(message)` (`aurora/planning/planner.py`) returns a `Plan`
@@ -291,6 +334,7 @@ the message to the Brain.
 | `aurora.knowledge` | `fact.py` | The `Fact` data model | Yes |
 | `aurora.routing` | `intent.py`, `decision.py`, `router.py` | Scored rule-based `IntentRouter` returning a structured `RouteDecision` | Yes |
 | `aurora.planning` | `plan.py`, `planner.py` | Splits a message into steps; the engine runs them | Yes |
+| `aurora.voice` | `listener.py`, `speaker.py`, `session.py` | Offline speech recognition with wake word, text-to-speech, voice conversations | Yes (from `main.py`, on demand) |
 | `aurora.tools` | `tool.py`, `tool_manager.py`, `result.py`, `executor.py`, `untrusted.py` | Tool interface, permission-checked registry, `ToolResult`, intent-to-tool execution, cleaning of outside text | Yes |
 | `aurora.tool_plugins` | `calculator.py`, `memory_tools.py`, `weather.py`, `research.py`, `documents.py`, `registry.py` | The built-in tools and `default_tools()` | Yes |
 | `aurora.events` | `event.py`, `bus.py`, `topics.py` | Publish/subscribe with error isolation; standard event names | Yes |
@@ -339,6 +383,7 @@ temporary database instead of `aurora_memory.db`.
 |---|---|
 | No general web search (needs a provider with an API key) | When a provider is chosen |
 | No NASA / astronomy databases, no source cross-checking between results | Later research work |
+| The small speech model misses uncommon names and places ("Pune" → "pony"); no voice profiles or barge-in (interrupting AURORA while it speaks) | Larger model / later voice work |
 | Document search matches words, not meaning; scanned PDFs (images) have no readable text | Semantic search / OCR later |
 | Recall matches words, not meaning ("hometown" won't find "From: Nagpur") | Semantic search, when it fits in 4 GB RAM |
 | Only semantic memory; no episodic, procedural or associative (knowledge graph) memory | Later memory work |

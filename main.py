@@ -54,6 +54,50 @@ def print_plan(plan) -> None:
     print()
 
 
+class VoiceControls:
+    """Creates the voice parts on first use, so AURORA starts fast without them."""
+
+    def __init__(self, engine):
+        self.engine = engine
+        self.session = None
+        self.speak_replies = False
+
+    def get(self):
+        if self.session is None:
+            from aurora.voice.listener import Listener
+            from aurora.voice.session import VoiceSession
+            from aurora.voice.speaker import Pyttsx3Speaker
+
+            print("Loading the speech model...")
+            listener = Listener()
+            try:
+                speaker = Pyttsx3Speaker()
+            except Exception as error:
+                print(f"(Text-to-speech isn't available: {error}. Replies will be text only.)")
+                speaker = None
+            self.session = VoiceSession(self.engine, listener, speaker)
+        return self.session
+
+    def run(self, action: str) -> None:
+        from aurora.voice.listener import VoiceUnavailable
+
+        try:
+            session = self.get()
+            if action == "listen":
+                session.listen_once()
+            else:
+                session.run_hands_free()
+        except VoiceUnavailable as error:
+            print(f"AURORA: {error}\n")
+
+    def speak(self, text: str) -> None:
+        if self.speak_replies:
+            try:
+                self.get().say(text)
+            except Exception as error:
+                print(f"(Couldn't speak: {error})")
+
+
 def main():
     # Make sure characters like ° and – display correctly on Windows,
     # including when output is piped or redirected.
@@ -78,7 +122,10 @@ def main():
     print("Type 'clear' to clear the conversation.")
     print("Type 'status' to see system status.")
     print("Type 'route <message>' to see how a message would be routed.")
-    print("Type 'plan <message>' to see how a message would be split into steps.\n")
+    print("Type 'plan <message>' to see how a message would be split into steps.")
+    print("Type 'listen' to ask by voice, 'voice on' for hands-free, 'speak on/off' to hear replies.\n")
+
+    voice = VoiceControls(engine)
 
     try:
         while True:
@@ -107,9 +154,19 @@ def main():
                 print_plan(engine.plan(user_input[5:]))
                 continue
 
+            if user_input.lower() in ("listen", "voice on"):
+                voice.run(user_input.lower())
+                continue
+
+            if user_input.lower() in ("speak on", "speak off"):
+                voice.speak_replies = user_input.lower() == "speak on"
+                print(f"AURORA: Spoken replies {'on' if voice.speak_replies else 'off'}.\n")
+                continue
+
             try:
                 response = engine.process_message(user_input)
                 print(f"\nAURORA: {response}\n")
+                voice.speak(response)
 
             except Exception as error:
                 logger.exception("Error while processing a message")

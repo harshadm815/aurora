@@ -8,7 +8,7 @@ model names, paths or versions.
 from pathlib import Path
 
 APP_NAME = "AURORA"
-VERSION = "0.11.1"
+VERSION = "0.12.0"
 
 USER_NAME = "Harry"
 
@@ -77,6 +77,8 @@ PERMISSION_GRANTS: dict[str, list[str]] = {
     "arXiv": ["network"],      # Sends the topic to export.arxiv.org.
     # Reads .txt/.md/.pdf files, only inside DOCUMENTS_DIR.
     "Documents": ["filesystem.read"],
+    # Microphone, used only while you've asked AURORA to listen.
+    "Voice": ["microphone"],
 }
 
 # Research
@@ -102,6 +104,20 @@ DOCUMENT_READ_CHARS = 1500
 # None means AURORA will ask which place you mean.
 DEFAULT_LOCATION: str | None = None
 WEATHER_TIMEOUT_SECONDS = 10
+
+# Voice
+#
+# Listening only happens when you type "listen" or "voice on". Audio is
+# processed offline and never saved.
+VOICE_MODEL_DIR = PROJECT_ROOT / "Models" / "vosk-model-small-en-us-0.15"
+VOICE_INPUT_DEVICE = None          # None = the Windows default microphone.
+VOICE_LISTEN_SECONDS = 10          # Longest single request.
+VOICE_END_SILENCE = 1.2            # Seconds without new words that end a request.
+VOICE_RATE = 185                   # Speaking speed (words per minute).
+VOICE_NAME = "Zira"                # Part of a Windows voice name ("David", "Zira"); "" = default.
+VOICE_MAX_SPOKEN_CHARS = 500       # Longer replies end with "the rest is on screen".
+# Words the small speech model mishears, e.g. {"pony": "Pune"}.
+VOICE_CORRECTIONS: dict[str, str] = {}
 
 # Personal overrides
 #

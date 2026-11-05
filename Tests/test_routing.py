@@ -250,3 +250,24 @@ def test_explicit_forget_beats_calculator_content(router):
     decision = route(router, "forget that 2 + 2 is 5")
 
     assert decision.intent is Intent.FORGET
+
+
+@pytest.mark.parametrize(
+    "message, query",
+    [
+        ("where do I live?", "live"),
+        ("what do I study", "study"),
+        ("where do I work?", "work"),
+        ("what do I like?", "like"),
+        ("who am I?", "me"),
+    ],
+)
+def test_recall_questions_about_the_user(router, message, query):
+    decision = route(router, message)
+
+    assert decision.intent is Intent.RECALL
+    assert decision.arguments["query"] == query
+
+
+def test_what_do_i_need_is_not_recall(router):
+    assert route(router, "what do I need for the exam?").intent is Intent.CONVERSATION

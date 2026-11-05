@@ -8,12 +8,16 @@ model names, paths or versions.
 from pathlib import Path
 
 APP_NAME = "AURORA"
-VERSION = "0.8.0"
+VERSION = "0.9.0"
 
 USER_NAME = "Harry"
 
 # Language model
 DEFAULT_MODEL = "tinyllama"
+# Give up on a reply after this long, so a stalled model can't freeze AURORA.
+MODEL_TIMEOUT_SECONDS = 120
+# Longest reply the model may generate (stops runaway, looping output).
+MODEL_MAX_REPLY_TOKENS = 400
 
 # Paths are absolute so AURORA uses the same files no matter which
 # folder it is started from.
@@ -35,6 +39,16 @@ ROUTE_CONVERSATION_CONFIDENCE = 0.5
 # what was meant instead of guessing.
 ROUTE_CLARIFY_MARGIN = 0.1
 
+# Memory
+#
+# Facts extracted from conversation need at least this confidence to be
+# saved automatically.
+MEMORY_MIN_CONFIDENCE = 0.7
+# Most memories given to the Brain as context for one reply.
+MEMORY_CONTEXT_LIMIT = 5
+# Tell the user when AURORA saves or updates a memory on its own.
+MEMORY_ANNOUNCE = True
+
 # Permissions
 #
 # Every plugin and tool is denied everything unless it is listed here.
@@ -51,6 +65,8 @@ PERMISSION_GRANTS: dict[str, list[str]] = {
     "Remember": ["memory.write"],
     "Recall": ["memory.read"],
     "Forget": ["memory.read", "memory.write"],
+    # Learns facts from conversation and gives relevant ones to the Brain.
+    "AutoMemory": ["memory.read", "memory.write"],
     "Weather": ["network"],   # Sends place names to open-meteo.com.
 }
 

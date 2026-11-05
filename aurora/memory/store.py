@@ -278,3 +278,54 @@ class MemoryStore:
             )
 
             return cursor.rowcount > 0
+
+    def find_by_attribute(self, entity: str, attribute: str) -> list[Fact]:
+        """
+        Returns every fact about ``entity`` with this attribute
+        (case-insensitive), oldest first.
+        """
+        with self._connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT
+                    id,
+                    category,
+                    entity,
+                    attribute,
+                    value,
+                    priority,
+                    confidence,
+                    created,
+                    last_used,
+                    times_used
+                FROM facts
+                WHERE LOWER(entity) = LOWER(?)
+                  AND LOWER(attribute) = LOWER(?)
+                ORDER BY id ASC
+                """,
+                (entity, attribute),
+            ).fetchall()
+
+        return [
+            self._row_to_fact(row)
+            for row in rows
+        ]
+
+    def mark_used(self, memory_ids: list[int]) -> None:
+        """
+        Records that these memories were used (recalled or given to the Brain).
+        """
+        if not memory_ids:
+            return
+
+        now = datetime.now().isoformat()
+
+        with self._connect() as connection:
+            connection.executemany(
+                """
+                UPDATE facts
+                SET last_used = ?, times_used = times_used + 1
+                WHERE id = ?
+                """,
+                [(now, memory_id) for memory_id in memory_ids],
+            )

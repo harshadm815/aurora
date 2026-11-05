@@ -5,23 +5,19 @@ Tools that let the user explicitly manage AURORA's long-term memory.
 - Recall:   look up stored memories by keyword.
 - Forget:   delete memories, but only after the user confirms.
 
-Automatic extraction of facts from ordinary conversation is Milestone 5.
+Automatic learning from ordinary conversation lives in aurora/memory/auto.py.
 """
 
 from aurora.knowledge.fact import Fact
 from aurora.kernel.permissions import Permission
+from aurora.memory.auto import describe
+from aurora.memory.evaluator import MemoryEvaluator
+from aurora.memory.extractor import FactExtractor
 from aurora.memory.manager import MemoryManager
 from aurora.tools.result import ToolResult
 from aurora.tools.tool import BaseTool
 
 NOTE_CATEGORY = "Note"
-
-
-def describe(fact: Fact) -> str:
-    """Human-readable form of a memory."""
-    if fact.category == NOTE_CATEGORY:
-        return fact.value
-    return f"{fact.attribute}: {fact.value}"
 
 
 def _bullets(facts: list[Fact]) -> str:
@@ -35,11 +31,28 @@ class RememberTool(BaseTool):
     def __init__(self, memory: MemoryManager):
         super().__init__("Remember")
         self.memory = memory
+        self.extractor = FactExtractor()
+        self.evaluator = MemoryEvaluator()
 
     def execute(self, content: str = "", **_) -> ToolResult:
         content = content.strip()
         if not content:
             return ToolResult(False, "What would you like me to remember?")
+
+        # "remember that my name is Harry" becomes a structured fact, so a
+        # later "my name is Harshad" updates it instead of contradicting it.
+        candidates = [f for f in self.extractor.extract(content) if self.evaluator.evaluate(f).keep]
+        if candidates:
+            results = [self.memory.learn(fact) for fact in candidates]
+            lines = []
+            for result in results:
+                if result.action == "updated":
+                    lines.append(f"{describe(result.fact)} (was {describe(result.previous)})")
+                else:
+                    lines.append(describe(result.fact))
+            if all(r.action == "duplicate" for r in results):
+                return ToolResult(True, "I already have that noted: " + "; ".join(lines), results)
+            return ToolResult(True, "Noted. I'll remember " + "; ".join(lines), results)
 
         fact = Fact(
             category=NOTE_CATEGORY,
@@ -66,11 +79,12 @@ class RecallTool(BaseTool):
 
     def execute(self, query: str = "", **_) -> ToolResult:
         result = self.memory.recall(query)
+        self.memory.mark_used(result.matches)
 
         if result.matches:
             heading = (
                 "Here's what I have saved:" if not result.keywords
-                else f"Here's what I have about {query}:"
+                else "Here's what I remember:"
             )
             return ToolResult(True, f"{heading}\n{_bullets(result.matches)}", result)
 

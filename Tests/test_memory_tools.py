@@ -130,7 +130,8 @@ def test_forget_leaves_unrelated_memories(memory):
 
     ForgetTool(memory).execute(query="exam").confirm()
 
-    assert [f.value for f in memory.memories()] == ["my sister is Priya"]
+    # "my sister is Priya" is stored as a structured fact.
+    assert [(f.attribute, f.value) for f in memory.memories()] == [("Sister", "Priya")]
 
 
 def test_forget_nothing_matching(memory):

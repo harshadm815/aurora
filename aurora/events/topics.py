@@ -23,6 +23,8 @@ ROUTE_DECIDED = "routing.decided"
 RESPONSE_GENERATED = "conversation.response_generated"
 CONVERSATION_CLEARED = "conversation.cleared"
 
+MEMORY_LEARNED = "memory.learned"
+
 PERMISSION_DENIED = "permission.denied"
 
 TOOL_EXECUTED = "tool.executed"

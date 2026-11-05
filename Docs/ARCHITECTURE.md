@@ -1,6 +1,6 @@
 # AURORA Architecture
 
-Version: 0.8.0
+Version: 0.9.0
 Status: Describes what exists in the code today. Planned components are listed separately at the end.
 
 ---
@@ -27,6 +27,8 @@ AuroraEngine  (aurora/kernel/engine.py)
    │      └── Weather ── Open-Meteo (network)
    ├── ServiceManager ── publishes service.* events
    │      └── BrainService ── Brain ── OllamaProvider ── Ollama (tinyllama)
+   │                                    (timeout + reply length cap)
+   ├── AutoMemory ── FactExtractor → MemoryEvaluator → MemoryManager
    └── PluginManager ── receives KernelContext, publishes plugin.* events
           (no plugins registered by default)
 ```
@@ -117,7 +119,10 @@ engine.register_plugin(RoomSensorPlugin())
    - A tool intent with a registered tool: the `ToolExecutor` runs it
      and the tool's own message is the reply. **The language model is not
      involved**, so computed or retrieved facts reach the user unchanged.
-   - Anything else: the full history goes to the `Brain`.
+   - Anything else is conversation. `AutoMemory` learns facts from the
+     message (announced in the reply), picks the memories relevant to it,
+     and the Brain receives: personality prompt, memory context, history.
+     See [MEMORY_DESIGN.md](MEMORY_DESIGN.md).
 5. The reply (from a tool or the Brain) is appended to the conversation,
    so the Brain sees tool answers as context in later turns.
 
@@ -209,8 +214,8 @@ the message to the Brain.
 | `aurora.conversation` | `conversation.py` | Working memory: message history for the current session | Yes |
 | `aurora.personality` | `personality.py` | AURORA's system prompt | Yes |
 | `aurora.plugins` | `plugin.py`, `plugin_manager.py` | Plugin lifecycle with permission checks | Yes (none registered) |
-| `aurora.memory` | `store.py`, `manager.py` | Long-term memory in SQLite: add, search, keyword recall, edit, delete, exact-duplicate check | Yes (through tools) |
-| `aurora.knowledge` | `fact.py`, `extractor.py` | `Fact` data model; rule-based `FactExtractor` (two patterns) | No |
+| `aurora.memory` | `store.py`, `manager.py`, `extractor.py`, `evaluator.py`, `auto.py` | Long-term memory: extraction, evaluation, conflict resolution, keyword recall with stemming, context for the Brain | Yes |
+| `aurora.knowledge` | `fact.py` | The `Fact` data model | Yes |
 | `aurora.routing` | `intent.py`, `decision.py`, `router.py` | Scored rule-based `IntentRouter` returning a structured `RouteDecision` | Yes (observed only) |
 | `aurora.tools` | `tool.py`, `tool_manager.py`, `result.py`, `executor.py` | Tool interface, permission-checked registry, `ToolResult`, intent-to-tool execution | Yes |
 | `aurora.tool_plugins` | `calculator.py`, `memory_tools.py`, `weather.py`, `registry.py` | The built-in tools and `default_tools()` | Yes |
@@ -254,12 +259,11 @@ temporary database instead of `aurora_memory.db`.
 
 | Gap | Milestone |
 |---|---|
-| Memory is only used when asked explicitly; facts aren't extracted from conversation or given to the Brain automatically | 5: Intelligent Memory |
-| Recall is keyword matching; "where do I study?" won't find "I go to college in Pune" | 5: Intelligent Memory |
 | No internet search or file/document reading tools | 7: Knowledge and Research |
+| Recall matches words, not meaning ("hometown" won't find "From: Nagpur") | Semantic search, when it fits in 4 GB RAM |
+| Only semantic memory; no episodic, procedural or associative (knowledge graph) memory | Later memory work |
+| TinyLlama often ignores or garbles the memory context it is given | A stronger model (hardware-dependent) |
 | One tool per message; no multi-step requests ("weather in Pune and Delhi") | 6: Planning Engine |
 | Routing is rule-based English only; no LLM fallback for unusual phrasing | Later, once a model good at structured output is available |
-| Fact extraction is two string rules and splits on the first "is"/"like" in the sentence | 5: Intelligent Memory |
-| No automatic memory retrieval, evaluation, or conflict resolution | 5: Intelligent Memory |
 | Permission grants are static config; no prompt to ask the user at runtime | Later, with physical-action tools (11) |
 | Event bus is synchronous; a slow subscriber delays the publisher | When voice/sensors need it (8, 10) |

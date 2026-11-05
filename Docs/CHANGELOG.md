@@ -1,5 +1,43 @@
 # Changelog
 
+## 0.9.0 — Milestone 5: Intelligent memory (2026-11-05)
+
+### Added
+- Automatic memory for ordinary conversation (`aurora/memory/auto.py`):
+  facts are extracted, evaluated, stored with conflict resolution, and
+  each save or update is announced in the reply.
+- `FactExtractor`: names, location, origin, birthday, likes, dislikes,
+  favourites, study, institution, occupation, employer and relationships,
+  with multi-clause messages and lists. Ignores questions, hypotheticals,
+  reported speech, and every message mentioning sensitive data.
+- `MemoryEvaluator`: confidence threshold, vague/negated/overlong values,
+  priority levels from MEMORY_DESIGN.md.
+- `MemoryManager.learn()`: duplicates, single-valued attributes
+  (a new name replaces the old one), likes vs dislikes.
+- Relevant memories are given to the Brain as a system message (not
+  saved in the conversation); `last_used` / `times_used` are tracked.
+- Recall stems words, so "where do I live?" finds "Lives in: Pune".
+- Router: "where do I live?", "what do I study?", "who am I?" etc. go to Recall.
+- `AutoMemory` permission component; `memory.learned` event.
+- Settings: `MEMORY_MIN_CONFIDENCE`, `MEMORY_CONTEXT_LIMIT`,
+  `MEMORY_ANNOUNCE`, `MODEL_TIMEOUT_SECONDS`, `MODEL_MAX_REPLY_TOKENS`.
+- 251 tests.
+
+### Changed
+- "remember that my name is Harry" stores a structured fact (so it can
+  be updated later) instead of a free-text note when the statement is
+  recognised.
+- Recall replies start with "Here's what I remember:".
+- `Docs/MEMORY_DESIGN.md` rewritten to describe the implemented system.
+
+### Fixed
+- A stalled or endlessly generating model could freeze AURORA. Ollama
+  calls now time out (120 s) and replies are capped (400 tokens), with
+  a clear message instead of a hang.
+
+### Removed
+- `aurora/knowledge/extractor.py` (replaced by `aurora/memory/extractor.py`).
+
 ## 0.8.0 — Milestone 4: Tool execution (2026-11-04)
 
 ### Added

@@ -7,8 +7,9 @@ from aurora.conversation.conversation import Conversation
 from aurora.events import topics
 from aurora.events.bus import EventBus
 from aurora.kernel.context import KernelContext
-from aurora.kernel.permissions import PermissionManager
+from aurora.kernel.permissions import Permission, PermissionManager
 from aurora.kernel.service_manager import ServiceManager
+from aurora.memory.auto import AutoMemory
 from aurora.memory.manager import MemoryManager
 from aurora.plugins.plugin import BasePlugin
 from aurora.plugins.plugin_manager import PluginManager
@@ -24,6 +25,9 @@ from aurora.tools.tool_manager import ToolManager
 logger = logging.getLogger(__name__)
 
 SOURCE = "Kernel"
+
+AUTO_MEMORY = "AutoMemory"
+AUTO_MEMORY_PERMISSIONS = (Permission.MEMORY_READ, Permission.MEMORY_WRITE)
 
 _YES = re.compile(r"^(?:y|yes|yeah|yep|sure|ok|okay|confirm|do it|go ahead)[.!]*$", re.I)
 _NO = re.compile(r"^(?:n|no|nope|cancel|stop|don'?t|never ?mind)[.!]*$", re.I)
@@ -62,6 +66,7 @@ class AuroraEngine:
         self.router = IntentRouter()
         self.last_route: RouteDecision | None = None
         self.memory = memory or MemoryManager()
+        self.auto_memory = AutoMemory(self.memory)
 
         # Tools
         self.tool_manager = ToolManager(self.permissions)
@@ -124,7 +129,7 @@ class AuroraEngine:
 
         if response is None:
             self.last_route = self.route(message)
-            response = self._handle(self.last_route)
+            response = self._handle(self.last_route, message)
 
         self.conversation.add_assistant(
             response
@@ -155,7 +160,7 @@ class AuroraEngine:
         logger.info("Pending %s action cancelled by a new message", name)
         return None
 
-    def _handle(self, decision: RouteDecision) -> str:
+    def _handle(self, decision: RouteDecision, message: str) -> str:
 
         if decision.needs_clarification:
             return self._clarifying_question(decision)
@@ -168,9 +173,48 @@ class AuroraEngine:
                 self.events.emit(topics.CONFIRMATION_REQUESTED, {"tool": name}, source=SOURCE)
             return result.message
 
-        return self.brain.ask(
-            self.conversation.history()
-        )
+        return self._converse(message)
+
+    # --- Conversation with memory ---------------------------------------------
+
+    @property
+    def auto_memory_enabled(self) -> bool:
+        return not self.permissions.missing(AUTO_MEMORY, AUTO_MEMORY_PERMISSIONS)
+
+    def _converse(self, message: str) -> str:
+        """
+        Ordinary conversation: learn from the message, give the Brain the
+        relevant memories, and tell the user if anything was saved.
+        """
+        learned = []
+        context = None
+
+        if self.auto_memory_enabled:
+            try:
+                learned = self.auto_memory.learn_from(message)
+                context = self.auto_memory.context_message(message)
+            except Exception:
+                # Memory problems must never stop AURORA from answering.
+                logger.exception("Automatic memory failed")
+
+        for result in learned:
+            self.events.emit(
+                topics.MEMORY_LEARNED,
+                {"action": result.action, "attribute": result.fact.attribute,
+                 "value": result.fact.value,
+                 "previous": result.previous.value if result.previous else None},
+                source=SOURCE,
+            )
+
+        history = self.conversation.history()
+        if context is not None:
+            # Right after the personality prompt; not stored in the conversation.
+            history = history[:1] + [context] + history[1:]
+
+        response = self.brain.ask(history)
+
+        note = AutoMemory.summary(learned) if settings.MEMORY_ANNOUNCE else None
+        return f"{response}\n\n{note}" if note else response
 
     @staticmethod
     def _clarifying_question(decision: RouteDecision) -> str:
@@ -201,6 +245,10 @@ class AuroraEngine:
 
     def tool_status(self) -> dict:
         status = {}
+        status["AutoMemory"] = (
+            "Ready" if self.auto_memory_enabled
+            else "Blocked (needs memory.read, memory.write)"
+        )
         for tool in self.tool_manager.tools.values():
             missing = self.permissions.missing(tool.name, tool.required_permissions)
             status[tool.name] = (

@@ -318,3 +318,32 @@ def test_engine_publishes_route_decision(fake_provider):
 
     assert engine.last_route.intent is Intent.CALCULATOR
     assert routes[0].data["arguments"] == {"expression": "12 * (7 + 3)"}
+
+
+# --- Ollama provider timeouts ---------------------------------------------
+
+def test_provider_timeout_becomes_a_clear_error():
+    import httpx
+    from aurora.providers.ollama_provider import ModelUnavailableError, OllamaProvider
+
+    class SlowClient:
+        def chat(self, **kwargs):
+            raise httpx.ReadTimeout("slow")
+
+    with pytest.raises(ModelUnavailableError, match="didn't answer within"):
+        OllamaProvider(client=SlowClient()).chat([])
+
+
+def test_provider_caps_reply_length():
+    from aurora.config import settings
+    from aurora.providers.ollama_provider import OllamaProvider
+
+    class RecordingClient:
+        def chat(self, **kwargs):
+            self.kwargs = kwargs
+            return {"message": {"content": "hi"}}
+
+    client = RecordingClient()
+    OllamaProvider(client=client).chat([])
+
+    assert client.kwargs["options"]["num_predict"] == settings.MODEL_MAX_REPLY_TOKENS

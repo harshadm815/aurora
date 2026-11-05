@@ -207,6 +207,12 @@ _RECALL_PATTERNS = [
     (re.compile(r"\bwhat\s+(?:i\s+told\s+you|have\s+i\s+told\s+you|did\s+i\s+(?:tell\s+you|say))\s+about\s+(?P<query>.+)$", re.I), 0.9),
     (re.compile(r"^(?:do|did)\s+you\s+remember\s+(?P<query>.+)$", re.I), 0.85),
     (re.compile(r"^(?:what|who|where|when|which)(?:'s|\s+is|\s+are|\s+was|\s+were)\s+my\s+(?P<query>.+)$", re.I), 0.75),
+    # "where do I live?", "what do I study?", "who am I?"
+    (re.compile(
+        r"^(?:what|where|who|which)\s+(?:do|did|am)\s+i\s+"
+        r"(?P<query>live|stay|study|studying|work|like|love|hate|dislike|come\s+from|go\s+to)\b.*$",
+        re.I), 0.8),
+    (re.compile(r"^who\s+am\s+i\s*\??$", re.I), 0.8),
 ]
 
 
@@ -251,9 +257,10 @@ def recall_rule(original: str, body: str) -> RouteDecision | None:
     for pattern, confidence in _RECALL_PATTERNS:
         match = pattern.search(body)
         if match:
+            query = match.groupdict().get("query") or "me"   # "who am I?" -> everything
             return RouteDecision(
                 Intent.RECALL, confidence, targets.MEMORY,
-                {"query": _clean(match.group("query"))},
+                {"query": _clean(query)},
                 "The user asks about something they may have told AURORA.",
             )
     return None

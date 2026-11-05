@@ -349,5 +349,10 @@ class IntentRouter:
                 best.reason, others,
             )
 
-        logger.debug("Routed %r -> %s", original, decision.to_dict())
+        # Never log the message or argument values: they are the user's words.
+        logger.debug(
+            "Routed message -> %s (%.2f), arguments: %s",
+            decision.intent.value, decision.confidence,
+            sorted(decision.arguments) or "none",
+        )
         return decision

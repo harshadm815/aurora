@@ -173,10 +173,10 @@ class WeatherTool(BaseTool):
             message = self.format(place, data, when)
         except WeatherError as error:
             # The user already sees the reason in the reply; keep it in the log file only.
-            logger.info("Weather lookup failed for %r: %s", location, error)
+            logger.info("Weather lookup failed: %s", type(error).__name__)
             return ToolResult(False, f"{error} I won't guess the weather.")
         except (KeyError, IndexError, TypeError):
-            logger.exception("Unexpected weather response for %r", location)
+            logger.exception("Unexpected weather response")
             return ToolResult(
                 False,
                 "The weather service sent data I didn't expect. I won't guess the weather.",

@@ -53,7 +53,7 @@ class AutoMemory:
         for fact in self.extractor.extract(message):
             evaluation = self.evaluator.evaluate(fact)
             if not evaluation.keep:
-                logger.debug("Not remembering %s=%r: %s", fact.attribute, fact.value, evaluation.reason)
+                logger.debug("Not remembering a %s fact: %s", fact.attribute, evaluation.reason)
                 continue
             results.append(self.memory.learn(fact))
         return results

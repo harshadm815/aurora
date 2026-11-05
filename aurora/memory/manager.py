@@ -153,7 +153,7 @@ class MemoryManager:
                 for extra in extras:
                     self.store.delete(extra.id)
                 fact.id = keep.id
-                logger.info("Memory updated: %s %r -> %r", fact.attribute, keep.value, fact.value)
+                logger.info("Memory updated: %s (id %s)", fact.attribute, keep.id)
                 return LearnResult("updated", fact, keep)
 
         opposite = OPPOSITES.get(fact.attribute.lower())
@@ -162,11 +162,11 @@ class MemoryManager:
                 if other.value.lower() == fact.value.lower():
                     self.store.delete(other.id)
                     fact.id = self.store.add(fact)
-                    logger.info("Memory updated: %s %r -> %s", other.attribute, other.value, fact.attribute)
+                    logger.info("Memory updated: %s -> %s (id %s)", other.attribute, fact.attribute, fact.id)
                     return LearnResult("updated", fact, other)
 
         fact.id = self.store.add(fact)
-        logger.info("Memory added: %s = %r", fact.attribute, fact.value)
+        logger.info("Memory added: %s (id %s)", fact.attribute, fact.id)
         return LearnResult("added", fact)
 
     def memories(self) -> list[Fact]:

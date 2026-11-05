@@ -226,10 +226,11 @@ class AuroraEngine:
     def route(self, message: str) -> RouteDecision:
         """Returns (and publishes) the routing decision for a message."""
         decision = self.router.route(message)
+        # Argument names only; their values are the user's words.
         logger.info(
-            "Route: %s (%.2f) -> %s %s",
+            "Route: %s (%.2f) -> %s, arguments: %s",
             decision.intent.value, decision.confidence,
-            decision.target, dict(decision.arguments),
+            decision.target, sorted(decision.arguments) or "none",
         )
         self.events.emit(topics.ROUTE_DECIDED, decision.to_dict(), source=SOURCE)
         return decision

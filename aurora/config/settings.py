@@ -8,7 +8,7 @@ model names, paths or versions.
 from pathlib import Path
 
 APP_NAME = "AURORA"
-VERSION = "0.9.0"
+VERSION = "0.9.1"
 
 USER_NAME = "Harry"
 

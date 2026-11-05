@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.9.1 — Log privacy (2026-11-05)
+
+### Fixed
+- `Logs/aurora.log` recorded user content in plain text: every message
+  (router debug line), tool arguments such as notes and memory queries,
+  remembered values, and weather place names. Logs now contain only
+  metadata: intent, confidence, target, argument names, attribute names,
+  memory ids and error types.
+
+### Added
+- `Tests/test_log_privacy.py`: sends messages through every path
+  (conversation, memory, forget + confirm, calculator, weather success
+  and failure) and fails if any user or model text reaches the log.
+
 ## 0.9.0 — Milestone 5: Intelligent memory (2026-11-05)
 
 ### Added

@@ -232,6 +232,10 @@ the message to the Brain.
    `ERROR`; a plugin that fails to initialize is disabled. Others continue.
 4. **The engine never prints.** Terminal output belongs to `main.py`;
    everything else uses `logging.getLogger(__name__)`.
+   **Logs never contain user content**: no messages, memory values,
+   place names, tool arguments or model replies. Only metadata
+   (intents, tool and attribute names, ids, counts, error types).
+   `Tests/test_log_privacy.py` enforces this.
 5. **No hardcoded configuration.** Model names, paths and versions come
    from `aurora/config/settings.py`. Paths are absolute, so running from any
    folder uses the same database and log.
@@ -244,7 +248,7 @@ the message to the Brain.
 - `aurora_memory.db` (project root): SQLite table `facts`
   (`id, category, entity, attribute, value, priority, confidence,
   created, last_used, times_used`). Not committed to git.
-- `Logs/aurora.log`: application log. Not committed to git.
+- `Logs/aurora.log`: application log (metadata only, no user content). Not committed to git.
 
 ## Testing
 

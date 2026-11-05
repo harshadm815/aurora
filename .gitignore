@@ -11,3 +11,6 @@ __pycache__/
 Models/
 Logs/
 Documents/
+
+# Personal settings (contact details etc.)
+aurora/config/local_settings.py

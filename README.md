@@ -26,8 +26,9 @@ but are not yet connected to the conversation. See
 3. Optional:
    - Put .txt, .md or .pdf files in `Documents/` for AURORA to list,
      search and read. It can't read files anywhere else.
-   - To use Wikipedia, set `RESEARCH_CONTACT` in
-     `aurora/config/settings.py` to an email address or web page.
+   - To use Wikipedia, create `aurora/config/local_settings.py` with
+     `RESEARCH_CONTACT = "you@example.com"` (an email address or web page).
+     That file isn't tracked by git and overrides `settings.py`.
      Wikimedia requires this, and it is sent with each lookup.
 
 ## Run

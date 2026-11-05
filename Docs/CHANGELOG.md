@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.11.1 — Personal settings (2026-11-05)
+
+### Added
+- `aurora/config/local_settings.py` (ignored by git) overrides `settings.py`,
+  for personal details such as `RESEARCH_CONTACT`. Wikipedia lookups are
+  now enabled on this machine.
+
 ## 0.11.0 — Milestone 7: Knowledge and research (2026-11-05)
 
 ### Added

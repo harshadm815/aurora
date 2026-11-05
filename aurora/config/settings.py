@@ -8,7 +8,7 @@ model names, paths or versions.
 from pathlib import Path
 
 APP_NAME = "AURORA"
-VERSION = "0.11.0"
+VERSION = "0.11.1"
 
 USER_NAME = "Harry"
 
@@ -102,3 +102,13 @@ DOCUMENT_READ_CHARS = 1500
 # None means AURORA will ask which place you mean.
 DEFAULT_LOCATION: str | None = None
 WEATHER_TIMEOUT_SECONDS = 10
+
+# Personal overrides
+#
+# Values in aurora/config/local_settings.py (not tracked by git) replace
+# the ones above. Use it for personal details such as RESEARCH_CONTACT,
+# so they never end up in the project's history.
+try:
+    from aurora.config.local_settings import *  # noqa: F401,F403
+except ImportError:
+    pass

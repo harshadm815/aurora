@@ -177,7 +177,8 @@ Failures are always reported, never papered over by the language model:
   in `.gitignore`.
 - **Wikipedia needs contact details.** Wikimedia refuses requests that
   don't include an email address or web page. Set `RESEARCH_CONTACT` in
-  `settings.py`; until then the Wikipedia tool explains this instead of
+  `aurora/config/local_settings.py` (personal overrides, not tracked by
+  git); until then the Wikipedia tool explains this instead of
   failing.
 - **No general web search yet.** Every reliable provider needs an
   account and API key. A web search tool can be added the same way as

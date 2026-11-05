@@ -21,6 +21,8 @@ INTENT_TOOLS = {
     Intent.PAPERS: "arXiv",
     Intent.DOCUMENTS: "Documents",
     Intent.VISION: "Camera",
+    Intent.SENSORS: "Sensors",
+    Intent.HEALTH: "Health",
 }
 
 SOURCE = "ToolExecutor"

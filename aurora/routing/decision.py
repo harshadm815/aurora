@@ -14,6 +14,8 @@ WIKIPEDIA = "Wikipedia"
 ARXIV = "arXiv"
 DOCUMENTS = "Documents"
 CAMERA = "Camera"
+SENSORS = "Sensors"
+HEALTH = "Health"
 
 
 @dataclass(frozen=True, eq=True)

@@ -41,6 +41,11 @@ but are not yet connected to the conversation. See
    opencv_zoo repository (models/object_detection_nanodet) into `Models/`.
    OCR models come with the `rapidocr-onnxruntime` package.
 
+6. Optional, sensors: AURORA starts with a **simulator** (answers are
+   labelled as simulated). To use real sensors, build the ESP32 in
+   `firmware/esp32_sensor_hub/` (wiring and flashing in its README) and
+   set `SENSOR_SOURCES` in `aurora/config/local_settings.py`.
+
 ## Run
 
 ```

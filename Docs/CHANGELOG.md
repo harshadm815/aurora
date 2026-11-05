@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.14.0 — Milestone 10: Sensor Hub (2026-11-05)
+
+### Added
+- Sensor Hub (`aurora/sensors/`): ESP32-over-Wi-Fi source, simulator,
+  plausibility checks, fallback to recent readings, SQLite history.
+- Sensors tool: room temperature, humidity, air pressure and motion
+  ("what's the temperature in my room?", "check my sensors").
+- Health tool: heart rate and SpO2 with an "informational only" note;
+  separate `health_data` permission, separate table, 7-day retention.
+  Sleep questions explain that no tracker is connected.
+- Simulated values are always labelled as simulated.
+- ESP32 firmware for BME280, PIR and MAX30102 with wiring and flashing
+  guide (`firmware/esp32_sensor_hub/`; not yet tested on hardware).
+  Wi-Fi credentials go in an ignored `secrets.h`.
+- `sensors` and `health` intents and routing; sensor settings and grants.
+- 433 tests (1 skipped on Windows).
+
+### Fixed
+- "what is the temperature in Pune" asked for clarification (weather vs
+  Wikipedia); weather questions are no longer treated as encyclopedia topics.
+
 ## 0.13.0 — Milestone 9: Vision (2026-11-05)
 
 ### Added

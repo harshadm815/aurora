@@ -25,6 +25,8 @@ def isolated_database(tmp_path, monkeypatch):
     monkeypatch.setattr(settings, "DATABASE_PATH", tmp_path / "aurora_test.db")
     # Likewise the real Documents folder is never read by tests.
     monkeypatch.setattr(settings, "DOCUMENTS_DIR", tmp_path / "Documents")
+    # And sensor history goes to a throwaway database.
+    monkeypatch.setattr(settings, "SENSOR_DATABASE_PATH", tmp_path / "sensors_test.db")
 
 
 @pytest.fixture(autouse=True)

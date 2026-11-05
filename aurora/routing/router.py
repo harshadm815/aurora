@@ -339,6 +339,8 @@ def knowledge_rule(original: str, body: str) -> RouteDecision | None:
         return None
     if any(ch.isdigit() for ch in topic) and _HAS_OPERATOR.search(topic):
         return None  # "what is 2 + 2" belongs to the calculator.
+    if _WEATHER_STRONG.search(topic) or _WEATHER_WEAK.search(topic):
+        return None  # "what is the temperature in Pune" belongs to weather or sensors.
 
     return RouteDecision(
         Intent.KNOWLEDGE, confidence, targets.WIKIPEDIA, {"topic": topic},
@@ -398,6 +400,75 @@ def documents_rule(original: str, body: str) -> RouteDecision | None:
     return None
 
 
+# --- Sensors and health ---------------------------------------------------------
+
+_INDOOR = re.compile(
+    r"\b(?:in\s+(?:my|the|this|our)\s+(?:room|bedroom|house|home|office|flat|apartment)|"
+    r"inside|indoors?|in\s+here|room\s+temperature|room)\b",
+    re.I,
+)
+
+_ROOM_QUANTITY = [
+    (re.compile(r"\b(?:temperature|how\s+(?:hot|warm|cold)\s+is\s+it|hot|warm|cold)\b", re.I), "temperature"),
+    (re.compile(r"\b(?:humidity|humid)\b", re.I), "humidity"),
+    (re.compile(r"\b(?:air\s+)?pressure\b", re.I), "pressure"),
+]
+
+_MOTION = re.compile(
+    r"\b(?:is\s+there\s+(?:any\s+)?(?:motion|movement)|any\s+(?:motion|movement)|"
+    r"(?:has|did)\s+(?:anyone|anybody|someone|somebody|something)\s+mov(?:e|ed)|motion\s+sensor)\b",
+    re.I,
+)
+
+_ALL_SENSORS = re.compile(
+    r"^(?:sensor\s+(?:readings?|status|data)|(?:check|read|show(?:\s+me)?)\s+(?:my\s+|the\s+|all\s+)?sensors?|"
+    r"what\s+do\s+(?:my|the)\s+sensors\s+say|room\s+(?:conditions|status|readings)|"
+    r"how\s+is\s+(?:my|the)\s+room)$",
+    re.I,
+)
+
+_HEALTH_QUANTITY = [
+    (re.compile(r"\b(?:heart\s*rate|pulse|bpm)\b", re.I), "heart_rate"),
+    (re.compile(r"\b(?:spo2|sp\s*o\s*2|blood\s+oxygen|oxygen\s+(?:level|saturation))\b", re.I), "spo2"),
+    (re.compile(r"\b(?:vitals|health\s+(?:readings?|sensors?|data))\b", re.I), "all"),
+]
+
+_ABOUT_ME = re.compile(r"\bmy\b|^(?:check|measure|read|take)\b", re.I)
+_SLEEP = re.compile(r"\bhow\s+(?:did|have)\s+i\s+(?:sleep|slept)\b|\bmy\s+sleep\b", re.I)
+
+
+def sensors_rule(original: str, body: str) -> RouteDecision | None:
+    text = _clean(body)
+
+    if _ALL_SENSORS.match(text):
+        return RouteDecision(Intent.SENSORS, 0.9, targets.SENSORS, {"quantity": "all"},
+                             "The user asks for all sensor readings.")
+    if _MOTION.search(text):
+        return RouteDecision(Intent.SENSORS, 0.85, targets.SENSORS, {"quantity": "motion"},
+                             "The user asks whether the motion sensor saw anything.")
+    if _INDOOR.search(text):
+        for pattern, quantity in _ROOM_QUANTITY:
+            if pattern.search(text):
+                return RouteDecision(Intent.SENSORS, 0.9, targets.SENSORS, {"quantity": quantity},
+                                     "The user asks about conditions in their room.")
+    return None
+
+
+def health_rule(original: str, body: str) -> RouteDecision | None:
+    text = _clean(body)
+
+    if _SLEEP.search(text):
+        return RouteDecision(Intent.HEALTH, 0.9, targets.HEALTH, {"quantity": "sleep"},
+                             "The user asks about their sleep.")
+    if not _ABOUT_ME.search(text):
+        return None   # "what is a heart rate?" is a general question.
+    for pattern, quantity in _HEALTH_QUANTITY:
+        if pattern.search(text):
+            return RouteDecision(Intent.HEALTH, 0.9, targets.HEALTH, {"quantity": quantity},
+                                 "The user asks for their own health readings.")
+    return None
+
+
 # --- Vision -------------------------------------------------------------------
 
 _LOOK = re.compile(
@@ -447,6 +518,8 @@ DEFAULT_RULES: tuple[Rule, ...] = (
     knowledge_rule,
     documents_rule,
     vision_rule,
+    sensors_rule,
+    health_rule,
 )
 
 

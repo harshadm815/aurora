@@ -8,7 +8,7 @@ model names, paths or versions.
 from pathlib import Path
 
 APP_NAME = "AURORA"
-VERSION = "0.13.0"
+VERSION = "0.14.0"
 
 USER_NAME = "Harry"
 
@@ -81,6 +81,10 @@ PERMISSION_GRANTS: dict[str, list[str]] = {
     "Voice": ["microphone"],
     # Camera, used only for "what do you see?", "read this" and "watch".
     "Camera": ["camera"],
+    # Room sensors (temperature, humidity, pressure, motion).
+    "Sensors": ["sensors"],
+    # Heart rate / blood oxygen. Remove this line to switch health readings off.
+    "Health": ["sensors", "health_data"],
 }
 
 # Research
@@ -131,6 +135,23 @@ VISION_MIN_CONFIDENCE = 0.4        # How sure the detector must be to mention an
 VISION_OCR_MIN_CONFIDENCE = 0.5
 VISION_MOTION_THRESHOLD = 0.02     # Fraction of the picture that must change (2 %).
 VISION_MOTION_COOLDOWN = 10        # Seconds between motion alerts in "watch" mode.
+
+# Sensors
+#
+# Where readings come from. Until real hardware is connected, a simulator
+# provides plausible values, and every answer says they are simulated.
+# For the ESP32 firmware in firmware/esp32_sensor_hub, replace the list with:
+#     {"name": "Room ESP32", "type": "http",
+#      "url": "http://aurora-sensors.local/readings", "location": "room"},
+SENSOR_SOURCES: list[dict] = [
+    {"name": "Simulator", "type": "simulated", "location": "room"},
+]
+SENSOR_DATABASE_PATH = PROJECT_ROOT / "sensor_data.db"
+SENSOR_TIMEOUT_SECONDS = 5
+# If a device doesn't answer, a stored reading up to this old is used (and labelled).
+SENSOR_MAX_AGE_MINUTES = 10
+SENSOR_RETENTION_DAYS = 30         # Room readings are deleted after this.
+HEALTH_RETENTION_DAYS = 7          # Health readings are deleted sooner.
 
 # Personal overrides
 #

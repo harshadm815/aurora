@@ -14,3 +14,6 @@ Documents/
 
 # Personal settings (contact details etc.)
 aurora/config/local_settings.py
+
+# ESP32 Wi-Fi credentials
+firmware/**/secrets.h

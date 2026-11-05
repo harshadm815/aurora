@@ -1,6 +1,6 @@
 # AURORA Architecture
 
-Version: 0.13.0
+Version: 0.14.0
 Status: Describes what exists in the code today. Planned components are listed separately at the end.
 
 ---
@@ -30,7 +30,9 @@ AuroraEngine  (aurora/kernel/engine.py)
    │      ├── Wikipedia ── en.wikipedia.org (network, needs RESEARCH_CONTACT)
    │      ├── arXiv ── export.arxiv.org (network)
    │      ├── Documents ── Documents/ folder only (filesystem.read); images analysed too
-   │      └── Camera ── webcam, one picture per request (camera)
+   │      ├── Camera ── webcam, one picture per request (camera)
+   │      ├── Sensors ─┐
+   │      └── Health ──┴── SensorHub ── ESP32 over Wi-Fi / Simulator; sensor_data.db
    ├── ServiceManager ── publishes service.* events
    │      └── BrainService ── Brain ── OllamaProvider ── Ollama (tinyllama)
    │                                    (timeout + reply length cap)
@@ -275,6 +277,35 @@ Settings: `VISION_CAMERA_INDEX`, `VISION_DETECTOR_MODEL`,
 `VISION_MIN_CONFIDENCE`, `VISION_OCR_MIN_CONFIDENCE`,
 `VISION_MOTION_THRESHOLD`, `VISION_MOTION_COOLDOWN`.
 
+## Sensor Hub
+
+`aurora/sensors/` reads room and health sensors when you ask.
+
+| You say | Tool | Answer |
+|---|---|---|
+| what's the temperature in my room? · how humid is it inside? | Sensors | "Temperature in your room: 23.4 °C (Room ESP32, just now)." |
+| is there any motion in my room? · has anyone moved? | Sensors | Motion sensor state |
+| check my sensors · how is my room? | Sensors | All room readings |
+| what's my heart rate? · my blood oxygen | Health | Reading plus "informational only, not a medical measurement" |
+| how did I sleep last night? | Health | Explains no sleep tracker is connected |
+
+- **Sources** (`sources.py`, configured in `SENSOR_SOURCES`):
+  `HttpSource` asks an ESP32 on the local network for JSON (firmware in
+  `firmware/esp32_sensor_hub/`); `SimulatedSource` gives plausible values
+  until hardware exists. **Every simulated value is labelled as such.**
+- **Validation** (`reading.py`): unknown quantities, wrong types, NaN and
+  implausible values (e.g. 150 °C, 101 % humidity, 15 bpm) are rejected
+  and reported as a note, never used.
+- **Hub** (`hub.py`): reads every source on request; if a device doesn't
+  answer, a stored reading up to `SENSOR_MAX_AGE_MINUTES` (10) old is used
+  and labelled "last known value".
+- **Storage** (`store.py`, `sensor_data.db`, not in git): room and health
+  readings in **separate tables**; room data kept 30 days, health data
+  7 days. Sensor data never enters long-term memory, and values are never
+  logged (only counts).
+- **Health** is a separate tool needing both `sensors` and `health_data`,
+  so it can be switched off on its own by removing its grant.
+
 ## Planning
 
 `Planner.plan(message)` (`aurora/planning/planner.py`) returns a `Plan`
@@ -375,6 +406,7 @@ the message to the Brain.
 | `aurora.knowledge` | `fact.py` | The `Fact` data model | Yes |
 | `aurora.routing` | `intent.py`, `decision.py`, `router.py` | Scored rule-based `IntentRouter` returning a structured `RouteDecision` | Yes |
 | `aurora.planning` | `plan.py`, `planner.py` | Splits a message into steps; the engine runs them | Yes |
+| `aurora.sensors` | `reading.py`, `sources.py`, `store.py`, `hub.py` | Sensor readings, validation, ESP32 / simulated sources, history with separate health storage | Yes (Sensors and Health tools) |
 | `aurora.vision` | `camera.py`, `detector.py`, `analyzer.py`, `motion.py`, `watch.py` | Webcam, object detection, OCR, scene description, motion watch | Yes (Camera tool, `watch`) |
 | `aurora.voice` | `listener.py`, `speaker.py`, `session.py` | Offline speech recognition with wake word, text-to-speech, voice conversations | Yes (from `main.py`, on demand) |
 | `aurora.tools` | `tool.py`, `tool_manager.py`, `result.py`, `executor.py`, `untrusted.py` | Tool interface, permission-checked registry, `ToolResult`, intent-to-tool execution, cleaning of outside text | Yes |
@@ -425,6 +457,7 @@ temporary database instead of `aurora_memory.db`.
 |---|---|
 | No general web search (needs a provider with an API key) | When a provider is chosen |
 | No NASA / astronomy databases, no source cross-checking between results | Later research work |
+| ESP32 firmware not yet tested on hardware; no background monitoring, trends or alerts from sensors; no wearable (sleep) support | 11: Automation, later sensor work |
 | Vision recognises 80 everyday object classes only; no free-form scene descriptions, no recording or face recognition (by design) | Larger models need more RAM |
 | The small speech model misses uncommon names and places ("Pune" → "pony"); no voice profiles or barge-in (interrupting AURORA while it speaks) | Larger model / later voice work |
 | Document search matches words, not meaning; scanned PDFs (images) have no readable text | Semantic search / OCR later |

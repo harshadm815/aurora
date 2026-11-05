@@ -20,6 +20,9 @@ PLUGIN_SHUTDOWN = "plugin.shutdown"
 
 MESSAGE_RECEIVED = "conversation.message_received"
 ROUTE_DECIDED = "routing.decided"
+PLAN_CREATED = "planning.created"
+PLAN_STEP_COMPLETED = "planning.step_completed"
+PLAN_COMPLETED = "planning.completed"
 RESPONSE_GENERATED = "conversation.response_generated"
 CONVERSATION_CLEARED = "conversation.cleared"
 

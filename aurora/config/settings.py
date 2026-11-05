@@ -8,7 +8,7 @@ model names, paths or versions.
 from pathlib import Path
 
 APP_NAME = "AURORA"
-VERSION = "0.9.1"
+VERSION = "0.10.0"
 
 USER_NAME = "Harry"
 
@@ -38,6 +38,11 @@ ROUTE_CONVERSATION_CONFIDENCE = 0.5
 # If the two best tool candidates are closer than this, AURORA asks
 # what was meant instead of guessing.
 ROUTE_CLARIFY_MARGIN = 0.1
+
+# Planning
+#
+# Most steps one message may be split into.
+PLAN_MAX_STEPS = 5
 
 # Memory
 #

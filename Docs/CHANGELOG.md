@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.10.0 — Milestone 6: Planning engine (2026-11-05)
+
+### Added
+- `Planner` and `Plan`/`Step` (`aurora/planning/`): a message can hold
+  several requests. "weather in Pune and Delhi, then calculate 12 * 7"
+  runs three steps.
+- Tool results from a plan are given to the Brain for the conversational
+  parts ("weather in Pune tomorrow and what should I wear?").
+- Weather requests for several places, and follow-ups that inherit the
+  place and day ("… and should I carry an umbrella?").
+- Deletions are never combined: the other steps run and AURORA asks for
+  the deletion separately.
+- Step limit (`PLAN_MAX_STEPS`, 5) with a message when reached.
+- `plan <message>` terminal command; `planning.*` events.
+- 284 tests.
+
+### Changed
+- The router only sets a weather `when` if the user says one (the
+  Weather tool still treats a missing `when` as "now").
+
 ## 0.9.1 — Log privacy (2026-11-05)
 
 ### Fixed

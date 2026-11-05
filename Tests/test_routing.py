@@ -115,7 +115,7 @@ def test_weather(router, message, location, when):
     assert decision.intent is Intent.WEATHER
     assert decision.target == "Weather"
     assert decision.arguments.get("location") == location
-    assert decision.arguments["when"] == when
+    assert decision.arguments.get("when", "now") == when  # Absent means "now".
 
 
 @pytest.mark.parametrize(

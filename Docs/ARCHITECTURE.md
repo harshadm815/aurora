@@ -1,6 +1,6 @@
 # AURORA Architecture
 
-Version: 0.9.0
+Version: 0.10.0
 Status: Describes what exists in the code today. Planned components are listed separately at the end.
 
 ---
@@ -21,6 +21,7 @@ AuroraEngine  (aurora/kernel/engine.py)
    ├── PermissionManager ────┤── KernelContext (what plugins may use)
    ├── Conversation ── Personality (system prompt)
    ├── IntentRouter ── RouteDecision (published as routing.decided)
+   ├── Planner ── Plan of Steps (each step routed by the IntentRouter)
    ├── ToolExecutor ── ToolManager (permission-checked)
    │      ├── Calculator
    │      ├── Remember / Recall / Forget ── MemoryManager ── SQLite
@@ -114,7 +115,11 @@ engine.register_plugin(RoomSensorPlugin())
 3. If an action is waiting for confirmation, "yes" runs it, "no" cancels
    it, and anything else cancels it and is handled as a new message.
 4. Otherwise the `IntentRouter` produces a `RouteDecision`
-   (published as `routing.decided`), and:
+   (published as `routing.decided`) and the `Planner` checks whether
+   the message holds several requests. A **multi-step plan** runs its
+   tool steps in order, then the Brain answers any conversational parts
+   with the tool results as context (see Planning below). A
+   single-step message is handled as follows:
    - `clarify`: AURORA asks the user to rephrase.
    - A tool intent with a registered tool: the `ToolExecutor` runs it
      and the tool's own message is the reply. **The language model is not
@@ -155,6 +160,44 @@ Failures are always reported, never papered over by the language model:
 The Weather tool sends the place name (then its coordinates) to
 open-meteo.com. Nothing else leaves the machine. Remove `"Weather"` from
 `PERMISSION_GRANTS` to switch this off.
+
+## Planning
+
+`Planner.plan(message)` (`aurora/planning/planner.py`) returns a `Plan`
+of `Step`s. Each step is a piece of the message plus its `RouteDecision`.
+
+| Message | Steps |
+|---|---|
+| weather in Pune and Delhi, then calculate 12 * 7 | weather Pune · weather Delhi · calculator `12 * 7` |
+| what is 2+2 and 3*5 | calculator · calculator (no language model involved) |
+| weather in Pune tomorrow and what should I wear? | weather Pune tomorrow · conversation (Brain gets the forecast) |
+| my name is Harry and what is 15 * 4? | conversation (name is learned) · calculator |
+| what is 2+2 and remember that I like tea and coffee | calculator · remember "I like tea and coffee" |
+| what is 2+2 and forget my exam | calculator, plus a note to ask for the deletion separately |
+| I like tea and coffee · remember that … and … | single step |
+
+Rules:
+
+1. Always split on "then", "after that", "also", ";" and sentence ends.
+2. Split on "and" / commas only if at least one part is a tool request
+   and every other part is a real clause (3+ words).
+3. "remember that …" owns everything after it.
+4. A weather request for several places becomes one step per place.
+5. A weather step without a place or day inherits them from the
+   previous weather step; identical steps are merged.
+6. **Deletions are never part of a plan.** The rest runs, and AURORA asks
+   for the deletion in a separate message, so a confirmation can't be
+   buried in a longer request.
+7. At most `settings.PLAN_MAX_STEPS` (5) steps; AURORA says if it stopped early.
+
+Running a plan: tool steps run in order and each reply is shown as-is.
+Conversational parts go to the Brain once, with a system message listing
+the tool results ("accurate: use them, don't contradict or recompute them")
+in addition to the memory context. Statements inside a plan are still
+learned by AutoMemory. Events: `planning.created`,
+`planning.step_completed`, `planning.completed` (intents only, no user text).
+
+Type `plan <message>` in the terminal to preview a plan without running it.
 
 ## Routing
 
@@ -216,7 +259,8 @@ the message to the Brain.
 | `aurora.plugins` | `plugin.py`, `plugin_manager.py` | Plugin lifecycle with permission checks | Yes (none registered) |
 | `aurora.memory` | `store.py`, `manager.py`, `extractor.py`, `evaluator.py`, `auto.py` | Long-term memory: extraction, evaluation, conflict resolution, keyword recall with stemming, context for the Brain | Yes |
 | `aurora.knowledge` | `fact.py` | The `Fact` data model | Yes |
-| `aurora.routing` | `intent.py`, `decision.py`, `router.py` | Scored rule-based `IntentRouter` returning a structured `RouteDecision` | Yes (observed only) |
+| `aurora.routing` | `intent.py`, `decision.py`, `router.py` | Scored rule-based `IntentRouter` returning a structured `RouteDecision` | Yes |
+| `aurora.planning` | `plan.py`, `planner.py` | Splits a message into steps; the engine runs them | Yes |
 | `aurora.tools` | `tool.py`, `tool_manager.py`, `result.py`, `executor.py` | Tool interface, permission-checked registry, `ToolResult`, intent-to-tool execution | Yes |
 | `aurora.tool_plugins` | `calculator.py`, `memory_tools.py`, `weather.py`, `registry.py` | The built-in tools and `default_tools()` | Yes |
 | `aurora.events` | `event.py`, `bus.py`, `topics.py` | Publish/subscribe with error isolation; standard event names | Yes |
@@ -267,7 +311,7 @@ temporary database instead of `aurora_memory.db`.
 | Recall matches words, not meaning ("hometown" won't find "From: Nagpur") | Semantic search, when it fits in 4 GB RAM |
 | Only semantic memory; no episodic, procedural or associative (knowledge graph) memory | Later memory work |
 | TinyLlama often ignores or garbles the memory context it is given | A stronger model (hardware-dependent) |
-| One tool per message; no multi-step requests ("weather in Pune and Delhi") | 6: Planning Engine |
+| Plans are fixed splits: a step can't use another step's result as input ("double the temperature in Pune") | Later planning work, needs a stronger model |
 | Routing is rule-based English only; no LLM fallback for unusual phrasing | Later, once a model good at structured output is available |
 | Permission grants are static config; no prompt to ask the user at runtime | Later, with physical-action tools (11) |
 | Event bus is synchronous; a slow subscriber delays the publisher | When voice/sensors need it (8, 10) |

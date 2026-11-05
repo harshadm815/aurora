@@ -40,6 +40,20 @@ def print_route(decision) -> None:
     print()
 
 
+def print_plan(plan) -> None:
+    if not plan.is_multi_step:
+        print(f"\n  single step: {plan.steps[0].describe()}\n")
+        return
+    print()
+    for number, step in enumerate(plan.steps, start=1):
+        print(f"  {number}. {step.describe()}")
+    for note in plan.notes:
+        print(f"  note: {note}")
+    if plan.truncated:
+        print("  (truncated to the first steps)")
+    print()
+
+
 def main():
     # Make sure characters like ° and – display correctly on Windows,
     # including when output is piped or redirected.
@@ -63,7 +77,8 @@ def main():
     print("Type 'exit' to shut down.")
     print("Type 'clear' to clear the conversation.")
     print("Type 'status' to see system status.")
-    print("Type 'route <message>' to see how a message would be routed.\n")
+    print("Type 'route <message>' to see how a message would be routed.")
+    print("Type 'plan <message>' to see how a message would be split into steps.\n")
 
     try:
         while True:
@@ -86,6 +101,10 @@ def main():
 
             if user_input.lower().startswith("route "):
                 print_route(engine.route(user_input[6:]))
+                continue
+
+            if user_input.lower().startswith("plan "):
+                print_plan(engine.plan(user_input[5:]))
                 continue
 
             try:

@@ -174,7 +174,10 @@ def weather_rule(original: str, body: str) -> RouteDecision | None:
     if location:
         arguments["location"] = location.group("location").strip()
     when = _WHEN.search(body)
-    arguments["when"] = " ".join(when.group(1).lower().split()) if when else "now"
+    if when:
+        # Only when stated, so a follow-up ("will it rain?") can inherit it.
+        # The Weather tool treats a missing "when" as "now".
+        arguments["when"] = " ".join(when.group(1).lower().split())
 
     return RouteDecision(Intent.WEATHER, confidence, targets.WEATHER, arguments, reason)
 

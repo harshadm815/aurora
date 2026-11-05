@@ -12,6 +12,8 @@ from aurora.kernel.service_manager import ServiceManager
 from aurora.memory.auto import AutoMemory
 from aurora.memory.manager import MemoryManager
 from aurora.plugins.plugin import BasePlugin
+from aurora.planning.plan import Plan
+from aurora.planning.planner import Planner
 from aurora.plugins.plugin_manager import PluginManager
 from aurora.routing.decision import RouteDecision
 from aurora.routing.router import IntentRouter
@@ -25,6 +27,11 @@ from aurora.tools.tool_manager import ToolManager
 logger = logging.getLogger(__name__)
 
 SOURCE = "Kernel"
+
+TOOL_RESULTS_HEADER = (
+    "Results AURORA's tools produced for the user's current request. They "
+    "are accurate: use them, and don't contradict or recompute them:"
+)
 
 AUTO_MEMORY = "AutoMemory"
 AUTO_MEMORY_PERMISSIONS = (Permission.MEMORY_READ, Permission.MEMORY_WRITE)
@@ -64,6 +71,7 @@ class AuroraEngine:
         # Core components
         self.conversation = Conversation()
         self.router = IntentRouter()
+        self.planner = Planner(self.router)
         self.last_route: RouteDecision | None = None
         self.memory = memory or MemoryManager()
         self.auto_memory = AutoMemory(self.memory)
@@ -129,7 +137,11 @@ class AuroraEngine:
 
         if response is None:
             self.last_route = self.route(message)
-            response = self._handle(self.last_route, message)
+            plan = self.plan(message)
+            if plan.is_multi_step:
+                response = self._run_plan(plan)
+            else:
+                response = self._handle(self.last_route, message)
 
         self.conversation.add_assistant(
             response
@@ -181,10 +193,11 @@ class AuroraEngine:
     def auto_memory_enabled(self) -> bool:
         return not self.permissions.missing(AUTO_MEMORY, AUTO_MEMORY_PERMISSIONS)
 
-    def _converse(self, message: str) -> str:
+    def _converse(self, message: str, tool_results: list[str] | None = None) -> str:
         """
         Ordinary conversation: learn from the message, give the Brain the
-        relevant memories, and tell the user if anything was saved.
+        relevant memories (and any tool results from this request), and
+        tell the user if anything was saved.
         """
         learned = []
         context = None
@@ -206,15 +219,73 @@ class AuroraEngine:
                 source=SOURCE,
             )
 
-        history = self.conversation.history()
+        extra = []
         if context is not None:
-            # Right after the personality prompt; not stored in the conversation.
-            history = history[:1] + [context] + history[1:]
+            extra.append(context)
+        if tool_results:
+            extra.append({
+                "role": "system",
+                "content": TOOL_RESULTS_HEADER + "\n" + "\n".join(f"- {r}" for r in tool_results),
+            })
+
+        # Right after the personality prompt; not stored in the conversation.
+        history = self.conversation.history()
+        history = history[:1] + extra + history[1:]
 
         response = self.brain.ask(history)
 
         note = AutoMemory.summary(learned) if settings.MEMORY_ANNOUNCE else None
         return f"{response}\n\n{note}" if note else response
+
+    # --- Planning -------------------------------------------------------------
+
+    def plan(self, message: str) -> Plan:
+        """Returns how a message would be split into steps (without running it)."""
+        return self.planner.plan(message)
+
+    def _run_plan(self, plan: Plan) -> str:
+        """
+        Runs the tool steps in order, then lets the Brain answer any
+        conversational parts with the tool results as context.
+        """
+        self.events.emit(topics.PLAN_CREATED, plan.to_dict(), source=SOURCE)
+        logger.info("Plan: %s", [s.decision.intent.value for s in plan.steps])
+
+        replies: list[str] = []
+        results: list[str] = []
+
+        for number, step in enumerate(plan.steps, start=1):
+            if not step.uses_tool or not self.executor.can_handle(step.decision):
+                continue
+            result = self.executor.execute(step.decision)
+            if result.needs_confirmation:
+                # The planner never includes these; refuse rather than act.
+                result.confirm = None
+                result.message = "That needs your confirmation, so please ask for it on its own."
+            replies.append(result.message)
+            results.append(result.message)
+            self.events.emit(
+                topics.PLAN_STEP_COMPLETED,
+                {"step": number, "intent": step.decision.intent.value, "success": result.success},
+                source=SOURCE,
+            )
+
+        conversation = [
+            step.text for step in plan.steps
+            if not step.uses_tool or not self.executor.can_handle(step.decision)
+        ]
+        if conversation:
+            replies.append(self._converse(" ".join(conversation), results))
+
+        replies.extend(plan.notes)
+        if plan.truncated:
+            replies.append(
+                f"(I handled the first {len(plan.steps)} parts of that. "
+                "Please ask me the rest separately.)"
+            )
+
+        self.events.emit(topics.PLAN_COMPLETED, {"steps": len(plan.steps)}, source=SOURCE)
+        return "\n\n".join(replies)
 
     @staticmethod
     def _clarifying_question(decision: RouteDecision) -> str:

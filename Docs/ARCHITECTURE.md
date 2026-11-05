@@ -1,6 +1,6 @@
 # AURORA Architecture
 
-Version: 0.14.0
+Version: 0.15.0
 Status: Describes what exists in the code today. Planned components are listed separately at the end.
 
 ---
@@ -32,7 +32,9 @@ AuroraEngine  (aurora/kernel/engine.py)
    │      ├── Documents ── Documents/ folder only (filesystem.read); images analysed too
    │      ├── Camera ── webcam, one picture per request (camera)
    │      ├── Sensors ─┐
-   │      └── Health ──┴── SensorHub ── ESP32 over Wi-Fi / Simulator; sensor_data.db
+   │      ├── Health ──┴── SensorHub ── ESP32 over Wi-Fi / Simulator; sensor_data.db
+   │      ├── Devices ── DeviceController ── simulated / ESP32 relay (token)
+   │      └── Reminders ── ReminderScheduler (this session)
    ├── ServiceManager ── publishes service.* events
    │      └── BrainService ── Brain ── OllamaProvider ── Ollama (tinyllama)
    │                                    (timeout + reply length cap)
@@ -306,6 +308,49 @@ Settings: `VISION_CAMERA_INDEX`, `VISION_DETECTOR_MODEL`,
 - **Health** is a separate tool needing both `sensors` and `health_data`,
   so it can be switched off on its own by removing its grant.
 
+## Devices and automation
+
+**Rule: an AI suggestion never becomes a hardware command by itself.**
+
+| You say | What happens |
+|---|---|
+| turn on my desk light · switch the fan off · set the fan speed to 2 · dim the lamp to 30% | "Shall I …? (yes / no)", then the change |
+| is the fan on? · list my devices | Current state, no confirmation needed |
+| remind me in 10 minutes to stretch · remind me at 5 pm to call home · set a timer for 3 minutes | A reminder shown in the terminal when due |
+| what are my reminders · cancel my reminders | List / cancel |
+
+Safety, in order:
+
+1. **Only configured devices** (`settings.DEVICES`) exist, each with a
+   kind (`light`, `fan`, `plug`), the actions it allows and value limits
+   (brightness 1–100 %, fan speed 1–3). Anything else is refused with an
+   explanation, never clamped.
+2. **Every change asks "yes / no"** through the same confirmation flow
+   as deleting memories. A device can skip this only if you add
+   `"confirm": False` to it yourself.
+3. **Commands come only from the user's own message.** Device intents are
+   routed from what you type or say; text from Wikipedia, arXiv,
+   documents, OCR, sensors or the language model is never routed, so a
+   web page that says "turn on the desk light" can't switch anything
+   (tested). Device commands are never part of a multi-step plan.
+4. **Rate limit**: at most `DEVICE_MAX_CHANGES_PER_MINUTE` (6) changes per
+   device per minute.
+5. **Audit trail** of every change (device, change, simulated or real),
+   kept in memory and logged.
+6. Needs the `hardware_control` permission (component `Devices`).
+
+Drivers (`aurora/devices/drivers.py`): `SimulatedDriver` (default; every
+answer says "simulated device") and `HttpRelayDriver` for
+`firmware/esp32_device_controller`, which refuses requests without the
+shared secret token (`DEVICE_CONTROLLER_TOKEN`, kept in
+`local_settings.py`) and starts with everything off.
+
+**Reminders** (`aurora/automation/reminders.py`) run on background timers
+for the current session only (AURORA says so when you set one), up to 20
+at a time and 24 hours ahead. They are shown, not spoken: the Windows
+speech engine must only be used from the main thread. Reminder text is
+never logged.
+
 ## Planning
 
 `Planner.plan(message)` (`aurora/planning/planner.py`) returns a `Plan`
@@ -406,6 +451,8 @@ the message to the Brain.
 | `aurora.knowledge` | `fact.py` | The `Fact` data model | Yes |
 | `aurora.routing` | `intent.py`, `decision.py`, `router.py` | Scored rule-based `IntentRouter` returning a structured `RouteDecision` | Yes |
 | `aurora.planning` | `plan.py`, `planner.py` | Splits a message into steps; the engine runs them | Yes |
+| `aurora.devices` | `device.py`, `drivers.py`, `controller.py` | Device definitions, limits, simulated / ESP32 drivers, checks, rate limit, audit | Yes (Devices tool) |
+| `aurora.automation` | `reminders.py` | Session reminders and timers | Yes (Reminders tool) |
 | `aurora.sensors` | `reading.py`, `sources.py`, `store.py`, `hub.py` | Sensor readings, validation, ESP32 / simulated sources, history with separate health storage | Yes (Sensors and Health tools) |
 | `aurora.vision` | `camera.py`, `detector.py`, `analyzer.py`, `motion.py`, `watch.py` | Webcam, object detection, OCR, scene description, motion watch | Yes (Camera tool, `watch`) |
 | `aurora.voice` | `listener.py`, `speaker.py`, `session.py` | Offline speech recognition with wake word, text-to-speech, voice conversations | Yes (from `main.py`, on demand) |
@@ -457,7 +504,9 @@ temporary database instead of `aurora_memory.db`.
 |---|---|
 | No general web search (needs a provider with an API key) | When a provider is chosen |
 | No NASA / astronomy databases, no source cross-checking between results | Later research work |
-| ESP32 firmware not yet tested on hardware; no background monitoring, trends or alerts from sensors; no wearable (sleep) support | 11: Automation, later sensor work |
+| ESP32 firmware (sensors and devices) not yet tested on hardware; no background monitoring, trends or alerts from sensors; no wearable (sleep) support | Later sensor work |
+| No rule-based automations ("turn on the fan when it's above 28 °C"): they would act without a per-change confirmation, so they need their own safety design | Later automation work |
+| Reminders are lost when AURORA closes and are not spoken | Later |
 | Vision recognises 80 everyday object classes only; no free-form scene descriptions, no recording or face recognition (by design) | Larger models need more RAM |
 | The small speech model misses uncommon names and places ("Pune" → "pony"); no voice profiles or barge-in (interrupting AURORA while it speaks) | Larger model / later voice work |
 | Document search matches words, not meaning; scanned PDFs (images) have no readable text | Semantic search / OCR later |

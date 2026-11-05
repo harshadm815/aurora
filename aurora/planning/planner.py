@@ -50,6 +50,13 @@ _LOCATION_LIST = re.compile(r"\s*(?:,\s*(?:and\s+)?|\s+and\s+)\s*", re.IGNORECAS
 
 _COMMANDS = {Intent.REMEMBER, Intent.FORGET}
 
+# Actions that need the user's confirmation are only accepted on their own.
+_SEPARATE_ONLY = {
+    Intent.FORGET: "To delete memories, ask me in a separate message (for example: \"forget my exam\").",
+    Intent.DEVICES: "To control a device, ask me in a separate message so you can confirm it "
+                    "(for example: \"turn on the desk light\").",
+}
+
 # "And what's 3+3?" -> "what's 3+3?"
 _LEADING_JOINER = re.compile(r"^(?:and|also|then|plus|so)\s+", re.IGNORECASE)
 
@@ -72,7 +79,7 @@ class Planner:
 
         single = Plan(message, [Step(message, whole)], reason="Handled as one request.")
 
-        if not message or whole.intent in _COMMANDS:
+        if not message or whole.intent in _COMMANDS or whole.intent in _SEPARATE_ONLY:
             return single
 
         texts: list[str] = []
@@ -92,16 +99,15 @@ class Planner:
         steps = self._merge_duplicates(steps)
 
         notes = []
-        if any(step.decision.intent is Intent.FORGET for step in steps):
-            # Never bury a deletion inside a longer request: do the rest
-            # and ask for the deletion on its own.
-            steps = [step for step in steps if step.decision.intent is not Intent.FORGET]
-            notes.append(
-                "To delete memories, ask me in a separate message "
-                "(for example: \"forget my exam\")."
-            )
-            if not any(step.uses_tool for step in steps):
-                return Plan(message, [], reason="Only a deletion was combined.", notes=notes)
+        for intent, note in _SEPARATE_ONLY.items():
+            # Only matters when there is something else in the message too.
+            if len(steps) > 1 and any(step.decision.intent is intent for step in steps):
+                # Never bury a deletion or a device command inside a longer
+                # request: do the rest and ask for it on its own.
+                steps = [step for step in steps if step.decision.intent is not intent]
+                notes.append(note)
+        if notes and not any(step.uses_tool for step in steps):
+            return Plan(message, [], reason="Only actions needing confirmation were combined.", notes=notes)
 
         if not notes and (len(steps) < 2 or not any(step.uses_tool for step in steps)):
             return single

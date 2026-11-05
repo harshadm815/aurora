@@ -46,6 +46,11 @@ but are not yet connected to the conversation. See
    `firmware/esp32_sensor_hub/` (wiring and flashing in its README) and
    set `SENSOR_SOURCES` in `aurora/config/local_settings.py`.
 
+7. Optional, devices: AURORA starts with a simulated desk light and fan.
+   For real switching, build `firmware/esp32_device_controller/` (read
+   its safety notes first) and set `DEVICES`, `DEVICE_CONTROLLER_URL` and
+   `DEVICE_CONTROLLER_TOKEN` in `aurora/config/local_settings.py`.
+
 ## Run
 
 ```

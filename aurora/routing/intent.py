@@ -16,4 +16,6 @@ class Intent(Enum):
     VISION = "vision"               # Look through the camera, or read text in front of it.
     SENSORS = "sensors"             # Room readings: temperature, humidity, pressure, motion.
     HEALTH = "health"               # The user's own heart rate / blood oxygen.
+    DEVICES = "devices"             # Control or check a smart device (always confirmed).
+    REMINDER = "reminder"           # Set, list or cancel reminders and timers.
     CLARIFY = "clarify"             # Too ambiguous: ask the user what they meant.

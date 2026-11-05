@@ -23,6 +23,8 @@ INTENT_TOOLS = {
     Intent.VISION: "Camera",
     Intent.SENSORS: "Sensors",
     Intent.HEALTH: "Health",
+    Intent.DEVICES: "Devices",
+    Intent.REMINDER: "Reminders",
 }
 
 SOURCE = "ToolExecutor"

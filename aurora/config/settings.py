@@ -8,7 +8,7 @@ model names, paths or versions.
 from pathlib import Path
 
 APP_NAME = "AURORA"
-VERSION = "0.14.0"
+VERSION = "0.15.0"
 
 USER_NAME = "Harry"
 
@@ -85,6 +85,8 @@ PERMISSION_GRANTS: dict[str, list[str]] = {
     "Sensors": ["sensors"],
     # Heart rate / blood oxygen. Remove this line to switch health readings off.
     "Health": ["sensors", "health_data"],
+    # Switching devices. Every change still asks you to confirm.
+    "Devices": ["hardware_control"],
 }
 
 # Research
@@ -152,6 +154,28 @@ SENSOR_TIMEOUT_SECONDS = 5
 SENSOR_MAX_AGE_MINUTES = 10
 SENSOR_RETENTION_DAYS = 30         # Room readings are deleted after this.
 HEALTH_RETENTION_DAYS = 7          # Health readings are deleted sooner.
+
+# Devices
+#
+# Only devices listed here can be controlled, and only with the actions
+# their kind allows ("light": on/off/toggle/brightness 1-100 %,
+# "fan": on/off/toggle/speed 1-3, "plug": on/off/toggle). Every change
+# asks "yes / no" first unless you add "confirm": False to a device.
+# "driver": "simulated" until real hardware exists; "esp32" uses the
+# controller in firmware/esp32_device_controller.
+DEVICES: list[dict] = [
+    {"id": "desk_light", "name": "desk light", "kind": "light",
+     "aliases": ["light", "lamp", "desk lamp"], "driver": "simulated"},
+    {"id": "fan", "name": "fan", "kind": "fan",
+     "aliases": ["ceiling fan"], "driver": "simulated"},
+]
+DEVICE_CONTROLLER_URL = "http://aurora-devices.local"
+DEVICE_CONTROLLER_TOKEN = ""       # Set in local_settings.py; must match the firmware.
+DEVICE_MAX_CHANGES_PER_MINUTE = 6  # Per device, to stop rapid on/off switching.
+
+# Reminders (this session only)
+REMINDER_MAX_ACTIVE = 20
+REMINDER_MAX_HOURS = 24
 
 # Personal overrides
 #

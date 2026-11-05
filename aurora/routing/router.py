@@ -469,6 +469,131 @@ def health_rule(original: str, body: str) -> RouteDecision | None:
     return None
 
 
+# --- Devices ------------------------------------------------------------------
+
+_SMALL_NUMBERS = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5,
+                  "six": 6, "seven": 7, "eight": 8, "nine": 9, "ten": 10}
+
+_DEVICE_PATTERNS = [
+    (re.compile(r"^(?:turn|switch|power)\s+(?P<action>on|off)\s+(?P<device>.+)$", re.I), None),
+    (re.compile(r"^(?:turn|switch|power)\s+(?P<device>.+?)\s+(?P<action>on|off)$", re.I), None),
+    (re.compile(r"^toggle\s+(?P<device>.+)$", re.I), "toggle"),
+    (re.compile(
+        r"^(?:set|change|put|dim|turn)\s+(?P<device>.+?)(?:'s)?(?:\s+(?:speed|brightness|level))?\s+(?:to|at)\s+"
+        r"(?P<value>\d{1,3}|one|two|three|four|five|six|seven|eight|nine|ten)\s*(?:%|percent)?$", re.I), "set"),
+    (re.compile(r"^(?:is|are)\s+(?P<device>.+?)\s+(?:on|off|running|switched\s+on|switched\s+off)$", re.I), "status"),
+]
+
+_DEVICE_LIST = re.compile(
+    r"^(?:list|show(?:\s+me)?)\s+(?:my\s+|all\s+(?:my\s+)?)?devices$|^what\s+devices\s+do\s+i\s+have$|^device\s+status$",
+    re.I,
+)
+
+
+def devices_rule(original: str, body: str) -> RouteDecision | None:
+    text = _clean(body)
+
+    if _DEVICE_LIST.match(text):
+        return RouteDecision(Intent.DEVICES, 0.95, targets.DEVICES, {"action": "list"},
+                             "The user asks which devices there are.")
+
+    for pattern, fixed_action in _DEVICE_PATTERNS:
+        match = pattern.match(text)
+        if not match:
+            continue
+        action = fixed_action or match.group("action").lower()
+        arguments = {"action": action, "device": match.group("device").strip()}
+        if action == "set":
+            raw = match.group("value").lower()
+            arguments["value"] = _SMALL_NUMBERS.get(raw) or int(raw)
+        return RouteDecision(Intent.DEVICES, 0.95, targets.DEVICES, arguments,
+                             "The user asks to control or check a device.")
+    return None
+
+
+# --- Reminders ------------------------------------------------------------------
+
+_UNIT_SECONDS = {"second": 1, "sec": 1, "minute": 60, "min": 60, "hour": 3600, "hr": 3600}
+_AMOUNT = r"(?P<n>\d+|an?|one|two|three|four|five|six|seven|eight|nine|ten|half\s+an?)"
+_DURATION = re.compile(rf"^{_AMOUNT}\s+(?P<unit>second|sec|minute|min|hour|hr)s?$", re.I)
+_CLOCK = re.compile(r"^(?P<h>\d{1,2})(?::(?P<m>\d{2}))?\s*(?P<ampm>am|pm|a\.m\.|p\.m\.)?$", re.I)
+
+_WHEN_PHRASE = (
+    r"(?:(?:\d+|an?|one|two|three|four|five|six|seven|eight|nine|ten|half\s+an?)\s+"
+    r"(?:seconds?|secs?|minutes?|mins?|hours?|hrs?)"
+    r"|\d{1,2}(?::\d{2})?\s*(?:am|pm|a\.m\.|p\.m\.)?)"
+)
+_REMIND = re.compile(
+    rf"^remind\s+me\s+(?P<kind2>in|at)\s+(?P<when2>{_WHEN_PHRASE})\s+(?:to\s+)?(?P<text2>.+)$"
+    rf"|^remind\s+me\s+(?:to\s+)?(?P<text>.+?)\s+(?P<kind>in|at)\s+(?P<when>{_WHEN_PHRASE})$",
+    re.I,
+)
+_TIMER = re.compile(
+    r"^(?:set|start)?\s*(?:a\s+)?timer\s+(?:for\s+)?(?P<when>.+)$"
+    r"|^(?:set|start)\s+an?\s+(?P<when2>\d+\s+(?:second|minute|hour)s?)\s+timer$",
+    re.I,
+)
+_REMINDER_LIST = re.compile(r"^(?:list|show(?:\s+me)?|what\s+are)\s+(?:my\s+)?(?:reminders|timers)$", re.I)
+_REMINDER_CANCEL = re.compile(r"^(?:cancel|clear|delete|stop)\s+(?:all\s+)?(?:my\s+)?(?:reminders|timers|the\s+timer)$", re.I)
+
+
+def _seconds(when: str) -> int | None:
+    match = _DURATION.match(when.strip())
+    if not match:
+        return None
+    raw = match.group("n").lower()
+    if raw.startswith("half"):
+        amount = 0.5
+    else:
+        amount = 1 if raw in ("a", "an") else _SMALL_NUMBERS.get(raw) or int(raw)
+    return int(amount * _UNIT_SECONDS[match.group("unit").lower()])
+
+
+def _clock(when: str) -> str | None:
+    match = _CLOCK.match(when.strip())
+    if not match:
+        return None
+    hour, minute = int(match.group("h")), int(match.group("m") or 0)
+    ampm = (match.group("ampm") or "").lower().replace(".", "")
+    if ampm == "pm" and hour < 12:
+        hour += 12
+    elif ampm == "am" and hour == 12:
+        hour = 0
+    if not (0 <= hour <= 23 and 0 <= minute <= 59):
+        return None
+    return f"{hour:02d}:{minute:02d}"
+
+
+def reminders_rule(original: str, body: str) -> RouteDecision | None:
+    text = _clean(body)
+
+    if _REMINDER_LIST.match(text):
+        return RouteDecision(Intent.REMINDER, 0.95, targets.REMINDERS, {"action": "list"}, "List reminders.")
+    if _REMINDER_CANCEL.match(text):
+        return RouteDecision(Intent.REMINDER, 0.95, targets.REMINDERS, {"action": "cancel"}, "Cancel reminders.")
+
+    match = _TIMER.match(text)
+    if match:
+        seconds = _seconds(match.group("when") or match.group("when2"))
+        if seconds:
+            return RouteDecision(Intent.REMINDER, 0.95, targets.REMINDERS,
+                                 {"action": "add", "seconds": seconds, "timer": True}, "Set a timer.")
+
+    match = _REMIND.match(text)
+    if match:
+        kind = (match.group("kind") or match.group("kind2")).lower()
+        when = match.group("when") or match.group("when2")
+        reminder = _clean(match.group("text") or match.group("text2"))
+        arguments = {"action": "add", "text": reminder}
+        if kind == "in":
+            arguments["seconds"] = _seconds(when)
+        else:
+            arguments["at"] = _clock(when)
+        if arguments.get("seconds") or arguments.get("at"):
+            return RouteDecision(Intent.REMINDER, 0.95, targets.REMINDERS, arguments, "Set a reminder.")
+    return None
+
+
 # --- Vision -------------------------------------------------------------------
 
 _LOOK = re.compile(
@@ -520,6 +645,8 @@ DEFAULT_RULES: tuple[Rule, ...] = (
     vision_rule,
     sensors_rule,
     health_rule,
+    devices_rule,
+    reminders_rule,
 )
 
 

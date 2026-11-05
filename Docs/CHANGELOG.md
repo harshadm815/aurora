@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.15.0 — Milestone 11: Automation (2026-11-05)
+
+### Added
+- Devices tool: turn on/off, toggle, set brightness or speed, status and
+  list, for devices listed in `settings.DEVICES` (simulated desk light and
+  fan by default; every answer says when a device is simulated).
+- Safety: only configured devices and allowed actions, values checked
+  against limits, a yes/no confirmation for every change, a rate limit of
+  6 changes per device per minute, and an audit trail. Device commands
+  are only accepted on their own, never inside a combined request, and
+  never from fetched text or the model's replies (tested).
+- ESP32 relay/fan controller firmware with token authentication and
+  safety notes (`firmware/esp32_device_controller/`; untested on hardware).
+- Reminders and timers for the current session ("remind me in 10 minutes
+  to stretch", "set a timer for 3 minutes", list, cancel).
+- `devices` and `reminder` intents; device and reminder settings; grant
+  `Devices: hardware_control`.
+- 492 tests (1 skipped on Windows).
+
 ## 0.14.0 — Milestone 10: Sensor Hub (2026-11-05)
 
 ### Added

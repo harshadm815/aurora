@@ -140,6 +140,11 @@ def main():
 
     voice = VoiceControls(engine)
 
+    # Reminders fire in the background: show them, then restore the prompt.
+    reminders_tool = engine.tool_manager.get("Reminders")
+    if reminders_tool is not None:
+        reminders_tool.scheduler.notify = lambda text: print(f"\n\a{text}\nYou: ", end="", flush=True)
+
     # Show when the camera turns on and off for "what do you see?" / "read this".
     camera_tool = engine.tool_manager.get("Camera")
     if camera_tool is not None:

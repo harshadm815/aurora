@@ -16,6 +16,8 @@ DOCUMENTS = "Documents"
 CAMERA = "Camera"
 SENSORS = "Sensors"
 HEALTH = "Health"
+DEVICES = "Devices"
+REMINDERS = "Reminders"
 
 
 @dataclass(frozen=True, eq=True)

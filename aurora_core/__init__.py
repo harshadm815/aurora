@@ -17,7 +17,9 @@ used by the running assistant until each part has been built and tested.
     generation/   Phase 5: sampling, text generation, measures of
                   generated text.
     runtime/      Phase 6: the AURORA Core Runtime: model loader, KV-cache
-                  inference, generation controller with resource limits.
+                  inference, generation controller with resource limits;
+                  Phase 7: optimised engine, lower-precision storage,
+                  benchmarks.
 """
 
-__version__ = "0.5.0"
+__version__ = "0.6.0"

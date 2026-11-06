@@ -9,6 +9,7 @@ forward pass over the window; caching keys and values to avoid that is
 part of the runtime (Phase 6).
 """
 
+import codecs
 from collections.abc import Callable, Iterator
 from dataclasses import asdict, dataclass
 
@@ -69,34 +70,55 @@ def generate_ids(model: AuroraT0, prompt_ids, config: GenerationConfig = Generat
 
 
 class TextStream:
-    """Turns a growing list of token ids into text pieces. A piece is
-    released only once it forms complete characters, so a multi-byte
-    character split across tokens is never shown half-finished."""
+    """Turns token ids, added one at a time, into text pieces.
+
+    Each token is decoded once, on its own: byte-level tokens go through
+    Python's incremental UTF-8 decoder, which holds back a character until
+    all its bytes have arrived (so a multi-byte character split across
+    tokens is never shown half-finished). The joined pieces always equal
+    tokenizer.decode(all ids), but the cost per token stays constant
+    instead of growing with the length of the text.
+    """
 
     def __init__(self, tokenizer: Tokenizer):
         self.tokenizer = tokenizer
         self.ids: list[int] = []
-        self.shown = ""
+        self._parts: list[str] = []
+        self._bytes = hasattr(tokenizer, "token_bytes")
+        self._decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
 
     def add(self, token: int) -> str:
         """Add a token; return the new text that can be shown now (maybe "")."""
+        token = int(token)
+        if not 0 <= token < self.tokenizer.vocab_size:
+            raise ValueError(f"token id {token} is outside the vocabulary")
         self.ids.append(token)
-        text = self.tokenizer.decode(self.ids)
-        if text.endswith("�") or len(text) <= len(self.shown):
-            return ""
-        piece, self.shown = text[len(self.shown):], text
+        if not self._bytes:
+            piece = self.tokenizer.decode([token])
+        elif token == UNK_ID:
+            # Like decode(): an unknown token ends any unfinished character.
+            piece = self._decoder.decode(b"", final=True) + "�"
+        elif token in (PAD_ID, BOS_ID, EOS_ID):
+            piece = ""
+        else:
+            piece = self._decoder.decode(self.tokenizer.token_bytes(token))
+        if piece:
+            self._parts.append(piece)
         return piece
 
     def finish(self) -> str:
-        """Whatever is still held back (e.g. bytes that never became a character)."""
-        text = self.tokenizer.decode(self.ids)
-        piece = text[len(self.shown):] if len(text) > len(self.shown) else ""
-        self.shown = text
+        """Whatever is still held back (bytes that never became a character)."""
+        piece = self._decoder.decode(b"", final=True) if self._bytes else ""
+        if piece:
+            self._parts.append(piece)
         return piece
 
     @property
     def text(self) -> str:
-        return self.tokenizer.decode(self.ids)
+        """The text so far, including anything still held back."""
+        held = self._decoder.getstate()[0] if self._bytes else b""
+        shown = "".join(self._parts)
+        return shown + held.decode("utf-8", errors="replace") if held else shown
 
 
 def generate_text(

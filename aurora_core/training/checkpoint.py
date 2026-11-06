@@ -40,7 +40,16 @@ class Checkpoint:
 
 
 def save_checkpoint(path, model: AuroraT0, *, step: int = 0, optimizer=None,
-                    tokenizer: Tokenizer | None = None, metadata: dict | None = None) -> None:
+                    tokenizer: Tokenizer | None = None, metadata: dict | None = None,
+                    precision: str = "float32") -> None:
+    """precision "float16" or "int8" stores the weights in less space (see
+    runtime/quantize.py); they are restored to the model's float type on
+    load. Reduced-precision checkpoints are for running, not for resuming
+    training, so they can't include optimizer state."""
+    from aurora_core.runtime.quantize import encode_params
+
+    if precision != "float32" and optimizer is not None:
+        raise ValueError("a reduced-precision checkpoint can't hold optimizer state")
     header = {
         "format": FORMAT,
         "version": VERSION,
@@ -49,12 +58,12 @@ def save_checkpoint(path, model: AuroraT0, *, step: int = 0, optimizer=None,
         "has_optimizer": optimizer is not None,
         "optimizer_t": optimizer.t if optimizer is not None else 0,
         "metadata": metadata or {},
+        "precision": precision,
     }
     arrays = {"header": np.array(json.dumps(header))}
     if tokenizer is not None:
         arrays["tokenizer"] = np.array(tokenizer.to_json())
-    for name, value in model.params.items():
-        arrays["param/" + name] = value
+    arrays.update(encode_params(model.params, precision))
     if optimizer is not None:
         for name in model.params:
             arrays["adam_m/" + name] = optimizer.m[name]
@@ -89,7 +98,11 @@ def load_checkpoint(path) -> Checkpoint:
 
     try:
         config = T0Config(**header["config"])
-        params = {k[len("param/"):]: v for k, v in arrays.items() if k.startswith("param/")}
+        from aurora_core.runtime.quantize import PRECISIONS, decode_params
+
+        if header.get("precision", "float32") not in PRECISIONS:
+            raise ValueError(f"unknown precision {header.get('precision')!r}")
+        params = decode_params(arrays)
         params = {k: v.astype(config.np_dtype, copy=False) for k, v in params.items()}
         model = AuroraT0(config, params=params)
     except (KeyError, TypeError, ValueError) as error:

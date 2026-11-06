@@ -1,5 +1,41 @@
 # Changelog
 
+## 0.24.0 — Optimisation (2026-11-06)
+
+Blueprint Phase 7. See the Phase 7 section of Docs/AURORA_CORE.md.
+
+### Changed
+- `TextStream` decodes each token once (incremental UTF-8 decoding)
+  instead of re-decoding the whole text for every token. Before, the
+  cost grew with the square of the output length; at 2,000 tokens it
+  took 73 % of the time.
+- The runtime uses an optimised engine by default
+  (`RuntimeLimits(engine="fast")`):
+  - `FastInferenceSession`: weights unpacked once, fewer and larger NumPy
+    operations;
+  - `FastSampler`: the same draws as `rng.choice`, with less work.
+
+  Both produce the same tokens as the Phase 6 code, which stays
+  available as `engine="reference"`.
+
+### Added
+- Lower-precision checkpoints: `save_checkpoint(..., precision="float16" | "int8")`
+  (int8: symmetric, one scale per output channel). Old checkpoints still
+  load.
+- `python -m aurora_core.runtime.precision`: file size, loss and greedy
+  agreement per precision.
+- `python -m aurora_core.runtime.benchmark`: no cache, reference and fast
+  engines on T0 and two larger random models, checking that the tokens
+  are identical.
+
+### Results (against the Phase 6 code, same machine, alternating runs)
+- AURORA-T0, 500 tokens: 1,788–1,871 → 5,383–5,743 tokens/s (3.0×).
+- AURORA-T0, 2,000 tokens: 1,039–1,055 → 5,667–5,735 tokens/s (5.4×).
+- 0.9M-parameter model: 2.0× (500 tokens), 2.5–2.9× (2,000 tokens).
+- Same tokens as Phase 6 in every case.
+- float16 halves the weights on disk with no measurable loss change;
+  int8 saves 55 % of the file for +0.0007 validation loss.
+
 ## 0.23.0 — AURORA Core Runtime (2026-11-06)
 
 Blueprint Phase 6. See Docs/AURORA_CORE.md.

@@ -12,7 +12,8 @@ Status: **Phases 1–6 are done:**
 - the tokenizers;
 - the training pipeline;
 - text generation with experiments;
-- the AURORA Core Runtime.
+- the AURORA Core Runtime;
+- optimisation (Phase 7), measured against Phase 6.
 
 AURORA-T0, trained on *The Adventures of Sherlock Holmes*, beats the
 baselines on text it never saw. It writes text from its own weights,
@@ -27,7 +28,9 @@ run by AURORA's own runtime with no Ollama involved. See [AURORA_T0_MODEL_CARD.m
 .venv\Scripts\python.exe -m aurora_core.training.experiments --data Data\pg1661.txt --steps 2000
 .venv\Scripts\python.exe -m aurora_core.runtime --model Models\aurora_t0_lr1e-2\best.npz --interactive
 .venv\Scripts\python.exe -m aurora_core.runtime --model Models\aurora_t0_lr1e-2\best.npz --benchmark --tokens 300
-.venv\Scripts\python.exe -m pytest Tests/test_core_tensors.py Tests/test_core_transformer.py Tests/test_core_tokenizer.py Tests/test_core_training.py Tests/test_core_generation.py Tests/test_core_runtime.py
+.venv\Scripts\python.exe -m aurora_core.runtime.benchmark --model Models\aurora_t0_lr1e-2\best.npz
+.venv\Scripts\python.exe -m aurora_core.runtime.precision --model Models\aurora_t0_lr1e-2\best.npz --data Data\pg1661.txt
+.venv\Scripts\python.exe -m pytest Tests/test_core_tensors.py Tests/test_core_transformer.py Tests/test_core_tokenizer.py Tests/test_core_training.py Tests/test_core_generation.py Tests/test_core_runtime.py Tests/test_core_optimisation.py
 ```
 
 ## Layout
@@ -61,6 +64,11 @@ run by AURORA's own runtime with no Ollama involved. See [AURORA_T0_MODEL_CARD.m
 | `runtime/session.py` | `InferenceSession`, `KVCache`: prefill, one-token steps, context-window policy |
 | `runtime/runtime.py` | `AuroraRuntime`: load / generate / unload, limits, cancellation, statistics |
 | `runtime/__main__.py` | Command line: one prompt, interactive, benchmark |
+| `runtime/session.py` (`FastInferenceSession`) | The optimised engine (Phase 7) |
+| `generation/sampling.py` (`FastSampler`) | Optimised sampling, same choices as `sample_next` |
+| `runtime/quantize.py` | float16 / int8 weight storage |
+| `runtime/precision.py` | Compares precisions: size, loss, agreement |
+| `runtime/benchmark.py` | Speed benchmarks across engines and model sizes |
 
 ## Phase 1: mathematics
 
@@ -462,6 +470,118 @@ operations per token) and on sampling, not on arithmetic. That is the
 main target for Phase 7 (profiling, fewer and larger operations, faster
 sampling). Larger models will benefit from the cache much more.
 
+## Phase 7: optimisation
+
+The rule from the blueprint: optimise only against a correct reference,
+and only where measurement says it matters. Every optimisation here has
+the Phase 6 code next to it as the reference, and must produce the
+**same tokens**.
+
+### 1. Profiling: where the time went
+
+`cProfile` on 2,000 tokens of T0 generation showed the model itself was
+not the problem:
+
+| Where | Share of time |
+|---|---|
+| `TextStream`: re-decoding *all* text so far, for every new token | 73 % |
+| The model (cached steps and rebuilds) | 15 % |
+| Sampling | 5 % |
+
+Decoding the whole text again each time made the cost grow with the
+square of the output length. That's why Phase 6 measured 1,746 tokens/s
+at 500 tokens but only about 1,050 at 2,000.
+
+### 2. What was changed
+
+| Change | How | Check |
+|---|---|---|
+| Incremental text streaming | Each token's bytes go through Python's incremental UTF-8 decoder once; a character is released when all its bytes have arrived | Equal to `decode(all ids)` on 6,000 random sequences with broken UTF-8 and every special token |
+| `FastInferenceSession` | Weights unpacked once; layer norm, attention and GELU on the new token with a minimal number of NumPy calls; `matmul` instead of `einsum`; contiguous output matrix | Equal to the reference session at every position: 2e-15 (float64), 1e-6 (float32) |
+| `FastSampler` | The exact procedure `rng.choice` uses (cumulative sum, one uniform number), but only over the allowed top-k tokens, with no per-token validation | Identical choices on 9,000 random draws over every setting, including ties |
+
+Each part separately, on T0:
+- a cached step went from 343 µs to 92 µs;
+- sampling went from 226 µs to 140 µs per token.
+
+### 3. Results against the Phase 6 baseline
+
+The actual Phase 6 code (commit `d6cd2e9`) was checked out next to the
+current code and run alternately on the same models. Settings:
+temperature 0.5, top-k 40, seed 0, median of 3 runs, two rounds.
+
+| Model | Tokens | Phase 6 | Phase 7 | Speed-up | Same tokens |
+|---|---|---|---|---|---|
+| AURORA-T0 (30k parameters) | 500 | 1,788–1,871 /s | 5,383–5,743 /s | **3.0×** | yes |
+| AURORA-T0 | 2,000 | 1,039–1,055 /s | 5,667–5,735 /s | **5.4×** | yes |
+| 0.9M parameters (d 128, 4 layers, context 128) | 500 | 601–605 /s | 1,211–1,245 /s | **2.0×** | yes |
+| 0.9M parameters | 2,000 | 420–461 /s | 1,168–1,242 /s | **2.5–2.9×** | yes |
+
+### 4. Scaling, and what limits speed now
+
+`runtime/benchmark.py`, 500 tokens (randomly initialised larger models;
+speed doesn't depend on training):
+
+| Model | Parameters | Weights + KV cache | No cache (Phase 5) | Reference engine | Fast engine |
+|---|---|---|---|---|---|
+| AURORA-T0 | 30,176 | 0.1 + 0.01 MB | 1,067 /s | 2,339 /s | 4,562 /s |
+| d 128, 4 layers, context 128 | 875,264 | 3.5 + 0.5 MB | 46 /s | 566 /s | 1,040 /s |
+| d 256, 6 layers, context 256 | 4,935,680 | 19.7 + 3.2 MB | 8 /s | 143 /s | 257 /s |
+
+What this shows:
+- **The KV cache matters more as models grow.** It's about 2× for T0
+  but 32× for the 4.9M model, because without it each token re-runs up
+  to 256 positions.
+- **The fast engine's gain shrinks with size**, from about 2× to between
+  1.2× and 1.8× depending on the run. It mostly removes per-call Python
+  overhead, which matters less as matrices get larger.
+- **The 4.9M model is limited by memory bandwidth.** Each token reads
+  every weight once (about 20 MB in float32) and takes about 4 ms, about
+  5 GB/s, close to what this laptop's memory delivers. Python and the
+  arithmetic are no longer the limit.
+- **Threads:** OpenBLAS with 1 thread is clearly slower for the 4.9M
+  model. 2 and 4 threads perform about the same, so the default stays.
+- **Noise:** results vary by up to about 20 % between runs on this
+  laptop, so all figures are medians and ranges.
+
+The next speed-up for larger models therefore needs fewer bytes per
+token: computing directly from float16 or int8 weights. NumPy can't do
+that quickly (it has no fast int8 matrix product, and float16 matrix
+products aren't hardware-accelerated). It needs the "optimised CPU
+kernels that we develop ourselves" the blueprint mentions: compiled
+code, the next step beyond NumPy.
+
+### 5. Lower-precision storage and quantisation
+
+`runtime/quantize.py`:
+- **What is reduced:** matrices and embeddings. Biases and layer-norm
+  parameters stay float32.
+- **int8:** symmetric, with one scale per output channel: per column for
+  weight matrices, per row for embeddings.
+- **On load,** weights are restored to float32, so the saving is on disk
+  and in transfer. Memory while running, and speed, are unchanged.
+
+AURORA-T0 (`python -m aurora_core.runtime.precision`):
+
+| Precision | File | Validation loss | Test loss | Greedy choice same as float32 | Largest weight error |
+|---|---|---|---|---|---|
+| float32 | 149 KB | 3.3624 | 3.3540 | 100 % | 0 |
+| float16 | 91 KB | 3.3624 | 3.3540 | 99.9 % | 4.9e-4 |
+| int8 | 67 KB | 3.3631 | 3.3544 | 97.2 % | 5.1e-3 |
+
+All three files include the tokenizer (7 KB) and file headers, so the
+weights alone shrink by more than these totals suggest.
+- **float16** costs nothing measurable.
+- **int8** costs 0.0007 in validation loss. About 3 % of greedy choices
+  change (383 of 13,824 positions). They are mostly close calls:
+  - at those positions, the gap between float32's top two scores has a
+    median of 0.024, against 0.47 over all positions;
+  - in 95 % of them, int8 picks float32's second choice.
+
+For T0 the file is tiny either way. These measurements matter for larger
+models and for a future runtime that computes from the reduced weights
+directly.
+
 ## What the tests prove
 
 `Tests/test_core_transformer.py`:
@@ -579,7 +699,41 @@ sampling). Larger models will benefit from the cache much more.
 - **The command line**: one prompt, benchmark and error handling.
 - **Independence**: no runtime module imports Ollama or the assistant.
 
+`Tests/test_core_optimisation.py`:
+
+- **Streaming:**
+  - the incremental text stream equals `decode()` on random ids,
+    including broken UTF-8 and special tokens;
+  - it never shows half a character;
+  - it never re-decodes the whole text.
+- **The fast session** equals the reference session at every position,
+  for several `keep` values, in float64 and float32, and equals full
+  forward passes.
+- **The fast sampler** makes the same choices as `sample_next` for every
+  setting, including ties and a top-k larger than the vocabulary.
+- **The fast engine** generates exactly the same tokens, text and cache
+  rebuilds as the reference engine: greedy, top-k and top-p.
+- **Quantisation:**
+  - int8 error is at most half a quantisation step, and zero channels
+    are safe;
+  - only matrices are reduced;
+  - float16 and int8 checkpoints load, run and are smaller;
+  - optimizer state is refused at reduced precision;
+  - unknown precisions are rejected, and old checkpoints still load.
+- **Tools**: the precision comparison and the benchmark (which must
+  report identical tokens).
+
 The tests were checked by breaking the code deliberately:
+- Phase 7: each of these is caught:
+  - a layer-norm variance 1 % off;
+  - the attention scale missing;
+  - a wrong GELU constant;
+  - attention skipping a position;
+  - top-k ties dropped;
+  - a wrong sampling search;
+  - banned tokens allowed;
+  - an unknown token not ending a character;
+  - an int8 scale off by one level.
 - Runtime: each of these is caught:
   - the wrong position embedding in a cached step;
   - a key not stored;
@@ -613,5 +767,5 @@ The tests were checked by breaking the code deliberately:
 
 | Missing | Phase |
 |---|---|
-| Optimisation against the Phase 6 baseline: profiling, faster matrix operations and attention, lower precision, quantisation | 7 |
+| Computing directly from float16 / int8 weights: needs compiled CPU kernels (beyond NumPy), the next speed limit for larger models | later |
 | More training text and a wider model (T1); longer runs to judge context length | later |

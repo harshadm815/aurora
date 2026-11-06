@@ -23,9 +23,9 @@ from dataclasses import asdict, dataclass
 import numpy as np
 
 from aurora_core.generation.generate import BANNED, GenerationConfig, TextStream
-from aurora_core.generation.sampling import sample_next
+from aurora_core.generation.sampling import FastSampler, sample_next
 from aurora_core.runtime.loader import ModelInfo, load_model
-from aurora_core.runtime.session import InferenceSession
+from aurora_core.runtime.session import FastInferenceSession, InferenceSession
 from aurora_core.tokenizer import EOS_ID
 
 
@@ -45,10 +45,15 @@ class RuntimeLimits:
     # Tokens kept when the context window is full (see session.py);
     # None = half the context length.
     keep_on_overflow: int | None = None
+    # "fast" (default): the optimised session and sampler (Phase 7).
+    # "reference": the plain Phase 6 code they are checked against.
+    engine: str = "fast"
 
     def __post_init__(self):
         if self.max_model_bytes < 1 or self.max_new_tokens < 1 or self.max_seconds <= 0:
             raise ValueError("runtime limits must be positive")
+        if self.engine not in ("fast", "reference"):
+            raise ValueError("engine must be 'fast' or 'reference'")
 
 
 @dataclass
@@ -88,7 +93,8 @@ class AuroraRuntime:
     def load(self, path) -> ModelInfo:
         with self._exclusive():
             model, tokenizer, info = load_model(path, self.limits.max_model_bytes)
-            session = InferenceSession(model, keep=self.limits.keep_on_overflow)
+            session_class = FastInferenceSession if self.limits.engine == "fast" else InferenceSession
+            session = session_class(model, keep=self.limits.keep_on_overflow)
             self._model, self._tokenizer, self._info, self._session = model, tokenizer, info, session
             return info
 
@@ -131,6 +137,13 @@ class AuroraRuntime:
                 raise ValueError("the prompt is empty")
             session, rng = self._session, np.random.default_rng(config.seed)
             stream = TextStream(self._tokenizer)
+            if self.limits.engine == "fast":
+                choose = FastSampler(self._model.config.vocab_size, config.temperature, config.top_k,
+                                     config.top_p, BANNED)
+            else:
+                def choose(logits, rng):
+                    return sample_next(logits, rng, temperature=config.temperature, top_k=config.top_k,
+                                       top_p=config.top_p, banned=BANNED)
 
             started = self.clock()
             session.prefills = 0
@@ -144,8 +157,7 @@ class AuroraRuntime:
                 if self.clock() - started > self.limits.max_seconds:
                     reason = "timeout"
                     break
-                token = sample_next(logits, rng, temperature=config.temperature, top_k=config.top_k,
-                                    top_p=config.top_p, banned=BANNED)
+                token = choose(logits, rng)
                 if token == EOS_ID and config.stop_at_eos:
                     reason = "eos"
                     break

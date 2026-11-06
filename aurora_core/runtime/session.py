@@ -137,3 +137,74 @@ class InferenceSession:
         x = layer_norm(x, params["ln_f.gamma"], params["ln_f.beta"], cfg.layer_norm_eps)
         self.tokens.append(token)
         return x @ params["token_embedding"].T
+
+
+class FastInferenceSession(InferenceSession):
+    """The same computation as InferenceSession, arranged for speed.
+
+    InferenceSession is the readable reference: it calls the general
+    building blocks (linear, layer_norm, softmax, ...) and looks weights up
+    by name on every token. For a model as small as T0, that per-call
+    overhead costs more than the arithmetic. This version:
+      - unpacks every layer's weights once, at creation;
+      - keeps the output matrix (the token embedding, transposed) contiguous;
+      - computes layer norm, attention and GELU on the single new token
+        with a minimal number of NumPy operations (matmul instead of
+        einsum, in-place updates where safe).
+    Results equal the reference up to floating-point rounding; the tests
+    check this at every position.
+    """
+
+    def __init__(self, model: AuroraT0, keep: int | None = None):
+        super().__init__(model, keep)
+        cfg, params = self.config, model.params
+        self._layers = [
+            tuple(params[f"blocks.{i}.{name}"] for name in (
+                "ln1.gamma", "ln1.beta", "attn.w_qkv", "attn.b_qkv", "attn.w_out", "attn.b_out",
+                "ln2.gamma", "ln2.beta", "ffn.w_in", "ffn.b_in", "ffn.w_out", "ffn.b_out"))
+            for i in range(cfg.n_layers)
+        ]
+        self._embedding = params["token_embedding"]
+        self._positions = params["position_embedding"]
+        self._output = np.ascontiguousarray(params["token_embedding"].T)
+        self._final = (params["ln_f.gamma"], params["ln_f.beta"])
+        self._inv_d = 1.0 / cfg.d_model
+        self._eps = cfg.layer_norm_eps
+        self._inv_sqrt = 1.0 / math.sqrt(cfg.head_dim)
+        self._gelu_c = math.sqrt(2.0 / math.pi)
+
+    def _norm(self, x, gamma, beta):
+        centred = x - x.sum() * self._inv_d
+        variance = (centred @ centred) * self._inv_d
+        return centred * (1.0 / math.sqrt(variance + self._eps)) * gamma + beta
+
+    def append(self, token: int) -> np.ndarray:
+        token = self._check(token)
+        if not self.tokens:
+            raise RuntimeError("call start() with a prompt first")
+        if len(self.tokens) == self.config.context_length:
+            recent = self.tokens[len(self.tokens) - (self.keep - 1):] if self.keep > 1 else []
+            return self._prefill(recent + [token])
+
+        cfg, cache = self.config, self.cache
+        pos = len(self.tokens)
+        d, n_heads, head_dim = cfg.d_model, cfg.n_heads, cfg.head_dim
+        norm, c = self._norm, self._gelu_c
+        x = self._embedding[token] + self._positions[pos]
+        for i, (g1, b1, w_qkv, b_qkv, w_out, b_out, g2, b2, w_in, b_in, w_ff, b_ff) in enumerate(self._layers):
+            qkv = norm(x, g1, b1) @ w_qkv + b_qkv
+            cache.k[i, :, pos] = qkv[d:2 * d].reshape(n_heads, head_dim)
+            cache.v[i, :, pos] = qkv[2 * d:].reshape(n_heads, head_dim)
+            q = qkv[:d].reshape(n_heads, head_dim, 1)
+            scores = np.matmul(cache.k[i, :, :pos + 1], q)[:, :, 0]        # (H, t)
+            scores *= self._inv_sqrt
+            scores -= scores.max(axis=1, keepdims=True)
+            np.exp(scores, out=scores)
+            scores /= scores.sum(axis=1, keepdims=True)
+            context = np.matmul(scores[:, None, :], cache.v[i, :, :pos + 1])  # (H, 1, d)
+            x = x + (context.reshape(d) @ w_out + b_out)
+            h = norm(x, g2, b2) @ w_in + b_in
+            h = 0.5 * h * (1.0 + np.tanh(c * (h + 0.044715 * h * h * h)))
+            x = x + (h @ w_ff + b_ff)
+        self.tokens.append(token)
+        return norm(x, *self._final) @ self._output

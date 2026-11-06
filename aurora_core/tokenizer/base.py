@@ -99,9 +99,8 @@ class Tokenizer(ABC):
 
     # ---------------------------------------------------------- persistence
 
-    def save(self, path) -> None:
-        """Write the tokenizer to a JSON file (written to a temporary file
-        first, so an interrupted save never leaves a half-written file)."""
+    def to_json(self) -> str:
+        """The tokenizer as a JSON string (what save() writes)."""
         data = {
             "format": FILE_FORMAT,
             "version": FILE_VERSION,
@@ -110,10 +109,15 @@ class Tokenizer(ABC):
             "special_tokens": list(SPECIAL_TOKENS),
             **self._state(),
         }
+        return json.dumps(data, ensure_ascii=False, indent=1)
+
+    def save(self, path) -> None:
+        """Write the tokenizer to a JSON file (written to a temporary file
+        first, so an interrupted save never leaves a half-written file)."""
         path = Path(path)
         path.parent.mkdir(parents=True, exist_ok=True)
         tmp = path.with_name(path.name + ".tmp")
-        tmp.write_text(json.dumps(data, ensure_ascii=False, indent=1), encoding="utf-8")
+        tmp.write_text(self.to_json(), encoding="utf-8")
         os.replace(tmp, path)
 
     @staticmethod
@@ -125,8 +129,19 @@ class Tokenizer(ABC):
         if path.stat().st_size > MAX_FILE_BYTES:
             raise TokenizerFileError("tokenizer file is too large")
         try:
-            data = json.loads(path.read_text(encoding="utf-8"))
-        except (UnicodeDecodeError, json.JSONDecodeError) as error:
+            text = path.read_text(encoding="utf-8")
+        except UnicodeDecodeError as error:
+            raise TokenizerFileError(f"tokenizer file is not valid UTF-8: {error}") from None
+        return Tokenizer.from_json(text)
+
+    @staticmethod
+    def from_json(text: str) -> "Tokenizer":
+        """Rebuild a tokenizer from to_json() output, checking every field."""
+        if len(text) > MAX_FILE_BYTES:
+            raise TokenizerFileError("tokenizer data is too large")
+        try:
+            data = json.loads(text)
+        except json.JSONDecodeError as error:
             raise TokenizerFileError(f"tokenizer file is not valid JSON: {error}") from None
         if not isinstance(data, dict) or data.get("format") != FILE_FORMAT:
             raise TokenizerFileError("not an AURORA tokenizer file")

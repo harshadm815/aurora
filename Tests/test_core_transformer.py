@@ -313,7 +313,7 @@ def test_aurora_core_uses_only_numpy_and_the_standard_library():
     allowed = {
         "numpy", "aurora_core",
         # standard library
-        "abc", "collections", "dataclasses", "heapq", "json", "math", "os",
+        "abc", "argparse", "collections", "dataclasses", "heapq", "json", "math", "os",
         "pathlib", "re", "sys", "time", "typing", "unicodedata",
     }
     files = list(CORE_DIR.rglob("*.py"))

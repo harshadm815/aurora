@@ -6,15 +6,16 @@ assistant (`aurora/`): it never imports it, and the assistant doesn't use
 it yet. Each part is built and tested on its own, and only connected to
 the assistant once it works (blueprint Phase 6 onwards).
 
-Status: **Phases 1–3 are done: tensor mathematics, the AURORA-T0
-forward pass, and the tokenizers.** The model has random weights and can't be trained yet,
-so its output is meaningless; what has been verified is that it computes
-the right thing.
+Status: **Phases 1–4 are done: tensor mathematics, the AURORA-T0
+Transformer, the tokenizers and the training pipeline.** A first model
+has been trained on *The Adventures of Sherlock Holmes* and beats the
+baselines on text it never saw. It can't generate text yet (Phase 5).
 
 ```
 .venv\Scripts\python.exe -m aurora_core              # build T0, run one forward pass
 .venv\Scripts\python.exe -m aurora_core.tokenizer    # train BPE on the docs, show the result
-.venv\Scripts\python.exe -m pytest Tests/test_core_tensors.py Tests/test_core_transformer.py Tests/test_core_tokenizer.py
+.venv\Scripts\python.exe -m aurora_core.training --data Data\pg1661.txt --steps 5000   # train T0
+.venv\Scripts\python.exe -m pytest Tests/test_core_tensors.py Tests/test_core_transformer.py Tests/test_core_tokenizer.py Tests/test_core_training.py
 ```
 
 ## Layout
@@ -32,6 +33,13 @@ the right thing.
 | `tokenizer/base.py` | Shared interface: `encode`, `decode`, `tokens`, id checks, `save` / `Tokenizer.load` (JSON) |
 | `tokenizer/char.py` | `CharTokenizer`: one token per character |
 | `tokenizer/bpe.py` | `ByteBPETokenizer`: byte-level BPE, training and encoding |
+| `transformer/backprop.py` | `loss_and_gradients(model, tokens, targets)`: forward pass with stored intermediates, then the backward pass |
+| `training/data.py` | Reading text, removing Gutenberg headers, train/validation/test split, `TokenDataset` (random batches, fixed evaluation windows) |
+| `training/baselines.py` | Uniform, unigram and bigram losses |
+| `training/optim.py` | `AdamW`, `clip_grad_norm`, `learning_rate` (warm-up + cosine) |
+| `training/checkpoint.py` | `save_checkpoint` / `load_checkpoint` (.npz, no pickle) |
+| `training/trainer.py` | `TrainConfig`, `train`, `evaluate` |
+| `training/__main__.py` | The command line: text file → trained model, metrics and summary |
 
 ## Phase 1: mathematics
 
@@ -166,6 +174,115 @@ and then renamed, so an interrupted save can't corrupt it. Loading never
 runs code (no pickle). It checks every field: format, version, special
 tokens, and merges that refer only to tokens already defined.
 
+## Phase 4: training
+
+**Backpropagation** (`transformer/backprop.py`). The forward pass is
+run again, this time keeping every intermediate value. Then the chain
+rule is applied backwards through:
+- the tied output layer and the final layer norm;
+- each block: the feed-forward network, layer norm, the attention output
+  projection, the attention weights (softmax), Q, K and V, and the
+  residual connections;
+- the token and position embeddings.
+
+Each step uses a Phase 1 backward function that was already checked on
+its own. The token embedding gets gradient from two places, the input
+lookup and the tied output layer, and both are added.
+
+**Data** (`training/data.py`):
+- **Splits:** 90 % training, 5 % validation, 5 % test, as contiguous
+  blocks cut at paragraph breaks. No sentence is in two parts.
+- **No leakage:** the tokenizer is trained on the training part only, so
+  nothing about the held-out text leaks into the model.
+- **Batches:** each training batch is 32 random windows of 32 tokens.
+  The target at each position is the next token.
+- **Evaluation:** fixed, non-overlapping windows, so numbers are
+  comparable between evaluations.
+
+**Optimisation** (`training/optim.py`):
+- **AdamW:** β = (0.9, 0.95). Weight decay 0.1 applies to weight
+  matrices and embeddings only, not to biases or layer-norm parameters.
+- **Clipping:** the combined gradient norm is clipped to 1.0.
+- **Learning rate:** warms up linearly for 100 steps to 3e-3, then
+  follows a cosine decay to 3e-4.
+
+**Checkpoints** (`training/checkpoint.py`): one `.npz` file holds:
+- the configuration and every parameter;
+- the optimizer's moment estimates and step, so training can resume
+  exactly;
+- the tokenizer and metadata.
+
+Loading uses `allow_pickle=False`, so a checkpoint can't run code. Every
+part is validated on load: format, version, configuration, parameter
+names and shapes, and that the tokenizer matches the vocabulary.
+
+**Baselines** (`training/baselines.py`). The model must beat these on
+held-out text:
+
+| Baseline | Predicts the next token from | Loss on held-out text |
+|---|---|---|
+| uniform | nothing (all equally likely) | ln V |
+| unigram | how common each token is | |
+| bigram | the previous token only | |
+
+The bigram baseline is the meaningful one. A model that can't beat it
+has learned nothing beyond "which token tends to follow which".
+
+### First trained model: AURORA-T0 on Sherlock Holmes
+
+| | |
+|---|---|
+| Text | *The Adventures of Sherlock Holmes*, Project Gutenberg #1661 (public domain), 562,203 characters after removing the licence header and footer |
+| Split | train 506,133 / validation 29,163 / test 26,907 characters |
+| Tokenizer | byte-level BPE, 512 tokens, trained on the training part: 238,215 / 13,830 / 12,459 tokens |
+| Model | AURORA-T0 (1 layer, 2 heads, d = 32, context 32, FF 128), 30,176 parameters (the larger vocabulary adds 8,192 over the 256-token default) |
+| Training | 5,000 steps × 32 windows × 32 tokens, about 5.1 M tokens, 21 passes over the training text; 214 s on the i3-8130U |
+
+Results on the **test** text (used once, at the end):
+
+| | Loss | Perplexity |
+|---|---|---|
+| uniform baseline | 6.238 | 512 |
+| unigram baseline | 5.263 | 193 |
+| bigram baseline | 3.699 | 40.4 |
+| **AURORA-T0** (best validation checkpoint, step 4,750) | **3.388** | **29.6** |
+
+Validation loss over training (bigram baseline 3.744):
+
+| Step | 0 | 250 | 500 | 1,000 | 2,000 | 3,000 | 4,000 | 4,750 | 5,000 |
+|---|---|---|---|---|---|---|---|---|---|
+| Train | | 4.97 | 4.02 | 3.75 | 3.49 | 3.36 | 3.30 | 3.27 | 3.26 |
+| Validation | 6.24 | 4.25 | 3.98 | 3.78 | 3.57 | 3.50 | 3.44 | **3.40** | 3.41 |
+
+This meets the Phase 4 completion condition:
+- **Loss decreases:** from 6.24 to 3.40.
+- **Validation is measured separately**, on text training never sees.
+- **Beats the baseline:** on the held-out test text it is better than
+  the bigram baseline, by 0.31 nats.
+
+The model uses context beyond the previous token: per token, it is
+about 27 % less "surprised" than the bigram model (perplexity 29.6 vs
+40.4).
+
+Observations for Phase 5:
+- **Mild overfitting:** training loss (3.26) is below validation
+  (3.41), and validation had almost stopped improving by the end.
+  21 passes over one book is close to the limit; more text helps more
+  than more steps.
+- **Clipping is always on late in training:** the gradient norm grew
+  from about 0.4 to about 2, so the clip at 1.0 was active in most of
+  the later steps. Worth comparing other clip values and learning rates
+  (one of the blueprint's Phase 5 experiments).
+
+Files (in `Models/aurora_t0/`, ignored by git):
+- `best.npz`: the best validation checkpoint (150 KB).
+- `last.npz`: the final checkpoint, with optimizer state for resuming.
+- `tokenizer.json`.
+- `metrics.jsonl`: one line per evaluation.
+- `summary.json`.
+
+The training text is in `Data/pg1661.txt`, also ignored by git.
+
 ## What the tests prove
 
 `Tests/test_core_transformer.py`:
@@ -206,7 +323,35 @@ tokens, and merges that refer only to tokens already defined.
 - **With AURORA-T0**: BPE token ids go through the model and its output
   ids decode back to text.
 
+`Tests/test_core_training.py`:
+
+- **Backpropagation is correct**: every entry of every parameter's
+  gradient in a 2-layer model matches numerical differentiation, with
+  and without ignored positions. The training forward pass gives exactly
+  the model's logits.
+- **Data**: Gutenberg stripping; splits are contiguous and join back to
+  the original; targets are inputs shifted by one; evaluation windows
+  are fixed.
+- **Baselines** on cases with known answers.
+- **AdamW** matches a hand calculation, minimises a quadratic, decays
+  only matrices, and saves/restores its state. Clipping keeps the
+  gradient direction. The schedule warms up and decays as designed.
+- **Checkpoints** reproduce the model, optimizer and tokenizer exactly.
+  Missing, damaged, foreign, pickled and mismatched files are rejected.
+- **Training**:
+  - A small model learns a repeating pattern perfectly and beats the
+    baseline.
+  - Training is reproducible with the same seed.
+  - The best checkpoint is kept.
+  - Divergence (NaN loss) stops training.
+  - The command line runs end to end.
+
 The tests were checked by breaking the code deliberately:
+- Backpropagation: each of these makes the gradient check fail:
+  - leaving out the attention scaling;
+  - dropping a residual connection's gradient;
+  - dropping the embedding gradient;
+  - swapping Q and K.
 - Transformer: removing the causal mask makes 5 tests fail; removing the
   1/√d scaling makes the reference comparison fail.
 - Tokenizer: each of these is caught:
@@ -220,6 +365,5 @@ The tests were checked by breaking the code deliberately:
 
 | Missing | Phase |
 |---|---|
-| Dataset loading, train/validation/test splits, backward pass through the whole model, AdamW, learning-rate schedule, gradient clipping, checkpoints | 4 |
-| Text generation (sampling, temperature, KV cache) | 5 |
-| Saving/loading models, a runtime the assistant can call instead of Ollama | 6 |
+| Text generation (sampling, temperature); experiments with context length, model size, initialisation and optimiser settings; more training text | 5 |
+| A runtime the assistant can call instead of Ollama (model loader, KV cache, resource management) | 6 |

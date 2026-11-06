@@ -1,5 +1,31 @@
 # Changelog
 
+## 0.21.0 — aurora_core: training pipeline (2026-11-06)
+
+Blueprint Phase 4. See Docs/AURORA_CORE.md.
+
+### Added
+- Backpropagation through AURORA-T0 (`transformer/backprop.py`), checked
+  against numerical gradients for every parameter of a 2-layer model.
+- `aurora_core.training`:
+  - Reading text, with Project Gutenberg headers removed.
+  - Contiguous 90 / 5 / 5 train / validation / test splits.
+  - Batches of (input, next-token target) windows.
+  - Uniform, unigram and bigram baselines.
+  - AdamW, global gradient-norm clipping, warm-up + cosine learning-rate
+    schedule.
+  - Checkpoints (.npz with the model, optimizer state, step and
+    tokenizer; loaded without pickle).
+  - The training loop with periodic validation; the best model is kept.
+- `python -m aurora_core.training --data <file>`.
+- First trained model, on *The Adventures of Sherlock Holmes* (Project
+  Gutenberg, public domain): test loss 3.388 (perplexity 29.6), better
+  than the bigram baseline (3.699), in 3.6 minutes on the laptop.
+- `Data/` (training text) is ignored by git. The model is in
+  `Models/aurora_t0/`, also ignored.
+- Tokenizers: `to_json()` / `Tokenizer.from_json()`.
+- 32 new tests (1,389 in total).
+
 ## 0.20.0 — aurora_core: tokenizers (2026-11-06)
 
 Blueprint Phase 3. See Docs/AURORA_CORE.md.

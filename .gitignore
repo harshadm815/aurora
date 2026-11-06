@@ -24,3 +24,6 @@ aurora_preferences.json
 # PyInstaller output
 build/
 dist/
+
+# Training text (downloaded or your own; not committed)
+Data/

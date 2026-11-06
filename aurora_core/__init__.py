@@ -11,6 +11,9 @@ used by the running assistant until each part has been built and tested.
                   (forward pass, random initialisation).
     tokenizer/    Phase 3: text <-> token ids (character-level and
                   byte-level BPE), saved as JSON.
+    training/     Phase 4: data splits, baselines, AdamW, clipping,
+                  learning-rate schedule, checkpoints, training loop.
+                  (Backpropagation is transformer/backprop.py.)
 """
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"

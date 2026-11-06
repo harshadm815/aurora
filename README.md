@@ -12,8 +12,9 @@ ESP32 is built), switches devices only after you confirm, sets reminders,
 and runs a team of research agents. Everything runs on a 4 GB laptop.
 
 AURORA's own language model is being built from scratch in `aurora_core/`
-(NumPy only). So far: the tensor maths, the AURORA-T0 Transformer's
-forward pass and the tokenizers. It isn't trained or connected to the assistant yet; see
+(NumPy only). So far: the tensor maths, the AURORA-T0 Transformer, the
+tokenizers and the training pipeline. A first model has been trained on
+*The Adventures of Sherlock Holmes*. It isn't connected to the assistant yet; see
 [Docs/AURORA_CORE.md](Docs/AURORA_CORE.md).
 
 See [Docs/ARCHITECTURE.md](Docs/ARCHITECTURE.md) for how it works and

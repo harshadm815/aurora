@@ -310,7 +310,12 @@ def imported_modules(path: Path) -> set[str]:
 
 
 def test_aurora_core_uses_only_numpy_and_the_standard_library():
-    allowed = {"numpy", "aurora_core", "math", "dataclasses", "typing", "time"}
+    allowed = {
+        "numpy", "aurora_core",
+        # standard library
+        "abc", "collections", "dataclasses", "heapq", "json", "math", "os",
+        "pathlib", "re", "sys", "time", "typing", "unicodedata",
+    }
     files = list(CORE_DIR.rglob("*.py"))
     assert files
     for path in files:

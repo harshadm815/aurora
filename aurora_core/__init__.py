@@ -9,6 +9,8 @@ used by the running assistant until each part has been built and tested.
                   and numerical gradient checking.
     transformer/  Phase 2: AURORA-T0, a small decoder-only Transformer
                   (forward pass, random initialisation).
+    tokenizer/    Phase 3: text <-> token ids (character-level and
+                  byte-level BPE), saved as JSON.
 """
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"

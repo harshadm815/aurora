@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.20.0 — aurora_core: tokenizers (2026-11-06)
+
+Blueprint Phase 3. See Docs/AURORA_CORE.md.
+
+### Added
+- `aurora_core.tokenizer`:
+  - Normalisation (NFC and line endings, or none).
+  - Special tokens `<pad>`, `<unk>`, `<bos>`, `<eos>` with fixed ids 0–3.
+    Text can never produce them; only `add_bos` / `add_eos` add them.
+  - `CharTokenizer`: one token per character; unknown characters become
+    `<unk>`.
+  - `ByteBPETokenizer`: byte-level BPE (GPT-2 style), trained from text.
+    It has no unknown tokens and round-trips any valid text exactly.
+  - Token ↔ id conversion and readable token names.
+  - Saving and loading as checked JSON files (never pickle).
+- `python -m aurora_core.tokenizer` trains on AURORA's docs and shows the result.
+- Tokenizer tests, including 300+ random multilingual strings for the
+  lossless round trip, and a reference implementation that encoding is
+  checked against (745 test cases).
+
 ## 0.19.0 — aurora_core: tensor maths and AURORA-T0 (2026-11-06)
 
 Blueprint Phases 1–2. A new package, `aurora_core/`, separate from the

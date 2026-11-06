@@ -26,12 +26,18 @@ def unigram_loss(train_ids, targets, vocab_size: int, smoothing: float = 1.0) ->
     return float(-np.mean(np.log(probs[np.asarray(targets).reshape(-1)])))
 
 
-def bigram_loss(train_ids, inputs, targets, vocab_size: int, smoothing: float = 0.1) -> float:
+def bigram_table(train_ids, vocab_size: int, smoothing: float = 0.1) -> np.ndarray:
+    """(V, V) matrix: row a holds P(next token | previous token a)."""
     train_ids = np.asarray(train_ids).reshape(-1)
     table = np.zeros((vocab_size, vocab_size), dtype=np.float64)
     np.add.at(table, (train_ids[:-1], train_ids[1:]), 1.0)
     table += smoothing
     table /= table.sum(axis=1, keepdims=True)
+    return table
+
+
+def bigram_loss(train_ids, inputs, targets, vocab_size: int, smoothing: float = 0.1) -> float:
+    table = bigram_table(train_ids, vocab_size, smoothing)
     prev = np.asarray(inputs).reshape(-1)
     nxt = np.asarray(targets).reshape(-1)
     return float(-np.mean(np.log(table[prev, nxt])))

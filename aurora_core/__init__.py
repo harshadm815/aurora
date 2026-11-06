@@ -14,6 +14,8 @@ used by the running assistant until each part has been built and tested.
     training/     Phase 4: data splits, baselines, AdamW, clipping,
                   learning-rate schedule, checkpoints, training loop.
                   (Backpropagation is transformer/backprop.py.)
+    generation/   Phase 5: sampling, text generation, measures of
+                  generated text.
 """
 
-__version__ = "0.3.0"
+__version__ = "0.4.0"

@@ -13,8 +13,9 @@ and runs a team of research agents. Everything runs on a 4 GB laptop.
 
 AURORA's own language model is being built from scratch in `aurora_core/`
 (NumPy only). So far: the tensor maths, the AURORA-T0 Transformer, the
-tokenizers and the training pipeline. A first model has been trained on
-*The Adventures of Sherlock Holmes*. It isn't connected to the assistant yet; see
+tokenizers, the training pipeline and text generation. A first model,
+trained on *The Adventures of Sherlock Holmes*, writes text from its own
+weights (see [its model card](Docs/AURORA_T0_MODEL_CARD.md)). It isn't connected to the assistant; see
 [Docs/AURORA_CORE.md](Docs/AURORA_CORE.md).
 
 See [Docs/ARCHITECTURE.md](Docs/ARCHITECTURE.md) for how it works and

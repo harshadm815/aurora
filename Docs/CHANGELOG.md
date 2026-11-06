@@ -1,5 +1,37 @@
 # Changelog
 
+## 0.22.0 — aurora_core: text generation and experiments (2026-11-06)
+
+Blueprint Phase 5. See Docs/AURORA_CORE.md and Docs/AURORA_T0_MODEL_CARD.md.
+
+### Added
+- `aurora_core.generation`:
+  - Sampling: greedy, temperature, top-k, top-p.
+  - Generation with a sliding context window.
+  - Streaming text that never shows half a character.
+  - Structural tokens can't be generated.
+- `python -m aurora_core.generation --checkpoint ... --prompt ...`.
+- Generated-text evaluation (`python -m aurora_core.generation.evaluate`),
+  compared with the bigram baseline and the real text:
+  - real-word rate;
+  - distinct word pairs;
+  - repeated 4-grams;
+  - 6-grams copied from the training text.
+- Experiment runner (`python -m aurora_core.training.experiments`):
+  - 14 controlled variants: context length, width, depth, heads,
+    initialisation, learning rate, clipping, weight decay, plus 2 extra
+    baseline seeds.
+  - Equal tokens per step for every variant.
+  - Results are saved after every variant and resumed after an
+    interruption.
+- AURORA-T0 retrained with the better learning rate: test loss 3.354
+  (perplexity 28.6). It generates text from its own weights.
+- `Docs/AURORA_T0_MODEL_CARD.md`.
+
+### Changed
+- `python -m aurora_core.training` uses a peak learning rate of 1e-2 by
+  default (was 3e-3).
+
 ## 0.21.0 — aurora_core: training pipeline (2026-11-06)
 
 Blueprint Phase 4. See Docs/AURORA_CORE.md.

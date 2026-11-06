@@ -490,7 +490,7 @@ the message to the Brain.
 | `aurora.tools` | `tool.py`, `tool_manager.py`, `result.py`, `executor.py`, `untrusted.py` | Tool interface, permission-checked registry, `ToolResult`, intent-to-tool execution, cleaning of outside text | Yes |
 | `aurora.tool_plugins` | `calculator.py`, `memory_tools.py`, `weather.py`, `research.py`, `documents.py`, `registry.py` | The built-in tools and `default_tools()` | Yes |
 | `aurora.events` | `event.py`, `bus.py`, `topics.py` | Publish/subscribe with error isolation; standard event names | Yes |
-| `aurora_core` (separate package) | `tensors/`, `transformer/`, `tokenizer/`, `training/` | AURORA's own neural network: tensor maths with gradient checks, the AURORA-T0 Transformer with backpropagation, character and byte-level BPE tokenizers, the training pipeline (see AURORA_CORE.md) | No, not yet |
+| `aurora_core` (separate package) | `tensors/`, `transformer/`, `tokenizer/`, `training/`, `generation/` | AURORA's own neural network: tensor maths with gradient checks, the AURORA-T0 Transformer with backpropagation, character and byte-level BPE tokenizers, the training pipeline and experiments, text generation (see AURORA_CORE.md) | No, not yet |
 
 ## Design rules
 
@@ -549,5 +549,5 @@ temporary database instead of `aurora_memory.db`.
 | Plans are fixed splits: a step can't use another step's result as input ("double the temperature in Pune") | Later planning work, needs a stronger model |
 | Routing is rule-based English only; no LLM fallback for unusual phrasing | Later, once a model good at structured output is available |
 | Permission grants are static config; no prompt to ask the user at runtime | Later, with physical-action tools (11) |
-| AURORA-T0 (`aurora_core`) is trained on one book but can't generate text yet and has no runtime, so the assistant still uses Ollama | Blueprint Phases 5–6 |
+| AURORA-T0 (`aurora_core`) generates text but is far too small to converse (see its model card), and there is no runtime yet, so the assistant still uses Ollama | Blueprint Phase 6 onwards |
 | Event bus is synchronous; a slow subscriber delays the publisher | When voice/sensors need it (8, 10) |

@@ -55,7 +55,8 @@ def main(argv=None) -> int:
     parser.add_argument("--vocab-size", type=int, default=512)
     parser.add_argument("--steps", type=int, default=3000)
     parser.add_argument("--batch-size", type=int, default=32)
-    parser.add_argument("--lr", type=float, default=3e-3)
+    parser.add_argument("--lr", type=float, default=1e-2,
+                        help="peak learning rate (1e-2 was best in the Phase 5 experiments)")
     parser.add_argument("--eval-interval", type=int, default=250)
     parser.add_argument("--seed", type=int, default=0)
     args = parser.parse_args(argv)

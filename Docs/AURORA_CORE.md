@@ -6,16 +6,20 @@ assistant (`aurora/`): it never imports it, and the assistant doesn't use
 it yet. Each part is built and tested on its own, and only connected to
 the assistant once it works (blueprint Phase 6 onwards).
 
-Status: **Phases 1–4 are done: tensor mathematics, the AURORA-T0
-Transformer, the tokenizers and the training pipeline.** A first model
-has been trained on *The Adventures of Sherlock Holmes* and beats the
-baselines on text it never saw. It can't generate text yet (Phase 5).
+Status: **Phases 1–5 are done: tensor mathematics, the AURORA-T0
+Transformer, the tokenizers, the training pipeline, and text generation
+with experiments.** AURORA-T0, trained on *The Adventures of Sherlock
+Holmes*, beats the baselines on text it never saw and writes text from
+its own weights. See [AURORA_T0_MODEL_CARD.md](AURORA_T0_MODEL_CARD.md).
 
 ```
 .venv\Scripts\python.exe -m aurora_core              # build T0, run one forward pass
 .venv\Scripts\python.exe -m aurora_core.tokenizer    # train BPE on the docs, show the result
 .venv\Scripts\python.exe -m aurora_core.training --data Data\pg1661.txt --steps 5000   # train T0
-.venv\Scripts\python.exe -m pytest Tests/test_core_tensors.py Tests/test_core_transformer.py Tests/test_core_tokenizer.py Tests/test_core_training.py
+.venv\Scripts\python.exe -m aurora_core.generation --checkpoint Models\aurora_t0_lr1e-2\best.npz --prompt "Sherlock Holmes" --temperature 0.5
+.venv\Scripts\python.exe -m aurora_core.generation.evaluate --checkpoint Models\aurora_t0_lr1e-2\best.npz --data Data\pg1661.txt
+.venv\Scripts\python.exe -m aurora_core.training.experiments --data Data\pg1661.txt --steps 2000
+.venv\Scripts\python.exe -m pytest Tests/test_core_tensors.py Tests/test_core_transformer.py Tests/test_core_tokenizer.py Tests/test_core_training.py Tests/test_core_generation.py
 ```
 
 ## Layout
@@ -40,6 +44,11 @@ baselines on text it never saw. It can't generate text yet (Phase 5).
 | `training/checkpoint.py` | `save_checkpoint` / `load_checkpoint` (.npz, no pickle) |
 | `training/trainer.py` | `TrainConfig`, `train`, `evaluate` |
 | `training/__main__.py` | The command line: text file → trained model, metrics and summary |
+| `training/experiments.py` | Controlled comparisons of model and training settings |
+| `generation/sampling.py` | Next-token distribution: greedy, temperature, top-k, top-p, banned tokens |
+| `generation/generate.py` | `generate_text`, `generate_ids`, `stream_ids` (sliding window) |
+| `generation/quality.py` | Measures of generated text; bigram sampler for comparison |
+| `generation/evaluate.py` | Evaluation of generated text against the baseline and real text |
 
 ## Phase 1: mathematics
 
@@ -283,6 +292,86 @@ Files (in `Models/aurora_t0/`, ignored by git):
 
 The training text is in `Data/pg1661.txt`, also ignored by git.
 
+## Phase 5: generation and experiments
+
+**Generation** (`generation/`). The model scores every possible next
+token, one is chosen, appended, and the process repeats. Choices:
+
+- **Temperature 0 (greedy):** always the top token. Exact, but loops.
+- **Temperature 0.5–1:** sample from the probabilities. Lower is safer,
+  higher is more varied.
+- **top-k / top-p:** sample only from the k most likely tokens, or the
+  smallest set whose probabilities reach p.
+
+Other behaviour:
+- **Long texts:** when the text is longer than the 32-token context,
+  only the last 32 tokens are fed in (a sliding window), so generation
+  can run on indefinitely.
+- **Banned tokens:** `<pad>`, `<unk>` and `<bos>` are never generated.
+  `<eos>` ends generation.
+- **Streaming:** text is released only when a piece forms complete
+  characters, never half an emoji.
+- **Cost:** each new token is a full forward pass over the window.
+  Caching keys and values to avoid that belongs to the runtime (Phase 6).
+
+**Evaluating generated text** (`generation/quality.py`). There's no
+single score for good text. Four simple measures are compared across
+real held-out text, the bigram baseline and the model:
+- real-word rate;
+- distinct word pairs;
+- repeated 4-grams (loops);
+- 6-grams copied from the training text (reciting).
+
+Results are in the [model card](AURORA_T0_MODEL_CARD.md#results). In
+short: at temperature 0.5 the model uses real words 86 % of the time
+(bigram 62 %, real text 93 %), doesn't loop and copies nothing. Greedy
+decoding loops.
+
+**Experiments** (`training/experiments.py`). Each variant changes one
+setting of T0 and trains for 2,000 steps on the same data and
+tokenizer. Every variant gets 1,024 tokens per step (the batch size is
+adjusted for the context length). Results are saved after every variant,
+so an interrupted sweep resumes where it stopped. Validation loss, lower
+is better:
+
+| Variant | Parameters | Validation loss | vs baseline | Overfit gap |
+|---|---|---|---|---|
+| T0 baseline (seeds 0, 1, 2) | 30,176 | 3.626 / 3.616 / 3.645 | (mean 3.629) | 0.08 |
+| **d_model 64** (FF 256) | 84,928 | **3.186** | **−0.44** | 0.16 |
+| **learning rate 1e-2** | 30,176 | **3.438** | **−0.19** | 0.08 |
+| 2 layers | 42,880 | 3.582 | −0.05 | 0.07 |
+| init std 0.1 | 30,176 | 3.588 | −0.04 | 0.08 |
+| no weight decay | 30,176 | 3.608 | −0.02 | 0.08 |
+| context 16 | 29,664 | 3.609 | −0.02 | 0.11 |
+| 4 heads | 30,176 | 3.619 | −0.01 | 0.08 |
+| grad clip 0.5 | 30,176 | 3.620 | −0.01 | 0.07 |
+| grad clip 5.0 | 30,176 | 3.622 | −0.01 | 0.08 |
+| context 64 | 31,200 | 3.725 | +0.10 | 0.08 |
+| learning rate 1e-3 | 30,176 | 3.914 | +0.29 | 0.05 |
+
+The three baseline seeds differ by up to 0.03, so smaller differences
+can't be told apart from chance.
+
+What that shows:
+- **Width helps most.** d_model 64 is far better, but has 2.8× the
+  parameters and twice the overfitting gap. With more text, a wider
+  model is the clear next step (T1).
+- **The learning rate was too low.** 1e-2 beats 3e-3 by 0.19 at 2,000
+  steps. Over 5,000 steps the lead shrank to 0.03 on test (3.354 vs
+  3.388), but it held, so 1e-2 is now the default and T0 was retrained
+  with it.
+- **Probably small real gains:** a second layer and larger initialisation
+  (−0.04 to −0.05), just above the noise.
+- **No measurable effect:** 4 heads, clipping at 0.5 or 5.0, no weight
+  decay, and context 16.
+- **Context 64 was worse** in 2,000 steps. This comparison is the least
+  fair: each variant's loss is averaged over windows of its own length,
+  and a model this small hasn't learned to use distant tokens. It needs
+  a longer run to judge.
+
+Raw results with full training curves are in
+`Models/experiments/results.json` (not in git).
+
 ## What the tests prove
 
 `Tests/test_core_transformer.py`:
@@ -346,7 +435,39 @@ The training text is in `Data/pg1661.txt`, also ignored by git.
   - Divergence (NaN loss) stops training.
   - The command line runs end to end.
 
+`Tests/test_core_generation.py`:
+
+- **Sampling:**
+  - greedy picks the top token;
+  - temperature sharpens and flattens as it should;
+  - top-k and top-p keep exactly the right tokens;
+  - banned tokens get no probability;
+  - 20,000 samples match the distribution.
+- **Generation is driven by learned weights:** a small model trained on
+  a sentence reproduces it, and the same model untrained doesn't. This is
+  the Phase 5 completion condition on a case with a known answer.
+- **Generation mechanics:**
+  - runs past the context length;
+  - reproducible with a seed;
+  - never writes structural tokens, even when they score highest;
+  - stops at `<eos>`;
+  - streamed pieces join up to the final text.
+- **Quality measures** on texts with known answers, including curly
+  apostrophes; the bigram sampler follows its training pairs.
+- **Experiments:**
+  - variants get equal tokens per step;
+  - each changes one setting;
+  - results save after every variant, resume after an interruption, and
+    start again when settings change.
+
 The tests were checked by breaking the code deliberately:
+- Generation: each of these is caught:
+  - top-p keeping too many tokens;
+  - ignoring banned tokens;
+  - inverted temperature;
+  - no sliding window;
+  - reading the wrong position's scores;
+  - miscounting repeats.
 - Backpropagation: each of these makes the gradient check fail:
   - leaving out the attention scaling;
   - dropping a residual connection's gradient;
@@ -365,5 +486,5 @@ The tests were checked by breaking the code deliberately:
 
 | Missing | Phase |
 |---|---|
-| Text generation (sampling, temperature); experiments with context length, model size, initialisation and optimiser settings; more training text | 5 |
 | A runtime the assistant can call instead of Ollama (model loader, KV cache, resource management) | 6 |
+| More training text and a wider model (T1); longer runs to judge context length | later |

@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.19.0 — aurora_core: tensor maths and AURORA-T0 (2026-11-06)
+
+Blueprint Phases 1–2. A new package, `aurora_core/`, separate from the
+assistant and not yet used by it. See Docs/AURORA_CORE.md.
+
+### Added
+- `aurora_core.tensors`: linear, softmax, log-softmax, cross-entropy
+  (with `ignore_index`), GELU and layer norm, each with a backward pass;
+  numerical gradient checking. Every backward pass is verified against
+  central differences.
+- `aurora_core.transformer`: AURORA-T0, a decoder-only Transformer in
+  NumPy (1 layer, 2 heads, 32 dimensions, context 32, feed-forward 128,
+  21,984 parameters, random initialisation, forward pass only).
+- `python -m aurora_core` builds T0 and runs one forward pass.
+- NumPy pinned in Requirements.txt (it was only installed through OpenCV).
+- 68 new tests (612 in total).
+
 ## 0.18.0 — Windows desktop integration (2026-11-06)
 
 ### Added

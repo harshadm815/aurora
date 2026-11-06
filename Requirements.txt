@@ -3,6 +3,9 @@ ollama==0.6.2
 httpx==0.28.1
 pypdf==6.21.4
 
+# AURORA's own neural network (aurora_core/)
+numpy==2.5.4
+
 # Voice (optional; the speech model is downloaded separately, see README)
 vosk==0.3.45
 sounddevice==0.5.6

@@ -11,6 +11,11 @@ through the webcam, reads room and health sensors (simulated until the
 ESP32 is built), switches devices only after you confirm, sets reminders,
 and runs a team of research agents. Everything runs on a 4 GB laptop.
 
+AURORA's own language model is being built from scratch in `aurora_core/`
+(NumPy only). So far: the tensor maths and the AURORA-T0 Transformer's
+forward pass. It isn't trained or connected to the assistant yet; see
+[Docs/AURORA_CORE.md](Docs/AURORA_CORE.md).
+
 See [Docs/ARCHITECTURE.md](Docs/ARCHITECTURE.md) for how it works and
 its "Known gaps" table for what's not done yet.
 
@@ -89,7 +94,7 @@ Logs are written to `Logs/aurora.log` (metadata only; never your messages).
 ## Documentation
 
 - [Command Centre](Docs/COMMAND_CENTRE.md)
-
+- [aurora_core: AURORA's own neural network](Docs/AURORA_CORE.md)
 - [Architecture](Docs/ARCHITECTURE.md)
 - [Memory design](Docs/MEMORY_DESIGN.md)
 - [Changelog](Docs/CHANGELOG.md)

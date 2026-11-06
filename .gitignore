@@ -20,3 +20,7 @@ firmware/**/secrets.h
 
 # Command Centre preferences
 aurora_preferences.json
+
+# PyInstaller output
+build/
+dist/

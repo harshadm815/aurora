@@ -123,6 +123,7 @@ class ChatView(BaseView):
         self.body.addLayout(row)
 
         self._set_ready(self.backend.engine is not None)
+        backend.state_changed.connect(lambda _: self._set_ready(self.backend.engine is not None))
 
     # --- Messages -----------------------------------------------------------------
 
@@ -144,9 +145,13 @@ class ChatView(BaseView):
         bar.setValue(bar.maximum())
 
     def _set_ready(self, ready: bool):
+        paused = self.backend.state == "paused"
+        ready = ready and self.backend.state == "running"
         self.send_button.setEnabled(ready and not self.busy)
         self.input.setEnabled(ready)
-        if not ready:
+        if paused:
+            self.thinking.setText("AURORA is paused. Start it from the Dashboard or the tray menu.")
+        elif not ready:
             self.thinking.setText("AURORA is starting…")
         elif not self.busy:
             self.thinking.setText("")

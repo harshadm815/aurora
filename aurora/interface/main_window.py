@@ -2,7 +2,7 @@
 
 import logging
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QEvent, Qt, QTimer
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import (
     QApplication, QButtonGroup, QFrame, QHBoxLayout, QMainWindow, QPushButton, QStackedWidget, QStatusBar,
@@ -11,7 +11,7 @@ from PySide6.QtWidgets import (
 
 from aurora.config import settings
 from aurora.interface.chat import ChatView
-from aurora.interface.components.widgets import Emblem, emblem_pixmap, fade_in, label
+from aurora.interface.components.widgets import Emblem, fade_in, label
 from aurora.interface.dashboard import DashboardView
 from aurora.interface.knowledge_view import KnowledgeView
 from aurora.interface.memory_view import MemoryView
@@ -21,6 +21,8 @@ from aurora.interface.styles.theme import palette, stylesheet
 from aurora.interface.system_monitor import SystemMonitorView
 from aurora.interface.tools_view import ToolsView
 from aurora.interface.vision_view import VisionView
+from aurora.interface.windows.integration import icon_path
+from aurora.interface.windows.tray import Tray
 
 logger = logging.getLogger(__name__)
 
@@ -40,9 +42,13 @@ PAGES = [
 
 class MainWindow(QMainWindow):
 
-    def __init__(self, backend):
+    def __init__(self, backend, use_tray: bool = True):
         super().__init__()
         self.backend = backend
+        self._quitting = False
+        self.current_hidden = None
+        self.app_icon = QIcon(str(icon_path()))
+        self.setWindowIcon(self.app_icon)
         self.setWindowTitle("AURORA Command Centre")
         self.setMinimumSize(1100, 720)
         self.resize(1360, 860)
@@ -105,6 +111,17 @@ class MainWindow(QMainWindow):
         backend.ollama_checked.connect(lambda _: self._update_status())
         backend.preferences_changed.connect(self.apply_preferences)
 
+        backend.state_changed.connect(lambda _: self._update_status())
+
+        # Notification-area icon (if Windows offers one).
+        self.tray = None
+        if use_tray and Tray.available():
+            self.tray = Tray(backend, self.app_icon, self)
+            self.tray.open_requested.connect(self.show_from_tray)
+            self.tray.settings_requested.connect(self.open_settings)
+            self.tray.exit_requested.connect(self.quit)
+            self.tray.show()
+
         self.current: str | None = None
         self.apply_preferences(backend.preferences)
         start = backend.preferences.get("start_page", "Dashboard")
@@ -142,7 +159,9 @@ class MainWindow(QMainWindow):
     def _update_status(self):
         status = self.backend.status()
         ollama = self.backend.ollama
-        parts = ["AURORA online" if status.get("running") else "AURORA starting"]
+        names = {"running": "AURORA online", "paused": "AURORA paused (model unloaded)",
+                 "failed": "AURORA couldn't start", "stopped": "AURORA stopped"}
+        parts = [names.get(self.backend.state, "AURORA starting")]
         parts.append(f"model {status.get('model', settings.DEFAULT_MODEL)}")
         if ollama["ok"] is True:
             parts.append("Ollama connected")
@@ -155,11 +174,57 @@ class MainWindow(QMainWindow):
         app = QApplication.instance()
         if app is not None:
             app.setStyleSheet(stylesheet(colours))
-            app.setWindowIcon(QIcon(emblem_pixmap(64, colours.accent)))
         self.emblem.set_accent(colours.accent)
         self.pages["Dashboard"].set_accent(colours.accent)
 
+    # --- Tray behaviour ---------------------------------------------------------------
+
+    @property
+    def tray_ready(self) -> bool:
+        return self.tray is not None
+
+    def show_from_tray(self):
+        self.showNormal()
+        self.raise_()
+        self.activateWindow()
+
+    def open_settings(self):
+        self.show_from_tray()
+        self.open_page("Settings")
+
+    def to_tray(self):
+        """Hides the window; AURORA keeps running in the notification area."""
+        if self.current:
+            self.pages[self.current].on_hidden()   # E.g. the camera turns off.
+            self.current_hidden = self.current
+        self.hide()
+        if self.tray:
+            self.tray.tell_once()
+
+    def changeEvent(self, event):
+        super().changeEvent(event)
+        if (event.type() == QEvent.WindowStateChange and self.isMinimized() and self.tray_ready
+                and self.backend.preferences.get("minimize_to_tray", True)):
+            QTimer.singleShot(0, self.to_tray)
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        if self.current_hidden and self.current_hidden == self.current:
+            self.current_hidden = None
+            self.pages[self.current].on_shown()
+
+    def quit(self):
+        """Exit for real: close the window and shut AURORA down."""
+        self._quitting = True
+        self.close()
+
     def closeEvent(self, event):
+        if (not self._quitting and self.tray_ready
+                and self.backend.preferences.get("close_to_tray", False)):
+            event.ignore()
+            self.to_tray()
+            return
+        self._quitting = True
         for view in self.pages.values():
             try:
                 view.on_hidden()   # Turns the camera off, stops timers.
@@ -167,4 +232,9 @@ class MainWindow(QMainWindow):
                 logger.exception("Closing a page failed")
         self.status.showMessage("Shutting down AURORA…")
         self.backend.shutdown()
+        if self.tray is not None:
+            self.tray.hide()
         event.accept()
+        app = QApplication.instance()
+        if app is not None:
+            app.quit()

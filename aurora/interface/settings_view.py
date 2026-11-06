@@ -11,6 +11,7 @@ from PySide6.QtWidgets import (
 from aurora.config import preferences, settings
 from aurora.interface.components.base_view import BaseView
 from aurora.interface.components.widgets import Panel, label
+from aurora.interface.windows import integration
 
 PAGES = ["Dashboard", "Chat", "Memory", "Knowledge", "Tools", "Vision", "Sensors", "System", "Settings"]
 
@@ -90,6 +91,31 @@ class SettingsView(BaseView):
                         "`listen` or `voice on` in the terminal.", "Faint", wrap=True))
         self.body.addWidget(voice)
 
+        windows = Panel("Windows")
+        form = QFormLayout()
+        self.minimize_to_tray = QCheckBox("Minimising the window sends AURORA to the notification area")
+        self.minimize_to_tray.setChecked(values["minimize_to_tray"])
+        form.addRow("", self.minimize_to_tray)
+        self.close_to_tray = QCheckBox("Closing the window keeps AURORA running in the notification area")
+        self.close_to_tray.setChecked(values["close_to_tray"])
+        form.addRow("", self.close_to_tray)
+        self.startup = QCheckBox("Start AURORA when I sign in to Windows (minimised to the notification area)")
+        self.startup.setChecked(integration.startup_enabled())
+        self.startup.setEnabled(integration.IS_WINDOWS)
+        form.addRow("", self.startup)
+        windows.add_layout(form)
+        shortcut_row = QHBoxLayout()
+        shortcut = QPushButton("Create desktop shortcut")
+        shortcut.clicked.connect(self._create_shortcut)
+        shortcut.setEnabled(integration.IS_WINDOWS)
+        shortcut_row.addWidget(shortcut)
+        shortcut_row.addStretch(1)
+        windows.add_layout(shortcut_row)
+        windows.add(label("To pin AURORA to the taskbar: right-click its taskbar button → Pin to taskbar "
+                          "(Windows doesn't let apps pin themselves). Exit AURORA from the tray menu.",
+                          "Faint", wrap=True))
+        self.body.addWidget(windows)
+
         buttons = QHBoxLayout()
         save = QPushButton("Save settings")
         save.setObjectName("Primary")
@@ -128,7 +154,29 @@ class SettingsView(BaseView):
             "animations": self.animations.isChecked(),
             "voice_name": self.voice_name.currentText(),
             "voice_rate": self.voice_rate.value(),
+            "minimize_to_tray": self.minimize_to_tray.isChecked(),
+            "close_to_tray": self.close_to_tray.isChecked(),
         }
+
+    def _create_shortcut(self):
+        try:
+            path = integration.create_shortcut()
+        except Exception as error:
+            QMessageBox.warning(self, "Desktop shortcut", f"Couldn't create the shortcut: {error}")
+            return
+        QMessageBox.information(self, "Desktop shortcut", f"Created {path.name} on your desktop.")
+
+    def _apply_startup(self) -> bool:
+        wanted = self.startup.isChecked()
+        if not integration.IS_WINDOWS or wanted == integration.startup_enabled():
+            return True
+        try:
+            integration.set_startup(wanted)
+            return True
+        except Exception as error:
+            QMessageBox.warning(self, "Start with Windows", f"Couldn't change the startup setting: {error}")
+            self.startup.setChecked(integration.startup_enabled())
+            return False
 
     def save(self):
         values = self.values()
@@ -145,7 +193,8 @@ class SettingsView(BaseView):
             if answer != QMessageBox.Yes:
                 return
         self.backend.save_preferences(values)
-        QMessageBox.information(self, "Settings", "Saved. New settings are in use.")
+        if self._apply_startup():
+            QMessageBox.information(self, "Settings", "Saved. New settings are in use.")
 
     def on_shown(self):
         self.model.setCurrentText(settings.DEFAULT_MODEL)

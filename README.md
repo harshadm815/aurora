@@ -65,6 +65,12 @@ Desktop interface (AURORA Command Centre):
 .venv\Scripts\python.exe command_centre.py
 ```
 
+Windows executable (after building it, see [Docs/COMMAND_CENTRE.md](Docs/COMMAND_CENTRE.md)):
+
+```
+packaging\build_windows.py   →   dist\AURORA Command Centre\AURORA Command Centre.exe
+```
+
 Terminal interface:
 
 ```

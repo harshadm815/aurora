@@ -9,6 +9,45 @@ The desktop interface for AURORA, built with PySide6 (Qt 6).
 (or `python -m aurora.interface`). The terminal interface, `main.py`,
 still works and shares the same memory, settings and preferences.
 
+## Windows integration
+
+| Feature | How |
+|---|---|
+| Icon | `aurora/interface/assets/aurora.ico`, 9 sizes (16–256 px), drawn from the emblem (`python -m aurora.interface.windows.icon` regenerates it). Used for the window, taskbar, tray, shortcut and .exe |
+| Own taskbar button | The process sets the AppUserModelID `Aurora.CommandCentre`, so Windows shows AURORA's icon instead of Python's |
+| Pin to taskbar | Right-click AURORA's taskbar button → **Pin to taskbar**. (Windows doesn't let apps pin themselves.) The shortcut carries the same app ID, so pinned and running buttons are one app |
+| Desktop shortcut | Settings → Windows → **Create desktop shortcut** (`AURORA Command Centre.lnk`, uses the .exe when packaged, otherwise `pythonw command_centre.py`) |
+| Notification area | Tray icon with **Open AURORA · Start AURORA · Pause AURORA · Settings · Exit**; click to open; tooltip shows the state |
+| Minimise / close to tray | Minimising hides the window to the tray (on by default); closing can too (off by default). Settings → Windows |
+| Start with Windows | Settings → Windows. Adds a value under `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` (your user only, no admin) that starts AURORA minimised to the tray. Off until you tick it |
+| One instance | Launching again (shortcut, startup, double-click) just brings the running AURORA to the front: no second process, no duplicate workers (a per-user local socket) |
+
+**Pause / Start.** Pause stops AURORA's services and plugins and asks
+Ollama to unload the model, freeing its memory (≈ 0.7 GB for TinyLlama).
+The window and tray stay; Start brings everything back.
+
+**Exit.** Exit from the tray (or closing the window when "close to tray"
+is off) turns the camera off, cancels reminders, shuts the engine down
+(services and plugins), waits for both worker pools to finish, removes
+the tray icon and releases the single-instance lock.
+
+## The .exe
+
+```
+.venv\Scripts\python.exe -m pip install pyinstaller
+.venv\Scripts\python.exe packaging\build_windows.py
+```
+
+produces `dist\AURORA Command Centre\AURORA Command Centre.exe` (a
+one-folder build: start-up is fast and nothing is unpacked to a temporary
+folder). The executable contains the code, Qt, OpenCV and the OCR models,
+but **not your data**: `aurora_home.txt` next to the .exe points to the
+project folder, where the memory database, models, logs, Documents and
+`local_settings.py` stay. `local_settings.py` (with your contact email) is
+deliberately left out of the build, and the build script checks that.
+Voice isn't bundled yet (the window doesn't use it); use `main.py` for
+voice.
+
 ## Pages
 
 | Page | What it shows | Where the data comes from |
@@ -96,4 +135,3 @@ never starts by itself.
 - Device control and reminders have no page of their own yet; use Chat
   ("turn on the desk light", "remind me in 10 minutes to stretch").
 - Light theme (only dark accents: cyan, blue, purple).
-- Starting with Windows (only "open on start" and "start maximised").

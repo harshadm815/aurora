@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.18.0 — Windows desktop integration (2026-11-06)
+
+### Added
+- AURORA application icon (`aurora.ico`, 16–256 px) for the window,
+  taskbar, tray, shortcut and executable.
+- Own Windows app identity (AppUserModelID), so AURORA has its own
+  taskbar button and can be pinned.
+- Notification-area icon with Open, Start, Pause, Settings and Exit;
+  minimise to tray (default on) and close to tray (default off).
+- Pause / Start: stops services and plugins and unloads the model from
+  RAM; Start brings it back. Also on the Dashboard.
+- Settings → Windows: start with Windows (HKCU Run key, starts minimised
+  to the tray, off by default) and Create desktop shortcut.
+- Single instance per user: launching again brings the running AURORA to
+  the front.
+- Clean exit: camera off, reminders cancelled, engine shut down, worker
+  pools drained, tray removed, lock released.
+- PyInstaller build (`packaging/aurora.spec`, `packaging/build_windows.py`):
+  one-folder `AURORA Command Centre.exe` that uses the project's data via
+  `aurora_home.txt` and never contains `local_settings.py`.
+- `settings.PROJECT_ROOT` resolves the data folder when packaged.
+- 544 tests (1 skipped on Windows).
+
 ## 0.17.0 — AURORA Command Centre (2026-11-06)
 
 ### Added

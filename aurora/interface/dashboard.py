@@ -100,6 +100,11 @@ class DashboardView(BaseView):
             button.setObjectName("Quick")
             button.clicked.connect(lambda _=False, p=page: self._quick(p))
             quick.add(button)
+        self.pause_button = QPushButton("\u23f8  Pause AURORA")
+        self.pause_button.setObjectName("Quick")
+        self.pause_button.setToolTip("Stop AURORA's services and free the model's memory")
+        self.pause_button.clicked.connect(self._toggle_pause)
+        quick.add(self.pause_button)
         quick.layout_.addStretch(1)
         lower.addWidget(quick, 2)
 
@@ -120,10 +125,17 @@ class DashboardView(BaseView):
         backend.activity_added.connect(lambda _: self._refresh_activity())
         backend.engine_failed.connect(self._failed)
         backend.preferences_changed.connect(lambda _: self._refresh_status())
+        backend.state_changed.connect(lambda _: self._refresh_status())
         self._show_system(backend.last_sample)
         self._refresh_activity()
 
     # --- Slots -------------------------------------------------------------------
+
+    def _toggle_pause(self):
+        if self.backend.state in ("paused", "failed"):
+            self.backend.resume()
+        else:
+            self.backend.pause()
 
     def _quick(self, page: str):
         if page == "Chat":
@@ -156,7 +168,13 @@ class DashboardView(BaseView):
         services = status.get("services", {})
         brain_ok = services.get("Brain") == "Running"
 
-        if not running:
+        state = self.backend.state
+        startable = state in ("paused", "failed")
+        self.pause_button.setText("\u25b6  Start AURORA" if startable else "\u23f8  Pause AURORA")
+        self.pause_button.setEnabled(state in ("running", "paused", "failed"))
+        if state == "paused":
+            self.ai_card.set("Paused", "Services stopped · model unloaded from RAM")
+        elif not running:
             self.ai_card.set("Starting…", "Loading AURORA's kernel")
         elif brain_ok:
             self.ai_card.set("Online", "Kernel running · Brain ready")
@@ -172,7 +190,10 @@ class DashboardView(BaseView):
         else:
             self.model_card.set(model, f"Ollama: {ollama['detail']}")
 
-        if running and brain_ok and ollama["ok"]:
+        if state == "paused":
+            self.status_dot.set_state("off", pulse=False)
+            self.status_text.setText("Paused. Start AURORA to continue.")
+        elif running and brain_ok and ollama["ok"]:
             self.status_dot.set_state("ok", pulse=True)
             self.status_text.setText("All core systems operational")
         elif running:

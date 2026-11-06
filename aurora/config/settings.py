@@ -5,10 +5,11 @@ Every configurable value lives here so other modules never hardcode
 model names, paths or versions.
 """
 
+import sys
 from pathlib import Path
 
 APP_NAME = "AURORA"
-VERSION = "0.17.0"
+VERSION = "0.18.0"
 
 USER_NAME = "Harry"
 
@@ -29,7 +30,23 @@ MODEL_MAX_REPLY_TOKENS = 400
 
 # Paths are absolute so AURORA uses the same files no matter which
 # folder it is started from.
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
+#
+# When AURORA runs as a packaged .exe, its data (memory, models, logs,
+# Documents, personal settings) lives outside the bundle: in the folder
+# named in "aurora_home.txt" next to the .exe, or else the .exe's folder.
+def _project_root() -> Path:
+    if getattr(sys, "frozen", False):
+        exe_folder = Path(sys.executable).resolve().parent
+        pointer = exe_folder / "aurora_home.txt"
+        if pointer.is_file():
+            home = pointer.read_text(encoding="utf-8").strip()
+            if home and Path(home).is_dir():
+                return Path(home).resolve()
+        return exe_folder
+    return Path(__file__).resolve().parents[2]
+
+
+PROJECT_ROOT = _project_root()
 DATABASE_PATH = PROJECT_ROOT / "aurora_memory.db"
 LOG_DIR = PROJECT_ROOT / "Logs"
 LOG_FILE = LOG_DIR / "aurora.log"
@@ -196,4 +213,12 @@ REMINDER_MAX_HOURS = 24
 try:
     from aurora.config.local_settings import *  # noqa: F401,F403
 except ImportError:
-    pass
+    # The packaged .exe deliberately doesn't contain local_settings.py
+    # (it holds personal details); read it from the data folder instead.
+    _local = PROJECT_ROOT / "aurora" / "config" / "local_settings.py"
+    if getattr(sys, "frozen", False) and _local.is_file():
+        import runpy
+
+        for _name, _value in runpy.run_path(str(_local)).items():
+            if _name.isupper():
+                globals()[_name] = _value

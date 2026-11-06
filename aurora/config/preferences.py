@@ -34,6 +34,8 @@ INTERFACE = {
     "start_maximized": (bool, False, lambda v: True),
     "animations": (bool, True, lambda v: True),
     "chat_streaming": (bool, True, lambda v: True),
+    "minimize_to_tray": (bool, True, lambda v: True),
+    "close_to_tray": (bool, False, lambda v: True),
 }
 
 

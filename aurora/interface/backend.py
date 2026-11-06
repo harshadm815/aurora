@@ -144,12 +144,15 @@ class Backend(QObject):
     ollama_checked = Signal(object)        # dict: {"ok": bool, "detail": str, "models": [...]}
     preferences_changed = Signal(dict)
     system_sampled = Signal(dict)          # Real CPU / RAM readings (None where unavailable)
+    state_changed = Signal(str)            # starting | running | paused | failed | stopped
 
     def __init__(self, engine_factory: Callable | None = None, parent=None):
         super().__init__(parent)
         self.dispatcher = Dispatcher()
         self._engine_factory = engine_factory
         self.engine = None
+        self.state = "starting"
+        self._shut_down = False
         self.preferences = preferences.load()
 
         self._engine_pool = QThreadPool(self)
@@ -219,23 +222,93 @@ class Backend(QObject):
 
         def ready(engine):
             self.engine = engine
+            self._set_state("running")
             self.engine_ready.emit()
             self.check_ollama()
             self._ollama_timer.start(30_000)
 
         def failed(error):
+            self._set_state("failed")
             self.engine_failed.emit(f"AURORA couldn't start: {error}")
 
+        self._set_state("starting")
         self.run_engine(create, ready, failed)
 
-    def shutdown(self, timeout_ms: int = 5000) -> None:
+    def _set_state(self, state: str) -> None:
+        if state != self.state:
+            self.state = state
+            logger.info("AURORA %s", state)
+            self.state_changed.emit(state)
+
+    @property
+    def paused(self) -> bool:
+        return self.state == "paused"
+
+    def pause(self) -> None:
+        """
+        Stops AURORA's services and plugins and asks Ollama to unload the
+        model, freeing its memory. The window stays open; ``resume()`` starts
+        everything again.
+        """
+        if self.engine is None or self.state != "running":
+            return
+        engine = self.engine
+        self._ollama_timer.stop()
+
+        def work():
+            engine.shutdown()
+            unload = getattr(engine.brain.provider, "unload", None)
+            if unload is not None:
+                try:
+                    unload()
+                except Exception:
+                    logger.warning("Couldn't unload the model (Ollama not reachable?)")
+
+        self._set_state("paused")
+        self.run_engine(work)
+
+    def resume(self) -> None:
+        """Starts AURORA again after ``pause()`` (or retries after a failed start)."""
+        if self.state == "failed" and self.engine is None:
+            self.start()
+            return
+        if self.engine is None or self.state != "paused":
+            return
+        engine = self.engine
+
+        def ready(_):
+            self._set_state("running")
+            self.engine_ready.emit()
+            self.check_ollama()
+            self._ollama_timer.start(30_000)
+
+        self._set_state("starting")
+        self.run_engine(engine.start, ready, lambda error: self._set_state("failed"))
+
+    def shutdown(self, timeout_ms: int = 10_000) -> None:
+        """
+        Stops everything AURORA runs: timers, reminders, the engine (services
+        and plugins) and both worker pools, waiting for work in progress.
+        Safe to call more than once.
+        """
+        if self._shut_down:
+            return
+        self._shut_down = True
         self._ollama_timer.stop()
         self._sample_timer.stop()
+
         if self.engine is not None:
             engine = self.engine
+            reminders = engine.tool_manager.get("Reminders")
+            if reminders is not None:
+                reminders.scheduler.cancel_all()
             self.run_engine(engine.shutdown)
-        self._engine_pool.waitForDone(timeout_ms)
-        self._io_pool.waitForDone(timeout_ms)
+
+        engine_done = self._engine_pool.waitForDone(timeout_ms)
+        io_done = self._io_pool.waitForDone(timeout_ms)
+        if not (engine_done and io_done):
+            logger.warning("Some background work didn't finish within %d ms", timeout_ms)
+        self._set_state("stopped")
         logging.getLogger("aurora").removeHandler(self._log_handler)
 
     # --- Events and logs ----------------------------------------------------
@@ -267,6 +340,10 @@ class Backend(QObject):
         if self.engine is None:
             on_error(RuntimeError("AURORA is still starting."))
             return
+        if self.state != "running":
+            on_error(RuntimeError("AURORA is paused. Start it again from the tray menu or the Dashboard."
+                                  if self.paused else f"AURORA is {self.state}."))
+            return
         engine = self.engine
         stream = self.preferences.get("chat_streaming", True) and on_token is not None
 
@@ -294,6 +371,7 @@ class Backend(QObject):
             logger.exception("Reading engine status failed")
             status = {"running": engine.running}
         status["model"] = getattr(engine.brain.provider, "model", "unknown")
+        status["state"] = self.state
         status["auto_memory"] = engine.auto_memory_enabled
         return status
 

@@ -84,6 +84,15 @@ class OllamaProvider(BaseProvider):
                 "I can't reach Ollama. Is it running? (Start it with: ollama serve)"
             ) from None
 
+    def unload(self) -> None:
+        """Asks Ollama to free the model's memory now (it reloads on the next question)."""
+        self.client.generate(model=self.model, keep_alive=0)
+        logger.info("Model %s unloaded", self.model)
+
+    def loaded_models(self) -> list[str]:
+        """Models currently held in memory by Ollama."""
+        return [model.model for model in self.client.ps().models]
+
     def installed_models(self) -> list[str]:
         """Names of the models installed in Ollama (for the Settings page)."""
         return sorted(model.model for model in self.client.list().models)

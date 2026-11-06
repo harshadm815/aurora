@@ -68,6 +68,37 @@ def generate_ids(model: AuroraT0, prompt_ids, config: GenerationConfig = Generat
     return list(stream_ids(model, prompt_ids, config))
 
 
+class TextStream:
+    """Turns a growing list of token ids into text pieces. A piece is
+    released only once it forms complete characters, so a multi-byte
+    character split across tokens is never shown half-finished."""
+
+    def __init__(self, tokenizer: Tokenizer):
+        self.tokenizer = tokenizer
+        self.ids: list[int] = []
+        self.shown = ""
+
+    def add(self, token: int) -> str:
+        """Add a token; return the new text that can be shown now (maybe "")."""
+        self.ids.append(token)
+        text = self.tokenizer.decode(self.ids)
+        if text.endswith("�") or len(text) <= len(self.shown):
+            return ""
+        piece, self.shown = text[len(self.shown):], text
+        return piece
+
+    def finish(self) -> str:
+        """Whatever is still held back (e.g. bytes that never became a character)."""
+        text = self.tokenizer.decode(self.ids)
+        piece = text[len(self.shown):] if len(text) > len(self.shown) else ""
+        self.shown = text
+        return piece
+
+    @property
+    def text(self) -> str:
+        return self.tokenizer.decode(self.ids)
+
+
 def generate_text(
     model: AuroraT0,
     tokenizer: Tokenizer,
@@ -77,23 +108,16 @@ def generate_text(
 ) -> str:
     """The continuation of `prompt` (without the prompt itself).
 
-    on_text, if given, receives the text as it is produced. Pieces are
-    released only once they form complete characters, so a multi-byte
-    character split across tokens is never shown half-finished.
+    on_text, if given, receives the text as it is produced (see TextStream).
     """
     if tokenizer.vocab_size != model.config.vocab_size:
         raise ValueError("tokenizer and model have different vocabulary sizes")
-    prompt_ids = tokenizer.encode(prompt)
-    new_ids: list[int] = []
-    shown = ""
-    for token in stream_ids(model, prompt_ids, config):
-        new_ids.append(token)
-        if on_text:
-            text = tokenizer.decode(new_ids)
-            if not text.endswith("�") and len(text) > len(shown):
-                on_text(text[len(shown):])
-                shown = text
-    text = tokenizer.decode(new_ids)
-    if on_text and len(text) > len(shown):
-        on_text(text[len(shown):])
-    return text
+    stream = TextStream(tokenizer)
+    for token in stream_ids(model, tokenizer.encode(prompt), config):
+        piece = stream.add(token)
+        if piece and on_text:
+            on_text(piece)
+    rest = stream.finish()
+    if rest and on_text:
+        on_text(rest)
+    return stream.text

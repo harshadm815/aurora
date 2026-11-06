@@ -16,6 +16,8 @@ used by the running assistant until each part has been built and tested.
                   (Backpropagation is transformer/backprop.py.)
     generation/   Phase 5: sampling, text generation, measures of
                   generated text.
+    runtime/      Phase 6: the AURORA Core Runtime: model loader, KV-cache
+                  inference, generation controller with resource limits.
 """
 
-__version__ = "0.4.0"
+__version__ = "0.5.0"

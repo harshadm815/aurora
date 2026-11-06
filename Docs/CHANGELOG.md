@@ -1,5 +1,33 @@
 # Changelog
 
+## 0.23.0 — AURORA Core Runtime (2026-11-06)
+
+Blueprint Phase 6. See Docs/AURORA_CORE.md.
+
+### Added
+- `aurora_core.runtime`, which runs AURORA's own models with no Ollama or
+  other model runner:
+  - Model loader: size limit, SHA-256 fingerprint, the tokenizer is
+    required, and weights are deserialised without pickle.
+  - `InferenceSession` with a KV cache: the prompt is processed once,
+    then one position per new token. A configurable context-window
+    policy applies when the cache is full.
+  - `AuroraRuntime` controller:
+    - streaming text;
+    - limits on model size, tokens and time per request;
+    - cancellation;
+    - one request at a time;
+    - memory report and unload.
+- `python -m aurora_core.runtime --model ... [--prompt | --interactive | --benchmark]`.
+- Baseline measurements for Phase 7: 45 ms load, 126 KB memory, 1,746
+  tokens/s with the cache vs 1,210 without (500 tokens, sampling).
+- `TextStream` (shared by generation and the runtime).
+
+### Fixed
+- A Phase 5 test checked that structural tokens are never generated, but
+  its setup didn't actually make them likely, so it couldn't fail. It now
+  confirms they are the model's favourites before checking.
+
 ## 0.22.0 — aurora_core: text generation and experiments (2026-11-06)
 
 Blueprint Phase 5. See Docs/AURORA_CORE.md and Docs/AURORA_T0_MODEL_CARD.md.

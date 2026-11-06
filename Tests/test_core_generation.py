@@ -131,11 +131,16 @@ def test_generation_is_reproducible_with_a_seed(trained):
 def test_generation_never_writes_structural_tokens(trained):
     original, tok = trained
     model = AuroraT0(original.config, params={k: v.copy() for k, v in original.params.items()})
-    # Make the structural tokens the most likely by far.
+    # Make the structural tokens the most likely by far: the final layer
+    # norm outputs a constant vector, and only their embeddings align with it.
+    model.params["ln_f.gamma"][:] = 0.0
+    model.params["ln_f.beta"][:] = 1.0
     for tid in BANNED:
-        model.params["token_embedding"][tid] *= 0
-    ids = generate_ids(model, tok.encode("the"), GenerationConfig(max_new_tokens=50, temperature=2.0, seed=0))
-    assert not set(ids) & {PAD_ID, UNK_ID, BOS_ID}
+        model.params["token_embedding"][tid] = 5.0
+    assert set(np.argsort(model(np.array(tok.encode("the")))[-1])[-3:]) == set(BANNED)
+    ids = generate_ids(model, tok.encode("the"), GenerationConfig(max_new_tokens=50, temperature=2.0, seed=0,
+                                                                  stop_at_eos=False))
+    assert len(ids) == 50 and not set(ids) & {PAD_ID, UNK_ID, BOS_ID}
 
 
 def test_generation_stops_at_eos():

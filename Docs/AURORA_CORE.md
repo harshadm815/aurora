@@ -6,11 +6,17 @@ assistant (`aurora/`): it never imports it, and the assistant doesn't use
 it yet. Each part is built and tested on its own, and only connected to
 the assistant once it works (blueprint Phase 6 onwards).
 
-Status: **Phases 1–5 are done: tensor mathematics, the AURORA-T0
-Transformer, the tokenizers, the training pipeline, and text generation
-with experiments.** AURORA-T0, trained on *The Adventures of Sherlock
-Holmes*, beats the baselines on text it never saw and writes text from
-its own weights. See [AURORA_T0_MODEL_CARD.md](AURORA_T0_MODEL_CARD.md).
+Status: **Phases 1–6 are done:**
+- tensor mathematics;
+- the AURORA-T0 Transformer;
+- the tokenizers;
+- the training pipeline;
+- text generation with experiments;
+- the AURORA Core Runtime.
+
+AURORA-T0, trained on *The Adventures of Sherlock Holmes*, beats the
+baselines on text it never saw. It writes text from its own weights,
+run by AURORA's own runtime with no Ollama involved. See [AURORA_T0_MODEL_CARD.md](AURORA_T0_MODEL_CARD.md).
 
 ```
 .venv\Scripts\python.exe -m aurora_core              # build T0, run one forward pass
@@ -19,7 +25,9 @@ its own weights. See [AURORA_T0_MODEL_CARD.md](AURORA_T0_MODEL_CARD.md).
 .venv\Scripts\python.exe -m aurora_core.generation --checkpoint Models\aurora_t0_lr1e-2\best.npz --prompt "Sherlock Holmes" --temperature 0.5
 .venv\Scripts\python.exe -m aurora_core.generation.evaluate --checkpoint Models\aurora_t0_lr1e-2\best.npz --data Data\pg1661.txt
 .venv\Scripts\python.exe -m aurora_core.training.experiments --data Data\pg1661.txt --steps 2000
-.venv\Scripts\python.exe -m pytest Tests/test_core_tensors.py Tests/test_core_transformer.py Tests/test_core_tokenizer.py Tests/test_core_training.py Tests/test_core_generation.py
+.venv\Scripts\python.exe -m aurora_core.runtime --model Models\aurora_t0_lr1e-2\best.npz --interactive
+.venv\Scripts\python.exe -m aurora_core.runtime --model Models\aurora_t0_lr1e-2\best.npz --benchmark --tokens 300
+.venv\Scripts\python.exe -m pytest Tests/test_core_tensors.py Tests/test_core_transformer.py Tests/test_core_tokenizer.py Tests/test_core_training.py Tests/test_core_generation.py Tests/test_core_runtime.py
 ```
 
 ## Layout
@@ -49,6 +57,10 @@ its own weights. See [AURORA_T0_MODEL_CARD.md](AURORA_T0_MODEL_CARD.md).
 | `generation/generate.py` | `generate_text`, `generate_ids`, `stream_ids` (sliding window) |
 | `generation/quality.py` | Measures of generated text; bigram sampler for comparison |
 | `generation/evaluate.py` | Evaluation of generated text against the baseline and real text |
+| `runtime/loader.py` | `load_model`: size limit, SHA-256, checkpoint deserialisation, tokenizer required |
+| `runtime/session.py` | `InferenceSession`, `KVCache`: prefill, one-token steps, context-window policy |
+| `runtime/runtime.py` | `AuroraRuntime`: load / generate / unload, limits, cancellation, statistics |
+| `runtime/__main__.py` | Command line: one prompt, interactive, benchmark |
 
 ## Phase 1: mathematics
 
@@ -372,6 +384,84 @@ What that shows:
 Raw results with full training curves are in
 `Models/experiments/results.json` (not in git).
 
+## Phase 6: the AURORA Core Runtime
+
+The runtime loads a saved AURORA model and generates text using only
+`aurora_core` and NumPy: no Ollama, no other model runner, and nothing
+from the assistant package.
+
+```python
+from aurora_core.runtime import AuroraRuntime
+from aurora_core.generation import GenerationConfig
+
+runtime = AuroraRuntime()
+runtime.load("Models/aurora_t0_lr1e-2/best.npz")
+result = runtime.generate("Sherlock Holmes", GenerationConfig(temperature=0.5),
+                          on_text=print)
+result.text, result.stats        # stats: tokens, speed, stop reason, ...
+runtime.unload()
+```
+
+| Blueprint component | Where |
+|---|---|
+| Model loader, weight deserializer | `runtime/loader.py` (via `training/checkpoint.py`: .npz, no pickle, every part validated) |
+| Tokenizer interface | The tokenizer stored in the checkpoint; `runtime.tokenizer` |
+| Inference controller | `AuroraRuntime.generate` |
+| Forward-pass execution, KV cache | `runtime/session.py` |
+| Context manager | `InferenceSession` window policy; long prompts keep their end |
+| Sampling, token generation | `generation/sampling.py`, shared with Phase 5 |
+| Resource management | `RuntimeLimits`, cancellation, one request at a time, `memory_usage`, `unload` |
+
+**KV cache.** In a causal Transformer, earlier positions' keys and
+values never change when new tokens arrive. The session therefore:
+1. runs the prompt once and stores every layer's keys and values;
+2. for each new token, computes only that token and attends to the
+   stored keys and values.
+
+The cache is pre-allocated: layers × heads × context × head size, for
+keys and for values (8 KB for T0).
+
+**Context window.** T0 learned position embeddings for positions 0–31
+only, and a stored key already includes its position, so the cache
+can't simply slide along. When it is full, the session keeps the most
+recent `keep` tokens and rebuilds the cache from them:
+
+| `keep` | Behaviour |
+|---|---|
+| 32 (`--keep 32`) | Exactly the Phase 5 sliding window, but every token after the first 32 needs a rebuild |
+| 16 (default) | A rebuild every 16 tokens; between rebuilds the model sees 16–32 tokens of context |
+
+**Resource management:**
+- **Model file size limit:** 500 MB by default.
+- **Request limits:** at most 2,048 new tokens and 120 seconds per request.
+- **Cancellation:** a request can be cancelled from another thread.
+- **One request at a time:** a second request is refused at once
+  (`RuntimeBusy`) rather than queued.
+- **Memory:** `memory_usage()` reports the weights and the cache;
+  `unload()` frees them.
+- **Failed loads:** a load that fails leaves the previous model in place.
+- **Fingerprint:** every loaded model has a SHA-256, so it is always known
+  which weights produced a text.
+
+**Baseline measurements** (i3-8130U, AURORA-T0, NumPy, single thread of
+Python; this is the documented starting point for Phase 7):
+
+| Measure | Value |
+|---|---|
+| Load time | 45 ms (150 KB file) |
+| Memory | 118 KB weights + 8 KB KV cache |
+| Prompt prefill | 0.4 ms |
+| One cached step / one full 32-token pass | ≈ 0.25 ms / ≈ 0.68 ms |
+| 500 tokens with sampling: reference (Phase 5, no cache) | 1,210 tokens/s |
+| 500 tokens: runtime, default window | 1,746 tokens/s (1.44×) |
+| 500 tokens: runtime, exact window (`keep` 32) | 1,242 tokens/s (1.03×) |
+
+The cache only saves about a third of the time, because T0 is tiny:
+most of the time goes on Python and NumPy call overhead (dozens of small
+operations per token) and on sampling, not on arithmetic. That is the
+main target for Phase 7 (profiling, fewer and larger operations, faster
+sampling). Larger models will benefit from the cache much more.
+
 ## What the tests prove
 
 `Tests/test_core_transformer.py`:
@@ -460,7 +550,44 @@ Raw results with full training curves are in
   - results save after every variant, resume after an interruption, and
     start again when settings change.
 
+`Tests/test_core_runtime.py`:
+
+- **The KV cache is exact:**
+  - prefill and every cached step match full forward passes over the
+    same tokens (to 1e-12 in float64);
+  - after the cache fills, for every `keep` from 1 to the context, the
+    cache holds exactly the most recent tokens and its scores match;
+  - with `keep` = context, results equal the reference sliding window
+    token for token;
+  - rebuilds happen exactly as often as expected.
+- **The runtime matches the reference generator**: identical tokens,
+  greedy and sampled, with the same seed.
+- **A trained model** reproduces its training sentence through the
+  runtime.
+- **Loading:**
+  - reports parameters, configuration, training step and a correct
+    SHA-256;
+  - refuses missing, oversized, damaged and tokenizer-less files;
+  - a failed load keeps the previous model.
+- **Limits and control:**
+  - long prompts keep their end and say so;
+  - `<eos>` stops generation;
+  - structural tokens never appear, even when they are the favourites;
+  - cancellation, timeout and token limits work;
+  - a second concurrent request is refused;
+  - unload frees the model.
+- **The command line**: one prompt, benchmark and error handling.
+- **Independence**: no runtime module imports Ollama or the assistant.
+
 The tests were checked by breaking the code deliberately:
+- Runtime: each of these is caught:
+  - the wrong position embedding in a cached step;
+  - a key not stored;
+  - values not stored at prefill;
+  - attention skipping the newest position;
+  - keeping one token too few after overflow;
+  - ignoring cancellation, the timeout, the token limit or the banned
+    tokens.
 - Generation: each of these is caught:
   - top-p keeping too many tokens;
   - ignoring banned tokens;
@@ -486,5 +613,5 @@ The tests were checked by breaking the code deliberately:
 
 | Missing | Phase |
 |---|---|
-| A runtime the assistant can call instead of Ollama (model loader, KV cache, resource management) | 6 |
+| Optimisation against the Phase 6 baseline: profiling, faster matrix operations and attention, lower precision, quantisation | 7 |
 | More training text and a wider model (T1); longer runs to judge context length | later |

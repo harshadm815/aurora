@@ -88,6 +88,15 @@ Example (temperature 0.5, seed 3; the prompt is in bold):
 - **Small measurements:** the generation metrics come from 20 prompts,
   and each experiment except the baseline was run once.
 
+## Running it
+
+With AURORA's own runtime (no Ollama):
+
+```
+.venv\Scripts\python.exe -m aurora_core.runtime --model Models\aurora_t0_lr1e-2\best.npz --prompt "Sherlock Holmes"
+.venv\Scripts\python.exe -m aurora_core.runtime --model Models\aurora_t0_lr1e-2\best.npz --interactive
+```
+
 ## Intended use
 
 A research milestone. It shows that AURORA's own mathematics, tokenizer,

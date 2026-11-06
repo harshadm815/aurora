@@ -1,6 +1,6 @@
 # AURORA Architecture
 
-Version: 0.16.0
+Version: 0.17.0
 Status: Describes what exists in the code today. Planned components are listed separately at the end.
 
 ---
@@ -13,6 +13,7 @@ independent components. Each component has one responsibility and can be
 tested on its own.
 
 ```
+command_centre.py  (desktop UI, PySide6) ── aurora/interface ── Backend (one engine, worker thread)
 main.py  (terminal UI: all printing and input; voice commands)
    │  └── VoiceSession ── Listener (Vosk, offline) + Speaker (Windows voices)
    │
@@ -479,6 +480,7 @@ the message to the Brain.
 | `aurora.knowledge` | `fact.py` | The `Fact` data model | Yes |
 | `aurora.routing` | `intent.py`, `decision.py`, `router.py` | Scored rule-based `IntentRouter` returning a structured `RouteDecision` | Yes |
 | `aurora.planning` | `plan.py`, `planner.py` | Splits a message into steps; the engine runs them | Yes |
+| `aurora.interface` | `app.py`, `backend.py`, `main_window.py`, nine views, `components/`, `styles/`, `system_info.py` | The AURORA Command Centre desktop interface (see COMMAND_CENTRE.md) | Separate front end |
 | `aurora.agents` | `base.py`, `research_agents.py`, `research_session.py`, `research_log.py` | Agent framework, research team, coordinator, research log | Yes (Research tool) |
 | `aurora.devices` | `device.py`, `drivers.py`, `controller.py` | Device definitions, limits, simulated / ESP32 drivers, checks, rate limit, audit | Yes (Devices tool) |
 | `aurora.automation` | `reminders.py` | Session reminders and timers | Yes (Reminders tool) |

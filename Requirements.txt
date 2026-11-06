@@ -12,5 +12,8 @@ pyttsx3==2.99
 opencv-python==5.0.0.93
 rapidocr-onnxruntime==1.2.3
 
+# Desktop interface (Command Centre)
+PySide6-Essentials==6.12.0
+
 # Development
 pytest==9.2.0

@@ -120,6 +120,10 @@ def main():
 
     setup_logging()
 
+    # Preferences saved from the Command Centre (model, personality, …).
+    from aurora.config import preferences
+    preferences.apply(preferences.load())
+
     engine = AuroraEngine()
 
     print("\n==============================")

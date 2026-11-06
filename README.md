@@ -59,6 +59,14 @@ its "Known gaps" table for what's not done yet.
 
 ## Run
 
+Desktop interface (AURORA Command Centre):
+
+```
+.venv\Scripts\python.exe command_centre.py
+```
+
+Terminal interface:
+
 ```
 .venv\Scripts\python.exe main.py
 ```
@@ -73,6 +81,8 @@ Logs are written to `Logs/aurora.log` (metadata only; never your messages).
 ```
 
 ## Documentation
+
+- [Command Centre](Docs/COMMAND_CENTRE.md)
 
 - [Architecture](Docs/ARCHITECTURE.md)
 - [Memory design](Docs/MEMORY_DESIGN.md)

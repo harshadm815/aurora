@@ -17,3 +17,6 @@ aurora/config/local_settings.py
 
 # ESP32 Wi-Fi credentials
 firmware/**/secrets.h
+
+# Command Centre preferences
+aurora_preferences.json

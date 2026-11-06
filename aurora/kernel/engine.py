@@ -129,12 +129,27 @@ class AuroraEngine:
 
     # --- Messages -----------------------------------------------------------
 
-    def process_message(self, message: str) -> str:
+    def process_message(self, message: str, on_token=None) -> str:
+        """
+        Handles one message and returns the full reply.
+
+        ``on_token`` (optional) receives the language model's reply piece
+        by piece as it is written, for interfaces that show it live. Tool
+        answers arrive whole in the return value.
+        """
 
         if not self.running:
             raise RuntimeError(
                 "Kernel is not running."
             )
+
+        self._on_token = on_token
+        try:
+            return self._process(message)
+        finally:
+            self._on_token = None
+
+    def _process(self, message: str) -> str:
 
         self.conversation.add_user(message)
         self.events.emit(topics.MESSAGE_RECEIVED, message, source=SOURCE)
@@ -238,7 +253,18 @@ class AuroraEngine:
         history = self.conversation.history()
         history = history[:1] + extra + history[1:]
 
-        response = self.brain.ask(history)
+        on_token = getattr(self, "_on_token", None)
+        if on_token is None:
+            response = self.brain.ask(history)
+        else:
+            pieces = []
+            for piece in self.brain.ask_stream(history):
+                pieces.append(piece)
+                try:
+                    on_token(piece)
+                except Exception:
+                    logger.exception("Streaming callback failed")
+            response = "".join(pieces)
 
         note = AutoMemory.summary(learned) if settings.MEMORY_ANNOUNCE else None
         return f"{response}\n\n{note}" if note else response

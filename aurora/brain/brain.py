@@ -1,3 +1,5 @@
+from collections.abc import Iterator
+
 from aurora.providers.base_provider import BaseProvider
 from aurora.providers.ollama_provider import OllamaProvider
 
@@ -15,3 +17,8 @@ class Brain:
     def ask(self, messages):
 
         return self.provider.chat(messages)
+
+    def ask_stream(self, messages) -> Iterator[str]:
+        """The reply in pieces, as the model writes it."""
+
+        return self.provider.chat_stream(messages)

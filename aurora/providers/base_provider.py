@@ -10,6 +10,13 @@ class BaseProvider(ABC):
     def chat(self, messages):
         pass
 
+    def chat_stream(self, messages):
+        """
+        Yields the reply in pieces. Providers that can't stream keep this
+        default, which yields the whole reply at once.
+        """
+        yield self.chat(messages)
+
     def health_check(self) -> None:
         """
         Raises an exception if the provider cannot serve requests.

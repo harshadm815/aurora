@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.17.0 — AURORA Command Centre (2026-11-06)
+
+### Added
+- Desktop interface (`command_centre.py`, `aurora/interface/`, PySide6):
+  Dashboard, Chat, Memory Centre, Knowledge Centre, Tools & capabilities,
+  Vision Centre, Sensor Centre, System monitor and Settings, in a dark
+  theme with cyan, blue or purple accents. See Docs/COMMAND_CENTRE.md.
+- `Backend` bridge: one engine on one worker thread, results delivered on
+  the GUI thread, activity feed and log view with metadata only.
+- Real CPU / RAM / process memory readings via Windows APIs (no new
+  dependency beyond PySide6).
+- Streaming replies: `process_message(..., on_token=...)`,
+  `Brain.ask_stream`, `OllamaProvider.chat_stream`.
+- Preferences saved from the Settings page (`aurora_preferences.json`,
+  ignored by git), applied by both interfaces; limited to a fixed,
+  type-checked list of keys.
+- `settings.PERSONALITY_PROMPT`.
+- 530 tests (1 skipped on Windows), including offscreen interface tests.
+
 ## 0.16.0 — Milestone 12: Multi-agent intelligence (2026-11-05)
 
 ### Added

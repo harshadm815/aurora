@@ -57,3 +57,33 @@ class OllamaProvider(BaseProvider):
             ) from None
 
         return response["message"]["content"]
+
+    def chat_stream(self, messages):
+        """Yields the reply piece by piece as the model writes it."""
+
+        logger.debug("Streaming %d messages to %s", len(messages), self.model)
+
+        try:
+            for part in self.client.chat(
+                model=self.model,
+                messages=messages,
+                stream=True,
+                options={"num_predict": settings.MODEL_MAX_REPLY_TOKENS},
+            ):
+                text = part["message"]["content"]
+                if text:
+                    yield text
+        except httpx.TimeoutException:
+            logger.warning("Model %s timed out", self.model)
+            raise ModelUnavailableError(
+                f"The language model didn't answer within "
+                f"{settings.MODEL_TIMEOUT_SECONDS} seconds. Please try again."
+            ) from None
+        except (httpx.ConnectError, ConnectionError):
+            raise ModelUnavailableError(
+                "I can't reach Ollama. Is it running? (Start it with: ollama serve)"
+            ) from None
+
+    def installed_models(self) -> list[str]:
+        """Names of the models installed in Ollama (for the Settings page)."""
+        return sorted(model.model for model in self.client.list().models)

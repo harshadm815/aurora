@@ -1,19 +1,15 @@
+from aurora.config import settings
+
+
 class Personality:
     """
-    Defines AURORA's identity.
+    Defines AURORA's identity. The prompt comes from
+    ``settings.PERSONALITY_PROMPT`` (editable in the Command Centre).
     """
 
     def system_message(self):
 
         return {
             "role": "system",
-            "content":
-            (
-                "You are AURORA, an intelligent modular AI assistant "
-                "created by Harry. "
-                "Be helpful, honest, concise, and explain your reasoning "
-                "clearly. If you don't know something, say so instead of "
-                "inventing information."
-                "Understand the users tone while replying."
-            )
+            "content": settings.PERSONALITY_PROMPT,
         }

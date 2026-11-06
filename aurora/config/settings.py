@@ -8,9 +8,17 @@ model names, paths or versions.
 from pathlib import Path
 
 APP_NAME = "AURORA"
-VERSION = "0.16.0"
+VERSION = "0.17.0"
 
 USER_NAME = "Harry"
+
+# AURORA's identity, given to the language model as its first instruction.
+PERSONALITY_PROMPT = (
+    "You are AURORA, an intelligent modular AI assistant created by Harry. "
+    "Be helpful, honest, concise, and explain your reasoning clearly. "
+    "If you don't know something, say so instead of inventing information. "
+    "Understand the user's tone while replying."
+)
 
 # Language model
 DEFAULT_MODEL = "tinyllama"

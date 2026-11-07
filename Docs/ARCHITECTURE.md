@@ -1,6 +1,6 @@
 # AURORA Architecture
 
-Version: 0.17.0
+Version: 0.18.0
 Status: Describes what exists in the code today. Planned components are listed separately at the end.
 
 ---
@@ -15,7 +15,7 @@ tested on its own.
 ```
 command_centre.py  (desktop UI, PySide6) ── aurora/interface ── Backend (one engine, worker thread)
 main.py  (terminal UI: all printing and input; voice commands)
-   │  └── VoiceSession ── Listener (Vosk, offline) + Speaker (Windows voices)
+   │  └── VoiceSession ── Listener (Vosk + VAD, offline) + SapiSpeaker (Windows voices)
    │
    ▼
 AuroraEngine  (aurora/kernel/engine.py)
@@ -208,12 +208,14 @@ Remove a tool's line from `PERMISSION_GRANTS` to switch it off.
 
 `aurora/voice/` adds speaking and listening. Everything runs offline:
 Vosk (`Models/vosk-model-small-en-us-0.15`, about 70 MB on disk) for
-speech recognition, and the voices built into Windows (SAPI5, via pyttsx3)
-for speech.
+speech recognition, and the voices built into Windows (SAPI5, called
+directly through `comtypes`) for speech. The language model never sees
+audio: voice only turns speech into the same text a typed message would
+be, and a reply back into speech.
 
 | Command | What happens |
 |---|---|
-| `listen` | The microphone opens for one request (up to 10 s, ends when you pause), AURORA answers on screen and aloud, the microphone closes |
+| `listen` | The microphone opens for one request (up to 10 s, ends when you stop speaking, gives up after 5 s of nobody speaking), AURORA answers on screen and aloud, the microphone closes |
 | `voice on` | Hands-free: AURORA waits for "Aurora", answers, and waits again until you say "stop listening" (or "stop", "goodbye") or press Ctrl+C |
 | `speak on` / `speak off` | Also read typed replies aloud |
 
@@ -230,21 +232,50 @@ How it works:
   sentence contains an arithmetic word ("twelve times seven" → `12 times 7`;
   "which one is it" is left alone); `VOICE_CORRECTIONS` fixes words the
   small model mishears, e.g. `{"pony": "Pune"}`.
-- **Spoken replies** drop links and source lines, spell out units
-  ("27°C" → "27 degrees Celsius") and stop after about 500 characters with
-  "The rest is on screen."
+  Spoken lists of numbers work too ("average of four five six" →
+  `average of 4 5 6`; "twenty one" stays `21`).
+- **Voice activity detection** (`vad.py`): each 30 ms frame's loudness is
+  compared with the room's background level. The first 0.2 s only learn
+  the room (so a noisy room isn't mistaken for speech), speech starts
+  after ~90 ms of loud frames (a click or cough doesn't count) and ends
+  after `VOICE_END_SILENCE` of quiet. Standard library only.
+- **Spoken replies** drop links, `Sources:` blocks and `[1]` citation
+  marks, spell out units ("27°C" → "27 degrees Celsius", °F likewise) and
+  stop after about 500 characters with "The rest is on screen."
+  `SapiSpeaker` speaks sentence by sentence and can be stopped mid-sentence.
+- **Interrupting AURORA.** In the terminal, press any key; in the Command
+  Centre, click **■ Stop**. Optional **barge-in** (`VOICE_BARGE_IN`, off by
+  default): while AURORA speaks, a strict detector listens and stops it
+  when you start talking. It is off by default because laptop speakers can
+  trigger it.
 - **Privacy and control.** The microphone (permission `microphone` for the
-  component `Voice`) opens only after `listen` or `voice on`, the terminal
-  shows when it is on and off, and it is closed while AURORA speaks so it
-  never hears itself. Audio is processed in memory, never saved, and
+  component `Voice`) opens only after `listen`, `voice on` or a click on
+  **🎙 Ask by voice**; the terminal and window show when it is on, with a
+  level meter. It is closed while AURORA speaks (unless you turn on
+  barge-in, which only measures loudness and never transcribes). Audio is processed in memory, never saved, and
   transcripts are never logged.
 - **Voice is optional.** The packages and model load only on the first
   voice command; without them AURORA works as before and explains what's
   missing.
 
 Settings: `VOICE_MODEL_DIR`, `VOICE_INPUT_DEVICE`, `VOICE_LISTEN_SECONDS`,
-`VOICE_END_SILENCE`, `VOICE_RATE`, `VOICE_NAME` ("Zira" or "David"),
-`VOICE_MAX_SPOKEN_CHARS`, `VOICE_CORRECTIONS`.
+`VOICE_END_SILENCE`, `VOICE_NO_SPEECH_SECONDS`, `VOICE_VAD_RATIO`,
+`VOICE_VAD_MIN_RMS`, `VOICE_RATE`, `VOICE_NAME` ("Zira" or "David"),
+`VOICE_VOLUME`, `VOICE_BARGE_IN`, `VOICE_MAX_SPOKEN_CHARS`,
+`VOICE_CORRECTIONS`. Name, speed, volume, microphone and barge-in can be
+changed on the Command Centre's Settings page.
+
+**Loop-back self-test** (`python -m aurora.voice.selftest`, or
+`"AURORA Command Centre.exe" --voice-check`): Windows' voices speak ten
+typical requests into WAV files, Vosk transcribes them and the engine's
+router checks each is understood as the right command. No microphone or
+speakers are used. Result on the development laptop (both voices, two
+speeds, 20 trials): 0.9 % word error rate, 100 % correct commands, about
+2.3 s per sentence. Real microphones and rooms are noisier than this.
+
+pyttsx3 was dropped: with version 2.99 on this machine only its first
+reply was spoken, saving to a file hung on the second call and its
+callbacks never fired.
 
 ## Vision
 
@@ -604,7 +635,7 @@ the message to the Brain.
 | `aurora.automation` | `reminders.py` | Session reminders and timers | Yes (Reminders tool) |
 | `aurora.sensors` | `reading.py`, `sources.py`, `store.py`, `hub.py` | Sensor readings, validation, ESP32 / simulated sources, history with separate health storage | Yes (Sensors and Health tools) |
 | `aurora.vision` | `camera.py`, `detector.py`, `analyzer.py`, `motion.py`, `watch.py` | Webcam, object detection, OCR, scene description, motion watch | Yes (Camera tool, `watch`) |
-| `aurora.voice` | `listener.py`, `speaker.py`, `session.py` | Offline speech recognition with wake word, text-to-speech, voice conversations | Yes (from `main.py`, on demand) |
+| `aurora.voice` | `listener.py`, `vad.py`, `speaker.py`, `session.py`, `selftest.py` | Offline speech recognition with wake word and voice activity detection, text-to-speech with interruption, voice conversations, loop-back test | Yes (from `main.py` and the Command Centre, on demand) |
 | `aurora.tools` | `tool.py`, `tool_manager.py`, `result.py`, `executor.py`, `untrusted.py` | Tool interface, permission-checked registry, `ToolResult`, intent-to-tool execution, cleaning of outside text | Yes |
 | `aurora.tool_plugins` | `calculator.py`, `numbers.py`, `memory_tools.py`, `weather.py`, `research.py`, `documents.py`, `registry.py` | The built-in tools and `default_tools()` | Yes |
 | `aurora.workflows` | `values.py`, `operations.py`, `workflow.py`, `builder.py`, `runner.py`, `validation.py` | Structured multi-step tasks: typed values between steps, validation, retries, traces | Yes |
@@ -660,7 +691,7 @@ temporary database instead of `aurora_memory.db`.
 | No rule-based automations ("turn on the fan when it's above 28 °C"): they would act without a per-change confirmation, so they need their own safety design | Later automation work |
 | Reminders are lost when AURORA closes and are not spoken | Later |
 | Vision recognises 80 everyday object classes only; no free-form scene descriptions, no recording or face recognition (by design) | Larger models need more RAM |
-| The small speech model misses uncommon names and places ("Pune" → "pony"); no voice profiles or barge-in (interrupting AURORA while it speaks) | Larger model / later voice work |
+| The small speech model misses uncommon names and places ("Pune" → "pony"); no voice profiles; barge-in is energy-based (off by default) and can be set off by loud speakers | Larger model / later voice work |
 | Document answers match words (with stemming), not meaning, and quote rather than explain; scanned PDFs (images) have no readable text; no general web search | Semantic search, a stronger model, OCR, a search provider |
 | Recall matches words and a fixed synonym list, not meaning | Semantic search, when it fits in 4 GB RAM |
 | Associative memory links people to facts only (no general concept graph); routines have no conditions | Later memory work |

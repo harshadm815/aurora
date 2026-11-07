@@ -9,7 +9,7 @@ import sys
 from pathlib import Path
 
 APP_NAME = "AURORA"
-VERSION = "0.28.0"
+VERSION = "0.29.0"
 
 USER_NAME = "Harry"
 
@@ -187,6 +187,14 @@ VOICE_END_SILENCE = 1.2            # Seconds without new words that end a reques
 VOICE_RATE = 185                   # Speaking speed (words per minute).
 VOICE_NAME = "Zira"                # Part of a Windows voice name ("David", "Zira"); "" = default.
 VOICE_MAX_SPOKEN_CHARS = 500       # Longer replies end with "the rest is on screen".
+VOICE_VOLUME = 1.0                 # Spoken replies: 0.0 (silent) to 1.0 (full).
+# Voice activity detection (aurora/voice/vad.py): when you start and stop talking.
+VOICE_NO_SPEECH_SECONDS = 5        # Stop listening if nobody starts speaking.
+VOICE_VAD_RATIO = 3.0              # Speech must be this many times louder than the room.
+VOICE_VAD_MIN_RMS = 300            # ...and at least this loud (16-bit scale), whatever the room.
+# Stop a spoken reply when you start talking. Needs headphones: with
+# speakers, the microphone hears AURORA itself and would cut it off.
+VOICE_BARGE_IN = False
 # Words the small speech model mishears, e.g. {"pony": "Pune"}.
 VOICE_CORRECTIONS: dict[str, str] = {}
 

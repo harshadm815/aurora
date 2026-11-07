@@ -1,5 +1,42 @@
 # Changelog
 
+## 0.29.0 — Voice system (2026-11-07)
+
+Blueprint Phase 12. See "Voice" in Docs/ARCHITECTURE.md.
+
+### Added
+- **Voice activity detection** (`aurora/voice/vad.py`): adaptive,
+  energy-based, standard library only. Listening ends when you stop
+  speaking and gives up after 5 s of nobody speaking.
+- **Interrupting AURORA**: any key in the terminal, ■ Stop in the window,
+  and optional barge-in (`VOICE_BARGE_IN`, off by default).
+- **Voice in the Command Centre**: 🎙 Ask by voice, ■ Stop and Speak
+  replies on the Chat page; voice, speed, volume, microphone, barge-in,
+  Test the voice and Test the microphone on the Settings page. One worker
+  thread (`VoiceController`) owns Vosk and the Windows voice.
+- **Loop-back self-test** (`python -m aurora.voice.selftest`, `--voice-check`
+  in the .exe): 0.9 % word error rate, 100 % correct commands over 20
+  trials, with no microphone or speakers.
+- Device names that are close to a real one get a suggestion ("desk life"
+  → "Did you mean the desk light?"), always with confirmation.
+- The .exe bundles voice.
+- Settings `VOICE_VOLUME`, `VOICE_NO_SPEECH_SECONDS`, `VOICE_VAD_RATIO`,
+  `VOICE_VAD_MIN_RMS`, `VOICE_BARGE_IN`; preferences `voice_volume`,
+  `voice_barge_in`, `voice_input_device`, `speak_replies`.
+- 42 new tests.
+
+### Changed
+- Text-to-speech calls Windows SAPI directly through `comtypes`
+  (`SapiSpeaker`) instead of pyttsx3. pyttsx3 2.99 only spoke the first
+  reply, hung saving a second file and never fired its callbacks.
+- Spoken replies also drop `Sources:` blocks and `[1]` citation marks.
+
+### Fixed
+- Spoken lists of numbers ("average of four five six") were sent to
+  Wikipedia; they are now read as numbers.
+- Tests that saved preferences changed the global settings for the tests
+  after them; every test now starts with the original settings.
+
 ## 0.28.0 — Command Centre: Model manager and Training monitor (2026-11-07)
 
 Blueprint Phase 11. The Command Centre now has all eleven sections and

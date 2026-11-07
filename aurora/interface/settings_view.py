@@ -11,6 +11,7 @@ from PySide6.QtWidgets import (
 from aurora.config import preferences, settings
 from aurora.interface.components.base_view import BaseView
 from aurora.interface.components.widgets import Panel, label
+from aurora.interface.voice_control import input_devices
 from aurora.interface.windows import integration
 
 PAGES = ["Dashboard", "Chat", "Memory", "Knowledge", "Tools", "Vision", "Sensors", "System", "Settings"]
@@ -76,7 +77,7 @@ class SettingsView(BaseView):
         interface.add_layout(form)
         self.body.addWidget(interface)
 
-        voice = Panel("Voice (used by the terminal's listen / voice on commands)")
+        voice = Panel("Voice (Chat's microphone button and spoken replies, and the terminal's listen / voice on)")
         form = QFormLayout()
         self.voice_name = QComboBox()
         self.voice_name.addItems(["Zira", "David", ""])
@@ -86,9 +87,35 @@ class SettingsView(BaseView):
         self.voice_rate.setRange(80, 300)
         self.voice_rate.setValue(values["voice_rate"])
         form.addRow("Speaking speed (words/min)", self.voice_rate)
+        self.voice_volume = QSpinBox()
+        self.voice_volume.setRange(0, 100)
+        self.voice_volume.setSuffix(" %")
+        self.voice_volume.setValue(round(values["voice_volume"] * 100))
+        form.addRow("Volume", self.voice_volume)
+        self.voice_device = QComboBox()
+        self.voice_device.addItem("Windows default microphone", "")
+        for name in input_devices():
+            self.voice_device.addItem(name, name)
+        index = self.voice_device.findData(values["voice_input_device"])
+        self.voice_device.setCurrentIndex(max(0, index))
+        form.addRow("Microphone", self.voice_device)
+        self.barge_in = QCheckBox("Stop speaking when I start talking (use headphones: with speakers, "
+                                  "the microphone hears AURORA and cuts it off)")
+        self.barge_in.setChecked(values["voice_barge_in"])
+        form.addRow("", self.barge_in)
         voice.add_layout(form)
-        voice.add(label("Voice conversations inside the Command Centre are planned; for now use "
-                        "`listen` or `voice on` in the terminal.", "Faint", wrap=True))
+        tests = QHBoxLayout()
+        test_voice = QPushButton("Test the voice")
+        test_voice.clicked.connect(self._test_voice)
+        test_mic = QPushButton("Test the microphone")
+        test_mic.clicked.connect(self._test_microphone)
+        tests.addWidget(test_voice)
+        tests.addWidget(test_mic)
+        tests.addStretch(1)
+        voice.add_layout(tests)
+        self.voice_result = voice.add(label(
+            "The microphone is opened only when you press Chat's microphone button or Test the microphone. "
+            "Speech is recognised on this laptop (Vosk) and never saved.", "Faint", wrap=True))
         self.body.addWidget(voice)
 
         windows = Panel("Windows")
@@ -154,9 +181,29 @@ class SettingsView(BaseView):
             "animations": self.animations.isChecked(),
             "voice_name": self.voice_name.currentText(),
             "voice_rate": self.voice_rate.value(),
+            "voice_volume": self.voice_volume.value() / 100,
+            "voice_input_device": self.voice_device.currentData() or "",
+            "voice_barge_in": self.barge_in.isChecked(),
             "minimize_to_tray": self.minimize_to_tray.isChecked(),
             "close_to_tray": self.close_to_tray.isChecked(),
         }
+
+    def _test_voice(self):
+        """Speaks one sentence with the voice settings on this page (saved first)."""
+        self.backend.save_preferences(self.values())
+        self.voice_result.setText("Speaking…")
+        self.backend.voice.speak("Hello, I'm AURORA. This is how I sound.",
+                                 lambda finished: self.voice_result.setText(
+                                     "Done." if finished else "Stopped."))
+
+    def _test_microphone(self):
+        """Listens once and shows what was heard (nothing is sent to AURORA)."""
+        self.backend.save_preferences(self.values())
+        self.voice_result.setText("🎙  Say something, for example \"what is the weather in Delhi\"…")
+        self.backend.voice.listen(
+            lambda text: self.voice_result.setText(f"I heard: “{text}”" if text else
+                                                   "I didn't hear anything. Check the microphone and its volume."),
+            lambda error: self.voice_result.setText(f"The microphone isn't available: {error}"))
 
     def _create_shortcut(self):
         try:

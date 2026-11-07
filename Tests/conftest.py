@@ -35,6 +35,16 @@ def isolated_database(tmp_path, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def restore_preference_settings(monkeypatch):
+    """Saving preferences (Settings page, voice controls) writes to the global
+    settings; put them back after every test so no test sees another's values."""
+    from aurora.config import preferences, settings
+
+    for attribute, _, _ in preferences.BACKEND.values():
+        monkeypatch.setattr(settings, attribute, getattr(settings, attribute))
+
+
+@pytest.fixture(autouse=True)
 def no_network(monkeypatch):
     """Tests must never reach a real service (Wikipedia, arXiv, Open-Meteo, Ollama)."""
     import socket

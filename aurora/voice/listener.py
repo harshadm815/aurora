@@ -22,6 +22,7 @@ from collections.abc import Iterator
 from pathlib import Path
 
 from aurora.config import settings
+from aurora.voice.vad import VoiceActivityDetector
 
 logger = logging.getLogger(__name__)
 
@@ -140,9 +141,29 @@ _UNITS = {
 _TENS = {w: 10 * (i + 2) for i, w in enumerate("twenty thirty forty fifty sixty seventy eighty ninety".split())}
 _SCALES = {"thousand": 1_000, "million": 1_000_000}
 _ARITHMETIC_WORD = re.compile(
-    r"\b(?:plus|minus|times|multiplied|divided|over|squared|cubed|power|percent|calculate|add|subtract)\b",
+    r"\b(?:plus|minus|times|multiplied|divided|over|squared|cubed|power|percent|calculate|add|subtract|"
+    # Statistics ("the average of four eight and fifteen")
+    r"average|mean|median|mode|sum|total|range|minimum|maximum|smallest|largest|biggest|lowest|highest|"
+    r"deviation)\b",
     re.IGNORECASE,
 )
+
+
+def _continues(run: list[str], word: str) -> bool:
+    """Whether ``word`` belongs to the number being read ("thirty five" = 35)
+    or starts a new one ("four eight" = 4 and 8)."""
+    if not run:
+        return True
+    previous = run[-1]
+    if "point" in run:                                   # decimals: "three point one four"
+        return word in _UNITS and _UNITS[word] < 10
+    if word in ("point", "hundred") or word in _SCALES:
+        return True
+    if previous == "hundred" or previous in _SCALES:
+        return True
+    if previous in _TENS and word in _UNITS and 0 < _UNITS[word] < 10:
+        return True
+    return False
 
 
 def _parse_number(words: list[str]) -> str:
@@ -197,8 +218,12 @@ def numbers_to_digits(text: str) -> str:
 
     for index, word in enumerate(words):
         if is_number_word(index):
-            if word.lower() != "and":
-                run.append(word.lower())
+            lowered = word.lower()
+            if lowered != "and":
+                if not _continues(run, lowered):
+                    out.append(_parse_number(run))
+                    run = []
+                run.append(lowered)
             continue
         if run:
             out.append(_parse_number(run))
@@ -246,27 +271,43 @@ class Listener:
         recognizer.AcceptWaveform(audio)
         return apply_corrections(self._text(recognizer.FinalResult()))
 
-    def listen_once(self, source: AudioSource, max_seconds: float | None = None) -> str:
+    def listen_once(self, source: AudioSource, max_seconds: float | None = None, on_level=None,
+                    should_stop=lambda: False) -> str:
         """
-        One utterance: returns when the speaker pauses, or after
-        ``max_seconds``. Returns "" if nothing was said.
+        One utterance. Ends when the voice activity detector hears the
+        speaker stop, when the recogniser finishes a sentence, after
+        ``max_seconds``, or when ``should_stop()`` is true. Returns "" if
+        nobody spoke (the detector gives up after VOICE_NO_SPEECH_SECONDS
+        instead of waiting the full time).
+
+        ``on_level(rms, speaking)`` gets each chunk's loudness, for a level meter.
         """
         max_seconds = settings.VOICE_LISTEN_SECONDS if max_seconds is None else max_seconds
         recognizer = self._recognizer(source.rate)
+        detector = VoiceActivityDetector(source.rate)
         live = isinstance(source, MicrophoneSource)
         deadline = time.monotonic() + max_seconds
         heard = 0.0
 
         for chunk in source.chunks():
+            if should_stop():
+                break
+            detector.feed(chunk)
+            if on_level is not None:
+                on_level(detector.level, detector.started and not detector.ended)
             if chunk and recognizer.AcceptWaveform(chunk):
                 text = self._text(recognizer.Result())
                 if text:
                     return apply_corrections(text)
+            if detector.ended or detector.gave_up:
+                break
             heard += len(chunk) / 2 / source.rate
             # The microphone is limited by the clock, a file by its length.
             if (live and time.monotonic() > deadline) or (not live and heard >= max_seconds):
                 break
 
+        if not detector.started:
+            return ""                 # only background noise: don't transcribe it into words
         return apply_corrections(self._text(recognizer.FinalResult()))
 
     def wait_for_wake_word(self, source: AudioSource, should_stop=lambda: False) -> str | None:

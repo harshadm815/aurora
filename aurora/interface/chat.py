@@ -5,7 +5,8 @@ from datetime import datetime
 from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtGui import QKeyEvent
 from PySide6.QtWidgets import (
-    QFrame, QHBoxLayout, QLabel, QPlainTextEdit, QPushButton, QScrollArea, QSizePolicy, QVBoxLayout, QWidget,
+    QCheckBox, QFrame, QHBoxLayout, QLabel, QPlainTextEdit, QPushButton, QScrollArea, QSizePolicy, QVBoxLayout,
+    QWidget,
 )
 
 from aurora.interface.components.base_view import BaseView
@@ -111,6 +112,27 @@ class ChatView(BaseView):
         self.confirm_row.hide()
         self.body.addWidget(self.confirm_row)
 
+        # Voice: push to talk, stop, spoken replies
+        voice_row = QHBoxLayout()
+        self.mic_button = QPushButton("🎙  Ask by voice")
+        self.mic_button.setToolTip("Opens the microphone for one question. It closes again when you stop talking.")
+        self.mic_button.clicked.connect(self.listen)
+        self.stop_voice_button = QPushButton("■  Stop")
+        self.stop_voice_button.setToolTip("Stop listening or speaking now.")
+        self.stop_voice_button.clicked.connect(self.backend.voice.stop)
+        self.stop_voice_button.setEnabled(False)
+        self.speak_replies = QCheckBox("Speak replies")
+        self.speak_replies.setChecked(bool(self.backend.preferences.get("speak_replies", False)))
+        self.speak_replies.toggled.connect(lambda on: self.backend.save_preferences({"speak_replies": on}))
+        self.voice_status = label("", "Faint")
+        voice_row.addWidget(self.mic_button)
+        voice_row.addWidget(self.stop_voice_button)
+        voice_row.addWidget(self.speak_replies)
+        voice_row.addWidget(self.voice_status, 1)
+        self.body.addLayout(voice_row)
+        backend.voice.state_changed.connect(self._voice_state)
+        backend.voice.level.connect(self._voice_level)
+
         # Input
         row = QHBoxLayout()
         self.input = MessageInput()
@@ -172,7 +194,42 @@ class ChatView(BaseView):
 
     # --- Sending ------------------------------------------------------------------
 
-    def send(self, text: str | None = None):
+    # --- Voice --------------------------------------------------------------------
+
+    def listen(self):
+        if self.busy or self.backend.voice.state in ("listening", "loading"):
+            return
+        self.backend.voice.stop()        # stop a reply that's still being spoken
+        self.voice_status.setText("Getting the microphone ready…")
+        self.backend.voice.listen(self._heard, self._voice_failed)
+
+    def _heard(self, text: str):
+        if not text:
+            self.voice_status.setText("I didn't hear anything. Try again, a little closer to the microphone.")
+            return
+        self.voice_status.setText("")
+        self.send(text, by_voice=True)
+
+    def _voice_failed(self, error):
+        self.voice_status.setText(f"Voice isn't available: {error}")
+
+    def _voice_state(self, state: str):
+        speaking_or_listening = state in ("listening", "speaking")
+        self.stop_voice_button.setEnabled(speaking_or_listening)
+        self.mic_button.setEnabled(state not in ("listening", "loading"))
+        messages = {"loading": "Loading the speech model (the first time takes a while)…",
+                    "listening": "🎙  Listening… speak now", "speaking": "🔊  Speaking… (Stop to interrupt)",
+                    "unavailable": f"Voice isn't available: {self.backend.voice.problem}"}
+        if state in messages:
+            self.voice_status.setText(messages[state])
+        elif self.voice_status.text().startswith(("🎙", "🔊", "Loading")):
+            self.voice_status.setText("")
+
+    def _voice_level(self, rms: float, speaking: bool):
+        bars = min(10, int(rms / 300))
+        self.voice_status.setText(("🎙  Hearing you  " if speaking else "🎙  Listening… speak now  ") + "▮" * bars)
+
+    def send(self, text: str | None = None, by_voice: bool = False):
         if self.busy:
             return
         text = (text if text is not None else self.input.toPlainText()).strip()
@@ -180,7 +237,7 @@ class ChatView(BaseView):
             return
         self.input.clear()
         self.confirm_row.hide()
-        self._add_bubble("You", text, "user")
+        self._add_bubble("You (voice)" if by_voice else "You", text, "user")
 
         self.busy = True
         self._streaming_bubble = None
@@ -221,6 +278,8 @@ class ChatView(BaseView):
         self._streaming_bubble = None
         self.confirm_row.setVisible(needs_confirmation)
         self._finish()
+        if self.speak_replies.isChecked():
+            self.backend.voice.speak(reply)
 
     def _on_error(self, error):
         self._streaming_bubble = None

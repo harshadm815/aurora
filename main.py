@@ -72,6 +72,20 @@ def watch(engine, camera_tool) -> None:
         print(f"AURORA: {error}\n")
 
 
+def key_pressed() -> bool:
+    """True if a key was pressed in the terminal (and consumes it): stops
+    AURORA speaking. Windows only; elsewhere speech can't be interrupted by key."""
+    try:
+        import msvcrt
+    except ImportError:
+        return False
+    if msvcrt.kbhit():
+        while msvcrt.kbhit():
+            msvcrt.getwch()
+        return True
+    return False
+
+
 class VoiceControls:
     """Creates the voice parts on first use, so AURORA starts fast without them."""
 
@@ -84,16 +98,16 @@ class VoiceControls:
         if self.session is None:
             from aurora.voice.listener import Listener
             from aurora.voice.session import VoiceSession
-            from aurora.voice.speaker import Pyttsx3Speaker
+            from aurora.voice.speaker import SapiSpeaker
 
             print("Loading the speech model...")
             listener = Listener()
             try:
-                speaker = Pyttsx3Speaker()
+                speaker = SapiSpeaker()
             except Exception as error:
                 print(f"(Text-to-speech isn't available: {error}. Replies will be text only.)")
                 speaker = None
-            self.session = VoiceSession(self.engine, listener, speaker)
+            self.session = VoiceSession(self.engine, listener, speaker, interrupt=key_pressed)
         return self.session
 
     def run(self, action: str) -> None:
@@ -145,7 +159,8 @@ def main():
     print("Type 'status' to see system status.")
     print("Type 'route <message>' to see how a message would be routed.")
     print("Type 'plan <message>' to see how a message would be split into steps.")
-    print("Type 'listen' to ask by voice, 'voice on' for hands-free, 'speak on/off' to hear replies.")
+    print("Type 'listen' to ask by voice, 'voice on' for hands-free, 'speak on/off' to hear replies "
+          "(press any key to stop AURORA speaking).")
 
     print("Type 'watch' to have AURORA watch the room for motion (Ctrl+C stops it).\n")
 

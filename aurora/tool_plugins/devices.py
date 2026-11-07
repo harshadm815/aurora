@@ -40,11 +40,20 @@ class DevicesTool(BaseTool):
             if action == "list":
                 return self.list()
 
-            target = self.controller.find(device)
+            guessed = ""
+            try:
+                target = self.controller.find(device)
+            except DeviceError:
+                # A near miss ("desk life", as speech recognition may hear "desk light"):
+                # suggest the close match, and always ask before changing anything.
+                target = self.controller.suggest(device)
+                if target is None:
+                    raise
+                guessed = f"I don't have a device called \"{device}\". Did you mean the {target.name}? "
 
             if action == "status":
                 state = self.controller.state(target)
-                return ToolResult(True, f"{target.describe(state)}.{self._tag(target)}", state)
+                return ToolResult(True, f"{guessed}{target.describe(state)}.{self._tag(target)}", state)
 
             if action not in CHANGES:
                 return ToolResult(False, "I can turn devices on or off, or set them to a level.")
@@ -60,12 +69,12 @@ class DevicesTool(BaseTool):
                 return ToolResult(False, str(error))
             return ToolResult(True, f"Done. {target.describe(state)}.{self._tag(target)}", state)
 
-        if not target.confirm:
+        if not target.confirm and not guessed:
             return carry_out()
 
         return ToolResult(
             True,
-            f"Shall I {command.describe(target)}?{self._tag(target)} (yes / no)",
+            f"{guessed}Shall I {command.describe(target)}?{self._tag(target)} (yes / no)",
             command,
             confirm=carry_out,
         )

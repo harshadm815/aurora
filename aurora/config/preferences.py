@@ -25,6 +25,10 @@ BACKEND = {
     "memory_context_limit": ("MEMORY_CONTEXT_LIMIT", int, lambda v: 0 <= v <= 20),
     "voice_name": ("VOICE_NAME", str, lambda v: len(v) <= 100),
     "voice_rate": ("VOICE_RATE", int, lambda v: 80 <= v <= 300),
+    "voice_volume": ("VOICE_VOLUME", float, lambda v: 0.0 <= v <= 1.0),
+    "voice_barge_in": ("VOICE_BARGE_IN", bool, lambda v: True),
+    # "" = the Windows default microphone (settings.VOICE_INPUT_DEVICE = None)
+    "voice_input_device": ("VOICE_INPUT_DEVICE", str, lambda v: len(v) <= 200),
 }
 
 # Preferences used only by the interface: key -> (type, default, check)
@@ -36,6 +40,7 @@ INTERFACE = {
     "chat_streaming": (bool, True, lambda v: True),
     "minimize_to_tray": (bool, True, lambda v: True),
     "close_to_tray": (bool, False, lambda v: True),
+    "speak_replies": (bool, False, lambda v: True),
 }
 
 
@@ -46,13 +51,17 @@ def _valid(key: str, value) -> bool:
         kind, _, check = INTERFACE[key]
     else:
         return False
-    if kind is int and isinstance(value, bool):
+    if kind in (int, float) and isinstance(value, bool):
         return False
+    if kind is float and isinstance(value, int):
+        value = float(value)                 # JSON writes 1.0 as 1
     return isinstance(value, kind) and check(value)
 
 
 def defaults() -> dict:
     values = {key: getattr(settings, attribute) for key, (attribute, _, _) in BACKEND.items()}
+    values["voice_input_device"] = settings.VOICE_INPUT_DEVICE if isinstance(settings.VOICE_INPUT_DEVICE, str) else ""
+    values["voice_volume"] = float(values["voice_volume"])
     values.update({key: default for key, (_, default, _) in INTERFACE.items()})
     return values
 
@@ -80,9 +89,12 @@ def load(path: Path | None = None) -> dict:
 
 def apply(values: dict) -> None:
     """Puts the backend preferences into settings (call before creating the engine)."""
-    for key, (attribute, _, _) in BACKEND.items():
+    for key, (attribute, kind, _) in BACKEND.items():
         if key in values and _valid(key, values[key]):
-            setattr(settings, attribute, values[key])
+            value = float(values[key]) if kind is float else values[key]
+            if key == "voice_input_device":
+                value = value or None          # "" means the Windows default microphone
+            setattr(settings, attribute, value)
 
 
 def save(values: dict, path: Path | None = None) -> None:

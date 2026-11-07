@@ -177,6 +177,9 @@ class Backend(QObject):
         # AURORA's own models (aurora_core): runtime and training runs.
         from aurora.interface.core_models import CoreModels
         self.core = CoreModels(self)
+        # Voice: microphone (push to talk), spoken replies, stop.
+        from aurora.interface.voice_control import VoiceController
+        self.voice = VoiceController(self)
 
         self._cpu = system_info.CpuMeter()
         self._cpu.percent()
@@ -272,6 +275,7 @@ class Backend(QObject):
         self._set_state("paused")
         self.run_engine(work)
         self.core.unload()            # AURORA's own model too (a training run keeps going)
+        self.voice.stop()             # and stop listening or speaking
 
     def resume(self) -> None:
         """Starts AURORA again after ``pause()`` (or retries after a failed start)."""
@@ -303,6 +307,7 @@ class Backend(QObject):
         self._ollama_timer.stop()
         self._sample_timer.stop()
         self.core.shutdown()          # stops a training run and unloads AURORA's model
+        self.voice.shutdown()         # microphone closed, speech stopped, voice thread ended
 
         if self.engine is not None:
             engine = self.engine
@@ -423,6 +428,7 @@ class Backend(QObject):
                 engine.auto_memory.context_limit = settings.MEMORY_CONTEXT_LIMIT
 
             self.run_engine(live, lambda _: self.check_ollama())
+        self.voice.apply_settings()      # voice, speed and volume take effect at once
         self.preferences_changed.emit(dict(self.preferences))
         logger.info("Preferences saved")
 

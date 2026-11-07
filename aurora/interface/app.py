@@ -44,10 +44,28 @@ def train(arguments: list[str]) -> int:
     return main(arguments)
 
 
+def voice_check(arguments: list[str]) -> int:
+    """`--voice-check [--out results.json]`: the voice loop-back test (speech
+    synthesis -> file -> recognition), without a window, microphone or sound.
+    Lets the packaged .exe prove its voice parts work."""
+    import os
+
+    setup_logging()
+    if sys.stdout is None:
+        sys.stdout = open(os.devnull, "w", encoding="utf-8")
+    if sys.stderr is None:
+        sys.stderr = open(os.devnull, "w", encoding="utf-8")
+    from aurora.voice.selftest import main
+
+    return main(arguments)
+
+
 def run(argv: list[str] | None = None) -> int:
     argv = list(argv if argv is not None else sys.argv)
     if argv[1:2] == ["--train"]:
         return train(argv[2:])
+    if argv[1:2] == ["--voice-check"]:
+        return voice_check(argv[2:])
     options = parse(argv)
     setup_logging()
 

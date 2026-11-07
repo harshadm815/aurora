@@ -48,15 +48,16 @@ deliberately left out of the build, and the build script checks that.
 AURORA's own neural network (`aurora_core`) is bundled: the Model
 manager runs checkpoints with it, and the Training monitor starts
 training as `AURORA Command Centre.exe --train …` (no window opens).
-Voice isn't bundled yet (the window doesn't use it); use `main.py` for
-voice.
+Voice is bundled too (Vosk, sounddevice, Windows SAPI); the speech
+model stays in `Models/`. `AURORA Command Centre.exe --voice-check` runs
+the voice loop-back test without a window.
 
 ## Pages
 
 | Page | What it shows | Where the data comes from |
 |---|---|---|
 | Dashboard | Greeting, clock, AI status, model, memory count, CPU, RAM, services, plugins, tools, recent activity, quick access | Engine status, Ollama check, MemoryManager, Windows APIs, event bus |
-| Chat | Conversation with timestamps, Markdown, streaming replies, a thinking indicator, Yes/No buttons when AURORA asks for confirmation, Clear | `engine.process_message()` (the same engine as the terminal) |
+| Chat | Conversation with timestamps, Markdown, streaming replies, a thinking indicator, Yes/No buttons when AURORA asks for confirmation, Clear. **🎙 Ask by voice** (one request; a level meter shows the microphone is on), **■ Stop** (stops listening or speaking), **Speak replies** | `engine.process_message()` (the same engine as the terminal); `VoiceController` |
 | Memory Centre | All memories with category, priority, confidence, dates and use; search, category filter, add note, edit value, delete with confirmation | `MemoryManager` |
 | Knowledge Centre | Ask your documents (answers quoted with citations, topic summaries, re-index, index status); research projects and sessions; documents (list, search, read); notes | Research log; Documents tool (through the ToolManager, so its folder limit and permission apply); MemoryManager |
 | Tools & capabilities | Every tool as Available, Disabled (with the missing permission) or Error; calculator trial | `engine.tool_status()`, `tool.failed` events |
@@ -65,7 +66,7 @@ voice.
 | Vision Centre | Camera status, live preview, "What do you see?", "Read text", detector/OCR/permission status | Camera tool's analyser |
 | Sensor Centre | Temperature, humidity, pressure, motion, air quality (not supported yet); health on request | Sensor Hub |
 | System monitor | CPU, system RAM, AURORA's own memory, uptime, Ollama, active and installed models, services, plugins, tools, logs | Windows APIs, Ollama, engine, AURORA's log |
-| Settings | Model, personality, streaming, memory announcements, memories given to the model, accent, start page, maximised start, animations, voice name and speed | `aurora_preferences.json` |
+| Settings | Model, personality, streaming, memory announcements, memories given to the model, accent, start page, maximised start, animations, voice name, speed and volume, microphone, barge-in, Test the voice, Test the microphone | `aurora_preferences.json` |
 
 ## Honest by design
 
@@ -80,6 +81,10 @@ voice.
   checks the `camera` permission and shows a red **● CAMERA ON**
   indicator. Leaving the page or closing the window turns it off.
   Frames stay in memory; nothing is recorded or saved.
+- **The microphone never opens by itself.** Only a click on Ask by voice
+  or Test the microphone opens it, for one request, and only with the
+  `microphone` permission. The status line and level meter show it is on.
+  Audio stays in memory and transcripts aren't logged.
 - **Health readings** are only fetched when you click "Show health
   readings", and need the Health permission.
 - **Permissions, devices and paths can't be changed from the interface.**
@@ -98,6 +103,7 @@ command_centre.py ── aurora/interface/app.py
                              ├── engine thread pool, 1 thread: every engine call, in order
                              ├── io thread pool, 2 threads: Ollama checks, memory queries, image analysis
                              ├── Dispatcher: delivers results on the GUI thread
+                             ├── VoiceController: one worker thread for Vosk and SAPI
                              ├── activity feed (event bus → metadata only)
                              ├── log view (AURORA's log → metadata only)
                              └── system sampler (every 2 s, shared by all views)
@@ -147,8 +153,8 @@ Training monitor:
 
 ## Not done yet
 
-- Voice conversations inside the window (the terminal's `listen` /
-  `voice on` work).
+- Hands-free voice (wake word) inside the window; use the terminal's
+  `voice on`.
 - Device control and reminders have no page of their own yet; use Chat
   ("turn on the desk light", "remind me in 10 minutes to stretch").
 - Light theme (only dark accents: cyan, blue, purple).

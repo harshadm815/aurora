@@ -70,6 +70,13 @@ def test_strip_wake_word(heard, wanted):
         ("what time is it", "what time is it"),
         ("which one is it", "which one is it"),                  # No arithmetic: unchanged.
         ("i have two cats and one dog", "i have two cats and one dog"),
+        # Spoken lists for the Numbers tool: separate numbers stay separate.
+        ("what is the average of four eight and fifteen", "what is the average of 4 8 and 15"),
+        ("what is the sum of twenty and thirty five", "what is the sum of 20 and 35"),
+        ("median of three one nine four", "median of 3 1 9 4"),
+        ("total of one hundred five and twelve", "total of 105 and 12"),
+        ("average of twelve thirteen and fourteen", "average of 12 13 and 14"),
+        ("average of three point five and two", "average of 3.5 and 2"),
     ],
 )
 def test_numbers_to_digits(heard, text):
@@ -116,9 +123,10 @@ class FakeSpeaker:
     def __init__(self):
         self.said = []
 
-    def speak(self, text):
+    def speak(self, text, should_stop=lambda: False):
         assert FakeMicrophone.open_now == 0   # Never speaking into an open microphone.
         self.said.append(text)
+        return True
 
 
 @pytest.fixture
@@ -212,7 +220,7 @@ def _real_voice_available():
     return (
         os.name == "nt"
         and importlib.util.find_spec("vosk") is not None
-        and importlib.util.find_spec("pyttsx3") is not None
+        and importlib.util.find_spec("comtypes") is not None
         and (settings.VOICE_MODEL_DIR / "am").is_dir()
     )
 
@@ -223,7 +231,7 @@ def spoken(tmp_path_factory):
     if not _real_voice_available():
         pytest.skip("Vosk, its model or Windows text-to-speech not available")
 
-    import pyttsx3
+    from aurora.voice.speaker import SapiSpeaker
 
     folder = tmp_path_factory.mktemp("speech")
     phrases = {
@@ -231,10 +239,9 @@ def spoken(tmp_path_factory):
         "wake_only": "Hey Aurora.",
         "no_wake": "Remember that my exam is on Friday.",
     }
-    engine = pyttsx3.init()
+    speaker = SapiSpeaker(voice="")
     for name, text in phrases.items():
-        engine.save_to_file(text, str(folder / f"{name}.wav"))
-    engine.runAndWait()
+        speaker.save_to_file(text, folder / f"{name}.wav")
     return folder
 
 

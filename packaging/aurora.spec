@@ -8,7 +8,7 @@
 
 import os
 
-from PyInstaller.utils.hooks import collect_data_files, collect_submodules
+from PyInstaller.utils.hooks import collect_data_files, collect_dynamic_libs, collect_submodules
 
 ROOT = os.path.abspath(os.path.join(SPECPATH, ".."))
 ICON = os.path.join(ROOT, "aurora", "interface", "assets", "aurora.ico")
@@ -19,19 +19,25 @@ NAME = "AURORA Command Centre"
 # Training monitor starts "<exe> --train …").
 hidden = collect_submodules("aurora", filter=lambda name: name != "aurora.config.local_settings")
 hidden += collect_submodules("aurora_core")
+# Voice (Phase 12): speech recognition (Vosk), microphone (sounddevice) and
+# Windows text-to-speech (SAPI through comtypes). The speech model itself
+# stays in Models/ in the data folder.
+hidden += collect_submodules("vosk") + ["sounddevice", "comtypes.client", "comtypes.stream"]
 
 datas = [(ICON, os.path.join("aurora", "interface", "assets"))]
 datas += collect_data_files("rapidocr_onnxruntime")      # OCR models and config
+datas += collect_data_files("vosk")
+binaries = collect_dynamic_libs("vosk")                  # libvosk.dll and its runtime
 
 a = Analysis(
     [os.path.join(ROOT, "command_centre.py")],
     pathex=[ROOT],
     hiddenimports=hidden,
     datas=datas,
+    binaries=binaries,
     excludes=[
         "aurora.config.local_settings",   # Personal details stay out of the .exe
-        # Voice runs from the terminal only (for now); not needed in the window.
-        "vosk", "sounddevice", "pyttsx3", "comtypes",
+        "pyttsx3",                        # replaced by direct SAPI (aurora/voice/speaker.py)
         # Development and unused GUI toolkits.
         "pytest", "_pytest", "tkinter", "matplotlib", "IPython",
     ],

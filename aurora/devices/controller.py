@@ -66,6 +66,21 @@ class DeviceController:
             raise DeviceError(f"Which one: {', '.join(d.name for d in matches)}?")
         return matches[0]
 
+    def suggest(self, name: str) -> Device | None:
+        """The one device whose name or alias is close to ``name`` ("desk life"
+        → desk light, as speech recognition sometimes hears it), or None.
+        A suggestion is never acted on without asking the user."""
+        import difflib
+
+        wanted = _ARTICLES.sub("", (name or "").strip().lower())
+        if not wanted:
+            return None
+        names = {n: d for d in self.devices.values() for n in d.names()}
+        # 0.7: "desk life" (0.74) finds the desk light; "fun" or "van" (0.67) don't become the fan.
+        close = difflib.get_close_matches(wanted, list(names), n=3, cutoff=0.7)
+        candidates = {names[n].id: names[n] for n in close}
+        return next(iter(candidates.values())) if len(candidates) == 1 else None
+
     def driver(self, device: Device) -> Driver:
         return self.drivers[device.id]
 

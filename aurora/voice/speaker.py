@@ -32,7 +32,7 @@ logger = logging.getLogger(__name__)
 
 _URL = re.compile(r"\(?https?://\S+\)?")
 _SOURCE_LINE = re.compile(r"^\(?Sources?:.*$", re.IGNORECASE | re.MULTILINE)
-_CITATION = re.compile(r"\s*\[\d+\]")
+_CITATION = re.compile(r"\s*\[\d+(?:,\s*\d+)*\]")     # [1] or [2, 3]
 _BULLET = re.compile(r"^\s*(?:[-*•]|\d+\.)\s+", re.MULTILINE)
 _REPLACEMENTS = [
     (re.compile(r"(\d)\s*°C"), r"\1 degrees Celsius"),
@@ -57,7 +57,8 @@ def speech_text(text: str, max_chars: int | None = None) -> str:
     max_chars = settings.VOICE_MAX_SPOKEN_CHARS if max_chars is None else max_chars
 
     # Citation lists ("Sources: [1] thesis.pdf, page 2") are for reading, not listening.
-    text = re.split(r"\n\s*Sources?:\s*\n", text, maxsplit=1)[0]
+    # So are the evidence lists under picture descriptions.
+    text = re.split(r"\n\s*(?:Sources?|Evidence):\s*\n", text, maxsplit=1)[0]
     text = _SOURCE_LINE.sub("", text)
     text = _URL.sub("", text)
     text = _CITATION.sub("", text)

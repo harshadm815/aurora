@@ -60,6 +60,8 @@ def default_sources(name: str, result: ToolResult) -> list[Source]:
                 if source not in seen:
                     seen.append(source)
             return seen
+        if hasattr(data, "evidence") and getattr(data, "name", ""):     # a picture's SceneReport
+            return [Source(DOCUMENT, data.name, "image, analysed on this computer")]
         return [Source(DOCUMENT, "your documents")]
     if name in ("Recall", "Remember"):
         return [Source(MEMORY)]

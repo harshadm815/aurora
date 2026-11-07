@@ -14,6 +14,7 @@ comtypes==1.4.17      # Windows text-to-speech (SAPI)
 # Vision (optional; the detection model is downloaded separately, see README)
 opencv-python==5.0.0.93
 rapidocr-onnxruntime==1.2.3
+pillow==13.0.0        # image decoding, EXIF orientation (was already installed for OCR)
 
 # Desktop interface (Command Centre)
 PySide6-Essentials==6.12.0

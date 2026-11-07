@@ -11,6 +11,8 @@ from aurora.tool_plugins.camera import CameraTool
 from aurora.vision.analyzer import describe
 from aurora.vision.camera import Camera, VisionUnavailable
 from aurora.vision.detector import Detection
+from aurora.vision.image_input import ImageQuality
+from aurora.vision.scene import ObjectEvidence, SceneReport
 from aurora.vision.watch import Watcher
 
 cv2 = pytest.importorskip("cv2")
@@ -141,6 +143,11 @@ class FakeAnalyzer:
         self.seen.append(image)
         return self._objects, [detection("cup")]
 
+    def analyse(self, image, read_text=False, name="camera"):
+        self.seen.append(image)
+        cup = ObjectEvidence("cup", 0.9, (300, 200, 340, 280), certain=True)
+        return SceneReport(name, 640, 480, [cup], ImageQuality(0.5, 0.2, 100.0))
+
     def text(self, image):
         if not self._lines:
             return "I can't find any readable text.", []
@@ -153,7 +160,8 @@ def test_look(monkeypatch):
 
     result = tool.execute(action="look")
 
-    assert result.message == "I can see a cup."
+    assert result.message.startswith("I can see a cup in the centre [1].\n\nEvidence:\n  [1] cup: 90% sure")
+    assert result.data.objects[0].label == "cup"
     assert notes == ["📷  Camera on…", "📷  Camera off."]
     assert FakeCamera.is_open is False
 
@@ -194,7 +202,7 @@ def engine(fake_provider, memory):
 
 
 def test_what_do_you_see(engine, fake_provider):
-    assert engine().process_message("Aurora, what do you see?") == "I can see a cup."
+    assert engine().process_message("Aurora, what do you see?").startswith("I can see a cup in the centre [1].")
     assert fake_provider.calls == []
 
 
@@ -289,6 +297,8 @@ def test_reading_an_image_from_documents(tmp_path, reader, detector):
     tool = DocumentsTool(folder, analyzer=VisionAnalyzer(detector, reader))
     result = tool.execute(action="read", name="note.png")
 
-    assert result.message == (
-        "note.png: I don't recognise any objects in view.\nThe text says:\n  BLACK HOLE NOTES"
+    assert result.message.startswith(
+        "note.png: I don't see any everyday objects I can recognise. The picture is mostly white. "
+        "It contains text: “BLACK HOLE NOTES”.\n\nEvidence:\n  Text: “BLACK HOLE NOTES”"
     )
+    assert [line.text for line in result.data.text] == ["BLACK HOLE NOTES"]

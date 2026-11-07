@@ -4,6 +4,7 @@ Starts the AURORA Command Centre.
     command_centre.py              open the window
     command_centre.py --minimized  start in the notification area (used by "start with Windows")
     command_centre.py --train …    run a training job (used by the Training monitor; no window)
+    command_centre.py --voice-check / --vision-check   self-tests (no window)
 
 Only one Command Centre runs per Windows user: launching it again just
 brings the running one to the front.
@@ -60,12 +61,30 @@ def voice_check(arguments: list[str]) -> int:
     return main(arguments)
 
 
+def vision_check(arguments: list[str]) -> int:
+    """`--vision-check [--labels labels.json] [--out results.json]`: the vision
+    self-check (pictures made in memory; no camera, no window), or a benchmark
+    on labelled photos. Lets the packaged .exe prove its vision parts work."""
+    import os
+
+    setup_logging()
+    if sys.stdout is None:
+        sys.stdout = open(os.devnull, "w", encoding="utf-8")
+    if sys.stderr is None:
+        sys.stderr = open(os.devnull, "w", encoding="utf-8")
+    from aurora.vision.evaluate import main
+
+    return main(arguments)
+
+
 def run(argv: list[str] | None = None) -> int:
     argv = list(argv if argv is not None else sys.argv)
     if argv[1:2] == ["--train"]:
         return train(argv[2:])
     if argv[1:2] == ["--voice-check"]:
         return voice_check(argv[2:])
+    if argv[1:2] == ["--vision-check"]:
+        return vision_check(argv[2:])
     options = parse(argv)
     setup_logging()
 

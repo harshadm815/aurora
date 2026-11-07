@@ -1,6 +1,6 @@
 # AURORA Architecture
 
-Version: 0.18.0
+Version: 0.19.0
 Status: Describes what exists in the code today. Planned components are listed separately at the end.
 
 ---
@@ -279,31 +279,79 @@ callbacks never fired.
 
 ## Vision
 
-`aurora/vision/` adds the camera, all processed on this computer:
+`aurora/vision/` lets AURORA look at pictures you choose and, when you ask,
+through the camera. Everything is processed on this computer.
 
-| You say / type | What happens |
+| You say / do | What happens |
 |---|---|
-| what do you see? · is anyone in the room? · describe the room | One picture → objects: "I can see a person in the middle, a laptop and two cups." |
-| read this · what does this say? | One picture → printed text (OCR) |
-| read photo.jpg | Objects and text in an image from `Documents/` (no camera) |
+| describe desk.jpg · what's in photo.png? · read photo.jpg | A picture from `Documents/`: grounded description with evidence (no camera) |
+| Vision Centre: Open image… / Paste / drag a file in, then Describe | The same, for any picture you choose; the boxes are drawn on it |
+| Chat: 🖼 Image… | The same, as a chat reply |
+| what do you see? · is anyone in the room? · describe the room | One camera picture → grounded description |
+| read this · what does this say? | One camera picture → printed text (OCR) |
 | `watch` | Motion alerts with the time and what's in view, until Ctrl+C |
+
+A **grounded description** only says what its evidence supports, and
+numbers each object so it can be checked against the picture:
+
+```
+desk.jpg: I can see a person on the left [1] and two cups (centre and right) [2, 3].
+I might also see a vase at the top [4], but I'm not sure. The main colours are
+white and brown. It contains text: "BLACK HOLE NOTES".
+
+Evidence:
+  [1] person: 82% sure, left, 19% of the picture (seen in the mirrored picture too)
+  ...
+  [4] vase: 45% sure, top, 3% of the picture (not certain)
+  Text: "BLACK HOLE NOTES" (97% sure)
+  Colours: white 41%, brown 23%
+  Measured: brightness 63%, contrast 32%, sharpness 533
+```
 
 Components:
 
-- **Camera** (`camera.py`): OpenCV, DirectShow backend. Opened for one
-  picture and released, or for the duration of `watch`. The terminal
-  shows "📷 Camera on… / Camera off." Pictures are never saved.
+- **Image input and preprocessing** (`image_input.py`). The format is
+  recognised from the file's first bytes, not its name (a program renamed
+  `.jpg` is refused). Files over `VISION_MAX_IMAGE_MB` (25 MB) are refused
+  before they are read, and pictures over `VISION_MAX_PIXELS` (50 million)
+  are refused from their header before decoding, so a tiny file claiming
+  to be enormous (a "decompression bomb") can't use up memory. Phone
+  photos stored sideways are turned upright from their EXIF note; grey,
+  palette, 16-bit and transparent images become ordinary colour
+  (transparency on white); pictures larger than
+  `VISION_ANALYSIS_MAX_SIDE` (1600 px) are scaled down for analysis.
+  Brightness, contrast, sharpness and main colours are **measured** and
+  turned into warnings ("very dark", "blurry") when they could hide things.
 - **Object detection** (`detector.py`): NanoDet-Plus from OpenCV's model
   zoo (Apache-2.0, 3.8 MB, `Models/object_detection_nanodet_2022nov.onnx`),
   80 COCO classes, CPU only via `cv2.dnn`. Outputs at strides 8/16/32 are
   paired by shape and decoded (distribution focal loss → box distances),
   then non-maximum suppression.
+- **Looking twice** (`analyzer.grounded_objects`). The detector runs on
+  the picture and on its mirror image. Patterns that only resemble an
+  object (waves, petals, ribbons) tend to change when mirrored; real
+  objects don't. An object is **certain** when both views find it in the
+  same place with at least `VISION_CERTAIN_CONFIDENCE` (0.5); if both find
+  it less confidently (from `VISION_MIN_CONFIDENCE`, 0.4) AURORA says it
+  "might" see it; if only one view finds it, it isn't mentioned.
 - **Text** (`analyzer.TextReader`): RapidOCR (ONNX, offline). Loads on
-  first use (~4 s); each recognised line is cleaned as untrusted text.
-- **Scene description** (`analyzer.describe`): built from the detections,
-  with positions for a single person (left / middle / right). No
-  captioning model: one that describes scenes freely needs more than
-  1.5 GB of RAM.
+  first use (~4 s); each line keeps its confidence and box, and is cleaned
+  as untrusted text: words in a picture are quoted, never followed.
+- **Scene report** (`scene.py`): `SceneReport` holds the evidence and
+  writes the description, the evidence list, a JSON form and the
+  annotated picture (numbered boxes: solid cyan for certain, thin amber
+  for uncertain, thin green for text). The numbers in the text match the
+  boxes. Spoken replies leave out the numbers and the evidence list.
+- **Vision models**: the detector and OCR load on first use and are
+  shared by the Camera tool, the Documents tool and the Command Centre;
+  a lock lets one analysis run at a time. There is no captioning model:
+  one that describes scenes freely needs more than 1.5 GB of RAM and,
+  unlike the report above, can't show where each claim came from.
+- **Camera** (`camera.py`): OpenCV, DirectShow backend. Opened for one
+  picture and released, or for the duration of `watch`. The terminal
+  shows "📷 Camera on… / Camera off." In the Command Centre it starts only
+  after you confirm, shows **● CAMERA ON** while on, and turns off when
+  you leave the page or choose a picture. Pictures are never saved.
 - **Motion** (`motion.py`): difference from a slowly updated background;
   2 % of the picture changing counts. `watch` waits
   `VISION_MOTION_COOLDOWN` (10 s) between alerts and publishes
@@ -311,11 +359,36 @@ Components:
 
 **People are only counted, never identified.** There is no face
 recognition. The camera needs the `camera` permission for the `Camera`
-component; logs record only how many objects were detected.
+component; a picture you choose doesn't use the camera. Logs record only
+how many objects and text lines were found, never what.
+
+**How well it works** (`python -m aurora.vision.evaluate --labels …`), on
+136 local photos labelled by hand: 32 with everyday objects (people,
+cups, cakes, clocks, books, suitcases, chairs; Microsoft Office's sample
+photos) and 104 without (flowers, landscapes, buildings, abstract
+wallpapers):
+
+| Rule | Objects found | Named objects correct | Photos without objects where something is named |
+|---|---|---|---|
+| Before: anything ≥ 0.4 | 72 % | 69 % | 44 % |
+| Now: certain (both views ≥ 0.5) | 63 % | 87 % | 6 % |
+
+About 0.17 s per photo for detection (both views) on the i3 laptop; OCR
+adds about 1 s. Silhouettes, drawings and unusual angles are often
+missed: that is the small detector's limit. Your own photos may differ;
+the benchmark takes any labelled folder.
+
+**Self-check** (`python -m aurora.vision.evaluate`, or
+`"AURORA Command Centre.exe" --vision-check`): eight checks on pictures
+made in memory: printed text, a sideways phone photo, transparency,
+16-bit, a dark picture, a featureless picture, a decompression bomb and
+a disguised file.
 
 Settings: `VISION_CAMERA_INDEX`, `VISION_DETECTOR_MODEL`,
-`VISION_MIN_CONFIDENCE`, `VISION_OCR_MIN_CONFIDENCE`,
-`VISION_MOTION_THRESHOLD`, `VISION_MOTION_COOLDOWN`.
+`VISION_MIN_CONFIDENCE`, `VISION_CERTAIN_CONFIDENCE`,
+`VISION_OCR_MIN_CONFIDENCE`, `VISION_MAX_IMAGE_MB`, `VISION_MAX_PIXELS`,
+`VISION_ANALYSIS_MAX_SIDE`, `VISION_MOTION_THRESHOLD`,
+`VISION_MOTION_COOLDOWN`.
 
 ## Sensor Hub
 
@@ -634,7 +707,7 @@ the message to the Brain.
 | `aurora.devices` | `device.py`, `drivers.py`, `controller.py` | Device definitions, limits, simulated / ESP32 drivers, checks, rate limit, audit | Yes (Devices tool) |
 | `aurora.automation` | `reminders.py` | Session reminders and timers | Yes (Reminders tool) |
 | `aurora.sensors` | `reading.py`, `sources.py`, `store.py`, `hub.py` | Sensor readings, validation, ESP32 / simulated sources, history with separate health storage | Yes (Sensors and Health tools) |
-| `aurora.vision` | `camera.py`, `detector.py`, `analyzer.py`, `motion.py`, `watch.py` | Webcam, object detection, OCR, scene description, motion watch | Yes (Camera tool, `watch`) |
+| `aurora.vision` | `image_input.py`, `camera.py`, `detector.py`, `analyzer.py`, `scene.py`, `evaluate.py`, `motion.py`, `watch.py` | Image input and preprocessing, webcam, object detection checked in two views, OCR, grounded scene reports, evaluation, motion watch | Yes (Camera and Documents tools, Command Centre, `watch`) |
 | `aurora.voice` | `listener.py`, `vad.py`, `speaker.py`, `session.py`, `selftest.py` | Offline speech recognition with wake word and voice activity detection, text-to-speech with interruption, voice conversations, loop-back test | Yes (from `main.py` and the Command Centre, on demand) |
 | `aurora.tools` | `tool.py`, `tool_manager.py`, `result.py`, `executor.py`, `untrusted.py` | Tool interface, permission-checked registry, `ToolResult`, intent-to-tool execution, cleaning of outside text | Yes |
 | `aurora.tool_plugins` | `calculator.py`, `numbers.py`, `memory_tools.py`, `weather.py`, `research.py`, `documents.py`, `registry.py` | The built-in tools and `default_tools()` | Yes |
@@ -690,7 +763,7 @@ temporary database instead of `aurora_memory.db`.
 | Research agents match words, not meaning; no free-form reasoning or summarising (needs a stronger model); no deleting research projects by voice/text yet | Later |
 | No rule-based automations ("turn on the fan when it's above 28 °C"): they would act without a per-change confirmation, so they need their own safety design | Later automation work |
 | Reminders are lost when AURORA closes and are not spoken | Later |
-| Vision recognises 80 everyday object classes only; no free-form scene descriptions, no recording or face recognition (by design) | Larger models need more RAM |
+| Vision recognises 80 everyday object classes only and misses about a third of them (silhouettes, drawings, unusual angles); no free-form scene descriptions or relations between objects; no recording or face recognition (by design) | A larger detector or captioning model needs more RAM |
 | The small speech model misses uncommon names and places ("Pune" → "pony"); no voice profiles; barge-in is energy-based (off by default) and can be set off by loud speakers | Larger model / later voice work |
 | Document answers match words (with stemming), not meaning, and quote rather than explain; scanned PDFs (images) have no readable text; no general web search | Semantic search, a stronger model, OCR, a search provider |
 | Recall matches words and a fixed synonym list, not meaning | Semantic search, when it fits in 4 GB RAM |

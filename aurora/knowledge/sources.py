@@ -54,8 +54,11 @@ class Source:
     def short(self) -> str:
         """For a one-line caption: 'your documents: thesis.pdf p. 3'."""
         if self.kind == DOCUMENT and self.title:
-            page = self.location.replace("page ", "p. ") if self.location else ""
-            return f"{LABELS[DOCUMENT]}: {self.title}" + (f" {page}" if page else "")
+            if self.location.startswith("page "):
+                where = self.location.replace("page ", "p. ")
+            else:                                   # e.g. "image, analysed on this computer"
+                where = f"({self.location})" if self.location else ""
+            return f"{LABELS[DOCUMENT]}: {self.title}" + (f" {where}" if where else "")
         if self.kind == LIVE and self.title:
             return f"live: {self.title}"
         return LABELS[self.kind]

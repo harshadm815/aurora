@@ -391,6 +391,15 @@ _DOC_READ = re.compile(
 )
 
 
+# "describe desk.jpg", "what's in photo.png", "look at scan.webp": a picture in Documents.
+_IMAGE_ASK = re.compile(
+    r"^(?:describe|analy[sz]e|look\s+at|check|what(?:'s|\s+is)\s+in|what(?:\s+do|\s+can)\s+you\s+see\s+in|"
+    r"what\s+does)\s+(?:the\s+|my\s+)?(?:(?:image|picture|photo|file)\s+)?"
+    r"(?P<name>[\w .()'-]+\.(?:jpe?g|png|bmp|webp))(?:\s+show|\s+say)?$",
+    re.I,
+)
+
+
 def documents_rule(original: str, body: str) -> RouteDecision | None:
     text = _clean(body)
 
@@ -416,6 +425,14 @@ def documents_rule(original: str, body: str) -> RouteDecision | None:
             Intent.DOCUMENTS, 0.95, targets.DOCUMENTS,
             {"action": "read", "name": match.group("name").strip()},
             "The user asks to read one of their documents.",
+        )
+
+    match = _IMAGE_ASK.match(_clean(_strip_prefix(original)))
+    if match:
+        return RouteDecision(
+            Intent.DOCUMENTS, 0.95, targets.DOCUMENTS,
+            {"action": "read", "name": match.group("name").strip()},
+            "The user asks what is in one of their pictures.",
         )
 
     return None

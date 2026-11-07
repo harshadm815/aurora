@@ -1,18 +1,29 @@
 """
 Vision Centre.
 
-The camera is never started automatically. "Turn camera on" asks you
-first, checks the camera permission, and shows a red indicator for as
-long as it's on. Leaving this page or closing the window turns it off.
-Frames are only kept in memory; nothing is recorded or saved.
+Two ways to give AURORA a picture:
+
+- **An image you choose**: Open image…, Paste (from the clipboard) or
+  drag a file onto the page. It is checked, turned upright and analysed
+  in memory; it isn't copied or saved anywhere.
+- **The camera**: never started automatically. "Turn camera on" asks
+  you first, checks the camera permission, and shows a red indicator for
+  as long as it's on. Leaving this page or closing the window turns it
+  off. Frames are only kept in memory; nothing is recorded or saved.
+
+Describe gives a grounded description: every object it names has a
+number, and the same number is drawn on the picture next to it, with how
+sure AURORA is.
 """
 
 import importlib.util
 import logging
+from pathlib import Path
 
 from PySide6.QtCore import Qt, QThread, Signal
 from PySide6.QtGui import QImage, QPixmap
-from PySide6.QtWidgets import QHBoxLayout, QLabel, QMessageBox, QPushButton, QSizePolicy, QTextBrowser
+from PySide6.QtWidgets import (QApplication, QFileDialog, QHBoxLayout, QLabel, QMessageBox, QPushButton,
+                               QSizePolicy, QTextBrowser)
 
 from aurora.config import settings
 from aurora.interface.components.base_view import BaseView
@@ -20,6 +31,25 @@ from aurora.interface.components.widgets import Badge, Panel, StatusDot, StatusR
 from aurora.kernel.permissions import Permission
 
 logger = logging.getLogger(__name__)
+
+IMAGE_SUFFIXES = (".jpg", ".jpeg", ".png", ".bmp", ".webp")
+
+
+def to_qimage(image) -> QImage:
+    """A BGR uint8 array as a QImage (copied, so the array can be freed)."""
+    height, width = image.shape[:2]
+    return QImage(image.data, width, height, image.strides[0], QImage.Format_BGR888).copy()
+
+
+def from_qimage(image: QImage):
+    """A QImage (e.g. from the clipboard) as a BGR uint8 array."""
+    import numpy as np
+
+    converted = image.convertToFormat(QImage.Format_BGR888)
+    width, height = converted.width(), converted.height()
+    row = converted.bytesPerLine()
+    buffer = np.frombuffer(converted.constBits(), dtype=np.uint8, count=row * height).reshape(height, row)
+    return buffer[:, : width * 3].reshape(height, width, 3).copy()
 
 
 class CameraThread(QThread):
@@ -41,9 +71,7 @@ class CameraThread(QThread):
                 for frame in camera.frames(interval=0.06):
                     if not self._running:
                         break
-                    height, width = frame.shape[:2]
-                    image = QImage(frame.data, width, height, frame.strides[0], QImage.Format_BGR888).copy()
-                    self.frame_ready.emit(frame.copy(), image)
+                    self.frame_ready.emit(frame.copy(), to_qimage(frame))
         except VisionUnavailable as error:
             self.failed.emit(str(error))
         except Exception as error:
@@ -57,43 +85,61 @@ class CameraThread(QThread):
 
 class VisionView(BaseView):
     title = "Vision Centre"
-    subtitle = "The camera only turns on when you ask. Pictures are analysed on this laptop and never saved."
+    subtitle = "Open a picture or, if you ask, use the camera. Pictures are analysed on this laptop and never saved."
     nav_icon = "👁"
 
     def __init__(self, backend, parent=None):
         super().__init__(backend, parent)
         self.thread: CameraThread | None = None
         self.last_frame = None
+        self.picture = None          # LoadedImage chosen by the user (file or clipboard)
+        self.report = None           # the last SceneReport
         self._confirmed = False
+        self.setAcceptDrops(True)
 
         top = QHBoxLayout()
 
         # Preview
-        preview = Panel("Camera")
+        preview = Panel("Picture")
         indicator = QHBoxLayout()
         self.live_dot = StatusDot("off")
         self.live_badge = Badge("CAMERA OFF", "off")
+        self.source_badge = Badge("NO PICTURE", "off")
         indicator.addWidget(self.live_dot)
         indicator.addWidget(self.live_badge)
+        indicator.addWidget(self.source_badge)
         indicator.addStretch(1)
         preview.add_layout(indicator)
-        self.image = QLabel("The camera is off.")
+        self.image = QLabel("Open or paste a picture, drag one here, or turn the camera on.")
         self.image.setAlignment(Qt.AlignCenter)
-        self.image.setMinimumSize(480, 360)
+        self.image.setWordWrap(True)
+        self.image.setMinimumSize(480, 340)
         self.image.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.image.setStyleSheet("background: #04070d; border-radius: 10px; color: #5b6b85;")
         preview.add(self.image, 1)
-        buttons = QHBoxLayout()
+
+        sources = QHBoxLayout()
+        self.open_button = QPushButton("Open image…")
+        self.open_button.clicked.connect(self.choose_file)
+        self.paste_button = QPushButton("Paste")
+        self.paste_button.setToolTip("Use a picture copied to the clipboard")
+        self.paste_button.clicked.connect(self.paste)
         self.toggle = QPushButton("Turn camera on")
         self.toggle.setObjectName("Primary")
         self.toggle.clicked.connect(self._toggle)
-        self.analyse = QPushButton("What do you see?")
-        self.analyse.clicked.connect(lambda: self._analyse("objects"))
+        for button in (self.open_button, self.paste_button, self.toggle):
+            sources.addWidget(button)
+        preview.add_layout(sources)
+
+        actions = QHBoxLayout()
+        self.analyse = QPushButton("Describe")
+        self.analyse.setToolTip("What's in the picture, with evidence for each thing named")
+        self.analyse.clicked.connect(lambda: self._analyse(read_text=None))
         self.read = QPushButton("Read text")
-        self.read.clicked.connect(lambda: self._analyse("text"))
-        for button in (self.toggle, self.analyse, self.read):
-            buttons.addWidget(button)
-        preview.add_layout(buttons)
+        self.read.clicked.connect(lambda: self._analyse(read_text=True))
+        for button in (self.analyse, self.read):
+            actions.addWidget(button)
+        preview.add_layout(actions)
         top.addWidget(preview, 3)
 
         # Status
@@ -102,6 +148,9 @@ class VisionView(BaseView):
         self.detector_row = status.add(StatusRow("Object detection", "", "off"))
         self.ocr_row = status.add(StatusRow("Text reading (OCR)", "", "off"))
         self.permission_row = status.add(StatusRow("Camera permission", "", "off"))
+        status.add(label("Objects are named as certain only when AURORA finds them again in the mirrored "
+                         "picture; otherwise it says it \"might\" see them. Each has a numbered box on the "
+                         "picture.", "Faint", wrap=True))
         status.add(label("People are only counted (\"a person on the left\"); nobody is identified. "
                          "There is no face recognition.", "Faint", wrap=True))
         status.layout_.addStretch(1)
@@ -110,8 +159,8 @@ class VisionView(BaseView):
 
         results = Panel("Analysis results")
         self.results = QTextBrowser()
-        self.results.setMinimumHeight(120)
-        self.results.setPlainText("Turn the camera on, then ask what it sees or read text in front of it.")
+        self.results.setMinimumHeight(140)
+        self.results.setPlainText("Choose a picture (or turn the camera on), then click Describe or Read text.")
         results.add(self.results)
         self.body.addWidget(results)
 
@@ -140,11 +189,81 @@ class VisionView(BaseView):
         self.toggle.setObjectName("Danger" if on else "Primary")
         self.toggle.style().unpolish(self.toggle)
         self.toggle.style().polish(self.toggle)
-        self.analyse.setEnabled(on)
-        self.read.setEnabled(on)
+        has_picture = on or self.picture is not None
+        self.analyse.setEnabled(has_picture)
+        self.read.setEnabled(has_picture)
         self.live_dot.set_state("error" if on else "off", pulse=on)
         self.live_badge.set("● CAMERA ON" if on else "CAMERA OFF", "error" if on else "off")
         self.camera_row.set("On (live preview)" if on else "Off", "error" if on else "off")
+        if on:
+            self.source_badge.set("LIVE CAMERA", "error")
+        elif self.picture is not None:
+            self.source_badge.set(f"IMAGE: {self.picture.name}"[:48], "info")
+        else:
+            self.source_badge.set("NO PICTURE", "off")
+
+    def _show(self, image):
+        self.image.setPixmap(QPixmap.fromImage(to_qimage(image)).scaled(
+            self.image.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation))
+
+    # --- Pictures chosen by the user -----------------------------------------------------
+
+    def choose_file(self):
+        start = str(settings.DOCUMENTS_DIR) if settings.DOCUMENTS_DIR.is_dir() else ""
+        from aurora.vision.image_input import FILE_FILTER
+
+        path, _ = QFileDialog.getOpenFileName(self, "Open an image", start, FILE_FILTER)
+        if path:
+            self.open_file(Path(path))
+
+    def open_file(self, path: Path):
+        """Loads (checks, turns upright, normalises) an image off the GUI thread."""
+        from aurora.vision.image_input import load_image
+
+        self.results.setPlainText(f"Opening {path.name}…")
+        self.backend.run_io(lambda: load_image(path), self.use_picture,
+                            lambda error: self.results.setPlainText(str(error)))
+
+    def paste(self):
+        from aurora.vision.image_input import ImageError, from_array
+
+        image = QApplication.clipboard().image()
+        if image.isNull():
+            self.results.setPlainText("There's no picture on the clipboard. Copy one first (for example "
+                                      "with Win+Shift+S or Copy image in a browser).")
+            return
+        try:
+            self.use_picture(from_array(from_qimage(image), "pasted picture"))
+        except ImageError as error:
+            self.results.setPlainText(str(error))
+
+    def use_picture(self, picture):
+        """Shows a chosen picture. The camera is turned off: one picture at a time."""
+        self.stop_camera()
+        self.picture = picture
+        self.report = None
+        self._show(picture.image)
+        width, height = picture.original_size
+        notes = [f"{picture.name}: {width}×{height} {picture.format}."]
+        if picture.rotated:
+            notes.append("Turned upright using the photo's orientation note.")
+        if picture.scaled < 1:
+            notes.append(f"Scaled to {picture.size[0]}×{picture.size[1]} for analysis.")
+        self.results.setPlainText(" ".join(notes) + " Click Describe or Read text.")
+        self._update_controls()
+
+    def dragEnterEvent(self, event):
+        urls = event.mimeData().urls() if event.mimeData().hasUrls() else []
+        if any(url.toLocalFile().lower().endswith(IMAGE_SUFFIXES) for url in urls):
+            event.acceptProposedAction()
+
+    def dropEvent(self, event):
+        for url in event.mimeData().urls():
+            path = url.toLocalFile()
+            if path.lower().endswith(IMAGE_SUFFIXES):
+                self.open_file(Path(path))
+                event.acceptProposedAction()
+                return
 
     # --- Camera ---------------------------------------------------------------------
 
@@ -167,6 +286,7 @@ class VisionView(BaseView):
                 return
             self._confirmed = True
 
+        self.picture = None
         self.thread = CameraThread(self)
         self.thread.frame_ready.connect(self._show_frame)
         self.thread.failed.connect(self._camera_failed)
@@ -178,9 +298,10 @@ class VisionView(BaseView):
         if self.thread is not None:
             thread, self.thread = self.thread, None
             thread.stop()
+            self.last_frame = None
+            self.image.setPixmap(QPixmap())
+            self.image.setText("The camera is off.")
         self.last_frame = None
-        self.image.setPixmap(QPixmap())
-        self.image.setText("The camera is off.")
         self._update_controls()
 
     def _thread_finished(self):
@@ -201,14 +322,44 @@ class VisionView(BaseView):
 
     # --- Analysis -------------------------------------------------------------------
 
-    def _analyse(self, what: str):
-        frame = self.last_frame
+    def _analyse(self, read_text: bool | None):
+        """Describe (read_text=None: text is read for chosen pictures, not for the
+        live camera, to keep it quick) or Read text (read_text=True)."""
         tool = self.backend.tool("Camera")
-        if frame is None or tool is None:
+        if tool is None:
             return
+        if self.thread is not None:
+            frame, name = self.last_frame, "camera"
+            if frame is None:
+                return
+            picture = frame.copy()
+            read = bool(read_text)
+        elif self.picture is not None:
+            picture, name, read = self.picture, self.picture.name, True
+        else:
+            return
+
         self.results.setPlainText("Analysing…" + (" (reading text takes a few seconds the first time)"
-                                                  if what == "text" else ""))
+                                                  if read else ""))
         analyzer = tool.analyzer
-        work = (lambda: analyzer.objects(frame)[0]) if what == "objects" else (lambda: analyzer.text(frame)[0])
-        self.backend.run_io(work, self.results.setPlainText,
+        only_text = read_text is True
+
+        def work():
+            report = analyzer.analyse(picture, read_text=read, name=name)
+            image = picture.image if hasattr(picture, "image") else picture
+            return report, report.annotate(image)
+
+        self.backend.run_io(work, lambda result: self._show_report(*result, only_text=only_text),
                             lambda error: self.results.setPlainText(f"Analysis failed: {error}"))
+
+    def _show_report(self, report, annotated, only_text: bool = False):
+        self.report = report
+        if self.thread is None:              # a chosen picture: show the evidence on it
+            self._show(annotated)
+        if only_text:
+            lines = report.text or []
+            body = ("The text says:\n" + "\n".join(f"  {line.text}  ({line.confidence:.0%} sure)" for line in lines)
+                    if lines else "I can't find any readable text.")
+            self.results.setPlainText(body)
+        else:
+            self.results.setPlainText(report.message())

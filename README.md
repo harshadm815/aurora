@@ -55,7 +55,7 @@ its "Known gaps" table for what's not done yet.
    https://alphacephei.com/vosk/models and unzip it into `Models/`, so
    that `Models/vosk-model-small-en-us-0.15/am` exists.
 
-5. Optional, for vision (`what do you see?`, `read this`, `watch`):
+5. Optional, for vision (`describe photo.jpg`, `what do you see?`, `read this`, `watch`, and the Vision Centre):
    download `object_detection_nanodet_2022nov.onnx` from OpenCV's
    opencv_zoo repository (models/object_detection_nanodet) into `Models/`.
    OCR models come with the `rapidocr-onnxruntime` package.

@@ -24,6 +24,16 @@ hidden += collect_submodules("aurora_core")
 # stays in Models/ in the data folder.
 hidden += collect_submodules("vosk") + ["sounddevice", "comtypes.client", "comtypes.stream"]
 
+# OCR (RapidOCR) adds its own folder to sys.path and imports its parts by
+# name as top-level modules ("ch_ppocr_v3_det"), which PyInstaller can't see.
+# Without these the .exe can't read text (found by `--vision-check`).
+import rapidocr_onnxruntime
+
+RAPIDOCR = os.path.dirname(rapidocr_onnxruntime.__file__)
+OCR_PARTS = ["ch_ppocr_v3_det", "ch_ppocr_v3_rec", "ch_ppocr_v2_cls"]
+hidden += OCR_PARTS + [f"{part}.{module}" for part in OCR_PARTS for module in ("utils",)]
+hidden += ["ch_ppocr_v3_det.text_detect", "ch_ppocr_v3_rec.text_recognize", "ch_ppocr_v2_cls.text_cls"]
+
 datas = [(ICON, os.path.join("aurora", "interface", "assets"))]
 datas += collect_data_files("rapidocr_onnxruntime")      # OCR models and config
 datas += collect_data_files("vosk")
@@ -31,7 +41,7 @@ binaries = collect_dynamic_libs("vosk")                  # libvosk.dll and its r
 
 a = Analysis(
     [os.path.join(ROOT, "command_centre.py")],
-    pathex=[ROOT],
+    pathex=[ROOT, RAPIDOCR],
     hiddenimports=hidden,
     datas=datas,
     binaries=binaries,

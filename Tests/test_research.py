@@ -243,7 +243,7 @@ def test_unreadable_image(documents):
     result = documents.execute(action="read", name="photo.jpg")   # Not really a JPEG.
 
     assert result.success is False
-    assert "can't open photo.jpg as an image" in result.message
+    assert result.message == "photo.jpg isn't a JPEG, PNG, BMP or WebP image."
 
 
 def test_search_text_files(documents):

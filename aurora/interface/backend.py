@@ -180,6 +180,7 @@ class Backend(QObject):
         # Voice: microphone (push to talk), spoken replies, stop.
         from aurora.interface.voice_control import VoiceController
         self.voice = VoiceController(self)
+        self._vision = None          # VisionAnalyzer for chosen pictures, when there's no Camera tool
 
         self._cpu = system_info.CpuMeter()
         self._cpu.percent()
@@ -365,6 +366,26 @@ class Backend(QObject):
             return reply, engine.pending is not None, caption(getattr(engine, "last_sources", []))
 
         self.run_engine(work, on_reply, on_error)
+
+    # --- Pictures -----------------------------------------------------------
+
+    def vision_analyzer(self):
+        """The Camera tool's analyser (models already loaded), or one of our own.
+        Analysing a picture the user chose doesn't use the camera."""
+        tool = self.tool("Camera")
+        if tool is not None:
+            return tool.analyzer
+        if self._vision is None:
+            from aurora.vision.analyzer import VisionAnalyzer
+
+            self._vision = VisionAnalyzer()
+        return self._vision
+
+    def describe_image(self, path):
+        """A grounded SceneReport for an image file (call off the GUI thread)."""
+        from aurora.vision.image_input import load_image
+
+        return self.vision_analyzer().analyse(load_image(path), read_text=True)
 
     def clear_conversation(self, on_done=None) -> None:
         if self.engine is not None:

@@ -146,28 +146,22 @@ class DocumentsTool(BaseTool):
             return ToolResult(False, f"I couldn't read your documents ({type(error).__name__}).")
 
     def read_image(self, path: Path) -> ToolResult:
-        """Objects and text in an image, analysed on this computer."""
-        import cv2
-        import numpy as np
-
+        """A grounded description of an image (objects, text, colours, quality),
+        analysed on this computer. The image is checked before it is decoded."""
         from aurora.vision.analyzer import VisionAnalyzer
         from aurora.vision.camera import VisionUnavailable
+        from aurora.vision.image_input import load_image
 
-        image = cv2.imdecode(np.fromfile(str(path), dtype=np.uint8), cv2.IMREAD_COLOR)
-        if image is None:
-            return ToolResult(False, f"I can't open {self._name(path)} as an image.")
-
+        name = self._name(path)
         try:
+            picture = load_image(path)
+            picture.name = name
             self._analyzer = self._analyzer or VisionAnalyzer()
-            objects, _ = self._analyzer.objects(image)
-            text, lines = self._analyzer.text(image)
-        except VisionUnavailable as error:
+            report = self._analyzer.analyse(picture, read_text=True)
+        except VisionUnavailable as error:       # includes ImageError (damaged, too large, not an image)
             return ToolResult(False, str(error))
 
-        message = f"{self._name(path)}: {objects}"
-        if lines:
-            message += "\n" + text
-        return ToolResult(True, message, {"objects": objects, "text": lines})
+        return ToolResult(True, report.message(heading=name), report)
 
     def list(self) -> ToolResult:
         files, skipped = self.files()

@@ -49,7 +49,7 @@ class CameraTool(BaseTool):
                 message, lines = self.analyzer.text(image)
                 return ToolResult(bool(lines), message, lines)
 
-            message, detections = self.analyzer.objects(image)
-            return ToolResult(True, message, detections)
+            report = self.analyzer.analyse(image, name="camera")
+            return ToolResult(True, report.message(), report)
         except VisionUnavailable as error:
             return ToolResult(False, str(error))

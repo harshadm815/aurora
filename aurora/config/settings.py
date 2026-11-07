@@ -9,7 +9,7 @@ import sys
 from pathlib import Path
 
 APP_NAME = "AURORA"
-VERSION = "0.29.0"
+VERSION = "0.30.0"
 
 USER_NAME = "Harry"
 
@@ -204,7 +204,12 @@ VOICE_CORRECTIONS: dict[str, str] = {}
 # "watch"). Pictures are analysed on this computer and never saved.
 VISION_CAMERA_INDEX = 0            # 0 = the built-in webcam.
 VISION_DETECTOR_MODEL = PROJECT_ROOT / "Models" / "object_detection_nanodet_2022nov.onnx"
-VISION_MIN_CONFIDENCE = 0.4        # How sure the detector must be to mention an object.
+VISION_MIN_CONFIDENCE = 0.4        # Below this an object isn't mentioned at all.
+VISION_CERTAIN_CONFIDENCE = 0.5    # At or above this, and seen again in the mirrored picture,
+                                   # an object is stated as fact; in between it's "might be".
+VISION_MAX_IMAGE_MB = 25           # Larger image files are refused.
+VISION_MAX_PIXELS = 50_000_000     # Larger pictures are refused before decoding.
+VISION_ANALYSIS_MAX_SIDE = 1600    # Larger pictures are scaled down for analysis.
 VISION_OCR_MIN_CONFIDENCE = 0.5
 VISION_MOTION_THRESHOLD = 0.02     # Fraction of the picture that must change (2 %).
 VISION_MOTION_COOLDOWN = 10        # Seconds between motion alerts in "watch" mode.

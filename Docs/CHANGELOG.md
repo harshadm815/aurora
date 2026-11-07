@@ -1,5 +1,51 @@
 # Changelog
 
+## 0.30.0 — Vision system (2026-11-07)
+
+Blueprint Phase 13. See "Vision" in Docs/ARCHITECTURE.md.
+
+### Added
+- **Image input and preprocessing** (`aurora/vision/image_input.py`):
+  format checked from the file's content, size and pixel limits checked
+  before decoding (decompression bombs refused), EXIF orientation
+  applied, grey/palette/16-bit/transparent images normalised, large
+  pictures scaled for analysis; brightness, contrast, sharpness and main
+  colours measured.
+- **Grounded descriptions** (`aurora/vision/scene.py`): every object
+  named has a number, a confidence and a box drawn on the picture; "I
+  might also see …" for uncertain objects; colours, text and quality
+  warnings from measurements; an evidence list under each description.
+- **Looking twice**: objects must be found again in the mirrored picture.
+  On 136 hand-labelled local photos, photos without objects where
+  something was wrongly named fell from 44 % to 6 %, and named objects
+  that are right rose from 69 % to 87 % (objects found: 72 % → 63 %).
+- **Vision Centre**: Open image…, Paste and drag-and-drop; Describe
+  shows the annotated picture; choosing a picture turns the camera off.
+- **Chat**: 🖼 Image… describes a picture you choose.
+- "describe desk.jpg", "what's in photo.png?", "look at scan.webp" for
+  pictures in `Documents/`.
+- **Evaluation** (`python -m aurora.vision.evaluate`): a self-check with
+  pictures made in memory (also `--vision-check` in the .exe) and a
+  benchmark for any labelled folder of photos.
+- Settings `VISION_CERTAIN_CONFIDENCE`, `VISION_MAX_IMAGE_MB`,
+  `VISION_MAX_PIXELS`, `VISION_ANALYSIS_MAX_SIDE`.
+- Pillow is now a direct requirement (it was already installed for OCR).
+- 74 new tests.
+
+### Changed
+- Camera and image answers are grounded reports with evidence instead of
+  a single sentence. Spoken replies leave out the evidence and numbers.
+- Image sources in Chat read "your documents: desk.png (image, analysed
+  on this computer)".
+
+### Fixed
+- The detector named objects in abstract pictures (e.g. "airplane" in
+  Windows' grey-waves wallpaper, 62 % sure), which AURORA stated as fact.
+- The packaged .exe couldn't read text in pictures: RapidOCR imports its
+  parts by name from its own folder, which the build didn't include.
+  Found by the new `--vision-check`.
+- "Sources:" captions for documents with a location other than a page.
+
 ## 0.29.0 — Voice system (2026-11-07)
 
 Blueprint Phase 12. See "Voice" in Docs/ARCHITECTURE.md.

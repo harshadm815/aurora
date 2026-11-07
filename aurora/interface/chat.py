@@ -1,14 +1,16 @@
 """Conversation with AURORA through the existing engine."""
 
 from datetime import datetime
+from pathlib import Path
 
 from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtGui import QKeyEvent
 from PySide6.QtWidgets import (
-    QCheckBox, QFrame, QHBoxLayout, QLabel, QPlainTextEdit, QPushButton, QScrollArea, QSizePolicy, QVBoxLayout,
-    QWidget,
+    QCheckBox, QFileDialog, QFrame, QHBoxLayout, QLabel, QPlainTextEdit, QPushButton, QScrollArea, QSizePolicy,
+    QVBoxLayout, QWidget,
 )
 
+from aurora.config import settings
 from aurora.interface.components.base_view import BaseView
 from aurora.interface.components.widgets import clear_layout, label, safe_markdown
 
@@ -125,6 +127,10 @@ class ChatView(BaseView):
         self.speak_replies.setChecked(bool(self.backend.preferences.get("speak_replies", False)))
         self.speak_replies.toggled.connect(lambda on: self.backend.save_preferences({"speak_replies": on}))
         self.voice_status = label("", "Faint")
+        self.image_button = QPushButton("🖼  Image…")
+        self.image_button.setToolTip("Choose a picture for AURORA to describe (analysed on this laptop, not saved).")
+        self.image_button.clicked.connect(lambda: self.ask_image())
+        voice_row.addWidget(self.image_button)
         voice_row.addWidget(self.mic_button)
         voice_row.addWidget(self.stop_voice_button)
         voice_row.addWidget(self.speak_replies)
@@ -245,6 +251,33 @@ class ChatView(BaseView):
         self._dot_timer.start(400)
         self._animate_thinking()
         self.backend.send_message(text, self._on_reply, self._on_error, on_token=self._on_token)
+
+    def ask_image(self, path: Path | None = None):
+        """Describes a picture the user chooses, with its evidence."""
+        if self.busy:
+            return
+        if path is None:
+            from aurora.vision.image_input import FILE_FILTER
+
+            start = str(settings.DOCUMENTS_DIR) if settings.DOCUMENTS_DIR.is_dir() else ""
+            chosen, _ = QFileDialog.getOpenFileName(self, "Choose a picture", start, FILE_FILTER)
+            if not chosen:
+                return
+            path = Path(chosen)
+        self._add_bubble("You", f"🖼  What's in {path.name}?", "user")
+        self.busy = True
+        self._set_ready(True)
+        self.thinking.setText("Looking at the picture… (the first time takes a few seconds)")
+        self.backend.run_io(lambda: self.backend.describe_image(path), self._on_image_report, self._on_error)
+
+    def _on_image_report(self, report):
+        bubble = self._add_bubble("AURORA", report.message(heading=report.name))
+        from aurora.knowledge.sources import DOCUMENT, Source, caption
+
+        bubble.set_sources(caption([Source(DOCUMENT, report.name, "image, analysed on this computer")]))
+        self._finish()
+        if self.speak_replies.isChecked():
+            self.backend.voice.speak(report.description())
 
     def _animate_thinking(self):
         self._dots = (self._dots % 3) + 1

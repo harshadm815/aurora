@@ -91,6 +91,7 @@ class WorkflowRunner:
             self.sleep(self.retry_delay * record.attempts)
 
         record.message = result.message
+        record.sources = list(result.sources)
         if not result.success:
             record.status = FAILED
             if result.retryable and record.attempts > 1:

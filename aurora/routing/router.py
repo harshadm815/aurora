@@ -19,7 +19,7 @@ from aurora.config import settings
 from aurora.routing import decision as targets
 from aurora.routing.decision import RouteDecision
 from aurora.routing.intent import Intent
-from aurora.routing import memory_rules
+from aurora.routing import knowledge_rules, memory_rules
 from aurora.routing.numbers_rule import numbers_rule
 from aurora.tool_plugins.calculator import CalculationError, evaluate
 
@@ -379,8 +379,8 @@ _DOC_LIST = re.compile(
 
 _DOC_SEARCH = re.compile(
     rf"^(?:search|look\s+through|check)\s+(?:in\s+)?my\s+{_DOC_WORDS}\s+(?:for|about)\s+(?P<query>.+)$"
-    rf"|^(?:find|search\s+for|look\s+for)\s+(?P<query2>.+?)\s+in\s+my\s+{_DOC_WORDS}$"
-    rf"|^what\s+(?:do|does)\s+my\s+{_DOC_WORDS}\s+say\s+about\s+(?P<query3>.+)$",
+    rf"|^(?:find|search\s+for|look\s+for)\s+(?P<query2>.+?)\s+in\s+my\s+{_DOC_WORDS}$",
+    # "what do my notes say about X" is a question: the Knowledge tool answers it.
     re.I,
 )
 
@@ -402,7 +402,7 @@ def documents_rule(original: str, body: str) -> RouteDecision | None:
 
     match = _DOC_SEARCH.match(text)
     if match:
-        query = match.group("query") or match.group("query2") or match.group("query3")
+        query = match.group("query") or match.group("query2")
         return RouteDecision(
             Intent.DOCUMENTS, 0.95, targets.DOCUMENTS,
             {"action": "search", "query": _clean(query)},
@@ -691,6 +691,7 @@ DEFAULT_RULES: tuple[Rule, ...] = (
     papers_rule,
     knowledge_rule,
     documents_rule,
+    knowledge_rules.knowledge_base_rule,
     vision_rule,
     sensors_rule,
     health_rule,

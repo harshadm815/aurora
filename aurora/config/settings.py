@@ -9,7 +9,7 @@ import sys
 from pathlib import Path
 
 APP_NAME = "AURORA"
-VERSION = "0.26.0"
+VERSION = "0.27.0"
 
 USER_NAME = "Harry"
 
@@ -120,6 +120,8 @@ PERMISSION_GRANTS: dict[str, list[str]] = {
     "arXiv": ["network"],      # Sends the topic to export.arxiv.org.
     # Reads .txt/.md/.pdf files, only inside DOCUMENTS_DIR.
     "Documents": ["filesystem.read"],
+    # Questions, summaries and comparisons over the same documents, with citations.
+    "Knowledge": ["filesystem.read"],
     # Microphone, used only while you've asked AURORA to listen.
     "Voice": ["microphone"],
     # Camera, used only for "what do you see?", "read this" and "watch".
@@ -151,6 +153,14 @@ DOCUMENTS_DIR = PROJECT_ROOT / "Documents"
 DOCUMENT_MAX_BYTES = 20_000_000
 # How much of a document "read <file>" shows.
 DOCUMENT_READ_CHARS = 1500
+
+# Knowledge index: your documents split into passages for search and
+# questions ("what do my notes say about …"). Rebuilt from the Documents
+# folder whenever files change; delete the file to start afresh.
+KNOWLEDGE_INDEX_PATH = PROJECT_ROOT / "knowledge_index.db"
+# Mark language-model answers to factual questions as unverified
+# ("from my language model's training, not checked against a source").
+LABEL_MODEL_ANSWERS = True
 
 # Weather
 #

@@ -9,6 +9,8 @@ from aurora.events.bus import EventBus
 from aurora.kernel.context import KernelContext
 from aurora.kernel.permissions import Permission, PermissionManager
 from aurora.kernel.service_manager import ServiceManager
+from aurora.knowledge import sources
+from aurora.knowledge.sources import COMPUTED, MEMORY, MODEL, Source
 from aurora.memory.auto import AutoMemory
 from aurora.memory.episodes import EpisodeLog
 from aurora.memory.manager import MemoryManager
@@ -42,6 +44,22 @@ TOOL_RESULTS_HEADER = (
 
 AUTO_MEMORY = "AutoMemory"
 AUTO_MEMORY_PERMISSIONS = (Permission.MEMORY_READ, Permission.MEMORY_WRITE)
+
+MODEL_LABEL = ("(This answer comes from my language model's training. It isn't checked against a source "
+               "and may be wrong; say \"look up …\" to check Wikipedia, or \"what do my notes say about …\".)")
+
+_QUESTION_START = re.compile(
+    r"^(?:what|who|whom|whose|when|where|why|how|which|is|are|was|were|does|do|did|can|could|will|"
+    r"would|should|has|have|had)\b", re.I)
+_PERSONAL = re.compile(r"\b(?:you|your|yours|yourself|aurora|i|i'm|im|me|my|mine|myself|we|our|us)\b", re.I)
+
+
+def is_factual_question(message: str) -> bool:
+    """A question about the world, not about AURORA or the user
+    ("who wrote Hamlet?" yes; "how are you?", "what should I wear?" no)."""
+    text = (message or "").strip()
+    return bool(text) and bool(text.endswith("?") or _QUESTION_START.match(text)) and not _PERSONAL.search(text)
+
 
 _YES = re.compile(r"^(?:y|yes|yeah|yep|sure|ok|okay|confirm|do it|go ahead)[.!]*$", re.I)
 _NO = re.compile(r"^(?:n|no|nope|cancel|stop|don'?t|never ?mind)[.!]*$", re.I)
@@ -110,6 +128,10 @@ class AuroraEngine:
         # the request it came from (for the activity history).
         self.pending: tuple[str, ToolResult] | None = None
         self.pending_decision: RouteDecision | None = None
+
+        # Where the last reply came from (aurora.knowledge.sources): the
+        # language model, memory, documents, live services, calculations.
+        self.last_sources: list[Source] = []
 
         # Kernel managers
         self.service_manager = ServiceManager(self.events)
@@ -180,6 +202,7 @@ class AuroraEngine:
 
         self.conversation.add_user(message)
         self.events.emit(topics.MESSAGE_RECEIVED, message, source=SOURCE)
+        self.last_sources = []
 
         response = self._answer_pending(message)
 
@@ -215,6 +238,7 @@ class AuroraEngine:
         if _YES.match(text):
             self.events.emit(topics.CONFIRMATION_ANSWERED, {"tool": name, "approved": True}, source=SOURCE)
             result = self.executor.confirm(name, pending)
+            self.last_sources = list(result.sources)
             if decision is not None:
                 self._record_episode(decision, result.success)
             return result.message
@@ -253,6 +277,7 @@ class AuroraEngine:
                 self.events.emit(topics.CONFIRMATION_REQUESTED, {"tool": name}, source=SOURCE)
             else:
                 self._record_episode(decision, result.success)
+            self.last_sources = sources.merge(self.last_sources, result.sources)
             return result.message
 
         return self._converse(message)
@@ -362,6 +387,12 @@ class AuroraEngine:
                     logger.exception("Streaming callback failed")
             response = "".join(pieces)
 
+        # Where this answer came from: the language model, plus the memories
+        # it was given. Unverified answers to factual questions say so.
+        self.last_sources = sources.merge(self.last_sources, [Source(MEMORY)] if context else [], [Source(MODEL)])
+        if settings.LABEL_MODEL_ANSWERS and not tool_results and is_factual_question(message):
+            response = f"{response}\n\n{MODEL_LABEL}"
+
         note = AutoMemory.summary(learned) if settings.MEMORY_ANNOUNCE else None
         return f"{response}\n\n{note}" if note else response
 
@@ -381,6 +412,9 @@ class AuroraEngine:
         for record in trace.records:
             if record.step.decision is not None and record.status != "skipped":
                 self._record_episode(record.step.decision, record.status == "done")
+            if record.status == "done":
+                computed = [Source(COMPUTED, "AURORA")] if record.step.operation is not None else []
+                self.last_sources = sources.merge(self.last_sources, record.sources, computed)
         self.events.emit(topics.WORKFLOW_COMPLETED, trace.to_dict(), source=SOURCE)
         return trace.message
 
@@ -405,6 +439,7 @@ class AuroraEngine:
                 result.message = "That needs your confirmation, so please ask for it on its own."
             else:
                 self._record_episode(step.decision, result.success)
+            self.last_sources = sources.merge(self.last_sources, result.sources)
             replies.append(result.message)
             results.append(result.message)
             self.events.emit(

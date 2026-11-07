@@ -57,6 +57,7 @@ class StepRecord:
     message: str = ""
     values: list[Value] = field(default_factory=list)
     problem: str = ""                    # why it failed or was skipped (for the user)
+    sources: list = field(default_factory=list)   # where a tool step's answer came from
 
 
 @dataclass

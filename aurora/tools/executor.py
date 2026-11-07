@@ -1,8 +1,10 @@
 import logging
+from datetime import datetime
 
 from aurora.events import topics
 from aurora.events.bus import EventBus
 from aurora.kernel.permissions import PermissionDeniedError
+from aurora.knowledge.sources import COMPUTED, DOCUMENT, LIVE, MEMORY, SENSOR, Source
 from aurora.routing.decision import RouteDecision
 from aurora.routing.intent import Intent
 from aurora.tools.result import ToolResult
@@ -24,6 +26,7 @@ INTENT_TOOLS = {
     Intent.KNOWLEDGE: "Wikipedia",
     Intent.PAPERS: "arXiv",
     Intent.DOCUMENTS: "Documents",
+    Intent.KNOWLEDGE_BASE: "Knowledge",
     Intent.VISION: "Camera",
     Intent.SENSORS: "Sensors",
     Intent.HEALTH: "Health",
@@ -33,6 +36,40 @@ INTENT_TOOLS = {
 }
 
 SOURCE = "ToolExecutor"
+
+
+def default_sources(name: str, result: ToolResult) -> list[Source]:
+    """Where a tool's answer came from, for tools that don't say themselves."""
+    now = datetime.now()
+    data = result.data
+    if name in ("Calculator", "Numbers"):
+        return [Source(COMPUTED, name)]
+    if name == "Weather":
+        return [Source(LIVE, "Open-Meteo", "https://open-meteo.com", now)]
+    if name == "Wikipedia" and isinstance(data, dict):
+        title = data.get("title") or "Wikipedia"
+        url = (data.get("content_urls") or {}).get("desktop", {}).get("page", "")
+        return [Source(LIVE, f"Wikipedia, \"{title}\"", url, now)]
+    if name == "arXiv":
+        return [Source(LIVE, "arXiv", "https://arxiv.org", now)]
+    if name == "Documents":
+        if isinstance(data, list) and data and hasattr(data[0], "citation"):
+            seen = []
+            for passage in data:
+                source = Source(DOCUMENT, passage.file, f"page {passage.page}" if passage.page else "")
+                if source not in seen:
+                    seen.append(source)
+            return seen
+        return [Source(DOCUMENT, "your documents")]
+    if name in ("Recall", "Remember"):
+        return [Source(MEMORY)]
+    if name == "Episodes":
+        return [Source(MEMORY, "activity history")]
+    if name in ("Sensors", "Health"):
+        return [Source(SENSOR)]
+    if name == "Camera":
+        return [Source(SENSOR, "camera")]
+    return []
 
 
 class ToolExecutor:
@@ -84,6 +121,8 @@ class ToolExecutor:
             self.events.emit(topics.TOOL_FAILED, {"tool": name, "error": str(error)}, source=SOURCE)
             return result
 
+        if result.success and not result.sources:
+            result.sources = default_sources(name, result)
         self._report(name, result)
         return result
 

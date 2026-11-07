@@ -158,6 +158,7 @@ engine.register_plugin(RoomSensorPlugin())
 | Wikipedia | `knowledge` | `network` | Encyclopedia summary ("tell me about black holes", "who is …", "what is a neutron star") with a link to the article |
 | arXiv | `papers` | `network` | Up to 5 papers with authors, dates and links; newest first for "recent / latest", otherwise most relevant |
 | Documents | `documents` | `filesystem.read` | List, search (with file and PDF page citations) and read .txt, .md and .pdf files in `Documents/` only |
+| Knowledge | `knowledge_base` | `filesystem.read` | Answers questions from your documents by quoting them with citations; summaries; comparisons (with Wikipedia through its own tool and permission) |
 
 A tool returns a `ToolResult` (`aurora/tools/result.py`): `success`,
 `message` (the reply), `data`, and optionally `confirm`, a function the
@@ -422,6 +423,69 @@ learned by AutoMemory. Events: `planning.created`,
 
 Type `plan <message>` in the terminal to preview a plan without running it.
 
+## Knowledge and sources
+
+AURORA keeps four kinds of knowledge apart, and every reply says which
+it used (`engine.last_sources`, shown under each reply in the Command
+Centre):
+
+| Kind | Meaning | Examples |
+|---|---|---|
+| language model | The model's training data: unverified, may be wrong or out of date | Ordinary conversation |
+| memory | Something you told AURORA | "what's my name?", memories given to the model |
+| your documents | A passage in a file in `Documents/`, with file and page | "according to my notes …" |
+| live source | An external service, fetched just now, with a link and time | Wikipedia, arXiv, Open-Meteo |
+| calculated | AURORA's own code | Calculator, Numbers, workflow operations |
+| sensor | A sensor reading (or the simulator) | "what's the temperature in my room?" |
+
+**Unverified answers are labelled.** When the language model answers a
+factual question (not one about AURORA or you), the reply ends with:
+
+> (This answer comes from my language model's training. It isn't checked
+> against a source and may be wrong; say "look up …" to check Wikipedia,
+> or "what do my notes say about …".)
+
+Set `LABEL_MODEL_ANSWERS = False` to turn this off.
+
+**External web access happens only through explicit tools:** Weather,
+Wikipedia and arXiv. Each needs the `network` permission and names its
+source in the reply. There is no general browsing or web search.
+
+**Answering from documents** (`aurora/knowledge/`):
+
+1. **Indexing:** `index.py` splits each document into passages of about
+   120 words without crossing pages, and stores them in SQLite FTS5 (Porter
+   stemming, BM25 ranking). It re-reads only files whose size, time or
+   content changed. Ingestion goes through the Documents tool, so only
+   files in `Documents/` are read.
+2. **Answering:** `answers.answer()` searches, then scores every sentence
+   of the best passages by how much of the question it covers, weighting
+   rare words more.
+   - Above 0.6: quote the best one to three sentences ("From your
+     documents").
+   - Above 0.34: show the closest passages and say it isn't a clear
+     answer.
+   - Otherwise: "I couldn't find anything about that in your documents."
+3. **Citations:** each quote is numbered, with a source list such as
+   `[1] thesis.pdf, page 2`. Quotes are exact sentences from the
+   document; a test checks this.
+4. **Disagreements:** if sentences from *different* documents give
+   different figures for the same unit, the answer adds a note, for
+   example "the sources give different figures: 27 percent
+   (astronomy_notes.md) vs 25 percent (lecture.txt)".
+5. **Summaries and comparisons:** these quote too.
+   - A document summary picks its most representative sentences, in
+     order.
+   - A topic summary picks the sentences most about the topic.
+   - A comparison shows each source's best sentences side by side, with
+     differing figures noted. A Wikipedia side calls the Wikipedia tool
+     through the tool manager, so its permission still applies.
+
+Why quote instead of writing an answer: TinyLlama can't be trusted to
+restate a source faithfully, and a quoted sentence can always be checked.
+When a stronger model is available, it can phrase answers *from* these
+quotes, with the quotes still shown.
+
 ## Workflows
 
 `aurora/workflows/`. Some requests need more than a list of independent
@@ -531,7 +595,7 @@ the message to the Brain.
 | `aurora.personality` | `personality.py` | AURORA's system prompt | Yes |
 | `aurora.plugins` | `plugin.py`, `plugin_manager.py` | Plugin lifecycle with permission checks | Yes (none registered) |
 | `aurora.memory` | `store.py`, `manager.py`, `extractor.py`, `evaluator.py`, `auto.py`, `episodes.py`, `routines.py` | Long-term memory (see MEMORY_DESIGN.md): semantic and associative facts with provenance, retention and recall; episodic activity history; routines | Yes |
-| `aurora.knowledge` | `fact.py` | The `Fact` data model | Yes |
+| `aurora.knowledge` | `fact.py`, `sources.py`, `index.py`, `answers.py` | The `Fact` model; source kinds and citations; the document index; answers, summaries and comparisons | Yes |
 | `aurora.routing` | `intent.py`, `decision.py`, `router.py` | Scored rule-based `IntentRouter` returning a structured `RouteDecision` | Yes |
 | `aurora.planning` | `plan.py`, `planner.py` | Splits a message into steps; the engine runs them | Yes |
 | `aurora.interface` | `app.py`, `backend.py`, `main_window.py`, nine views, `components/`, `styles/`, `system_info.py` | The AURORA Command Centre desktop interface (see COMMAND_CENTRE.md) | Separate front end |
@@ -597,7 +661,7 @@ temporary database instead of `aurora_memory.db`.
 | Reminders are lost when AURORA closes and are not spoken | Later |
 | Vision recognises 80 everyday object classes only; no free-form scene descriptions, no recording or face recognition (by design) | Larger models need more RAM |
 | The small speech model misses uncommon names and places ("Pune" → "pony"); no voice profiles or barge-in (interrupting AURORA while it speaks) | Larger model / later voice work |
-| Document search matches words, not meaning; scanned PDFs (images) have no readable text | Semantic search / OCR later |
+| Document answers match words (with stemming), not meaning, and quote rather than explain; scanned PDFs (images) have no readable text; no general web search | Semantic search, a stronger model, OCR, a search provider |
 | Recall matches words and a fixed synonym list, not meaning | Semantic search, when it fits in 4 GB RAM |
 | Associative memory links people to facts only (no general concept graph); routines have no conditions | Later memory work |
 | TinyLlama often ignores or garbles the memory context it is given | A stronger model (hardware-dependent) |

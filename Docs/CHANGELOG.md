@@ -1,5 +1,42 @@
 # Changelog
 
+## 0.27.0 — Knowledge and research system (2026-11-07)
+
+Blueprint Phase 10. See "Knowledge and sources" in Docs/ARCHITECTURE.md.
+
+### Added
+- **Knowledge index** (`aurora/knowledge/index.py`):
+  - your documents split into passages with page numbers, in SQLite
+    FTS5 with Porter stemming and BM25 ranking (`knowledge_index.db`,
+    not in git);
+  - it updates itself, re-reading only files that changed;
+  - a damaged file is reported and skipped.
+- **Answers with citations**: "according to my notes, …?", "what do my
+  notes say about …?", "in thesis.pdf, …?".
+  - AURORA quotes the sentences that answer the question, numbers each
+    one, and lists its file and page.
+  - If the documents don't answer it, it says so and doesn't guess.
+- **Disagreements**: when two documents give different figures for the
+  same thing, the answer says so.
+- **Summaries** of a document or of a topic across your documents, and
+  **comparisons** of two documents, or of your documents and Wikipedia.
+  All quote and cite their sources.
+- **Source labels on every reply** (`aurora/knowledge/sources.py`):
+  - kinds: language model (training), memory, your documents, live
+    source, calculated, sensor;
+  - the Command Centre shows them under each reply;
+  - language-model answers to factual questions say they're unverified.
+- Knowledge Centre: an "Ask your documents" tab (Ask, Summarize topic,
+  Re-index, index status).
+- `ToolResult.sources`; the executor fills in sources for tools that
+  don't set them.
+- 66 new tests.
+
+### Changed
+- "what do my notes say about X" is now answered by the Knowledge tool
+  (it used to list matching passages). "search my documents for X"
+  still lists passages.
+
 ## 0.26.0 — Advanced memory system (2026-11-07)
 
 Blueprint Phase 9. See Docs/MEMORY_DESIGN.md (version 3).

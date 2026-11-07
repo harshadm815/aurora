@@ -345,7 +345,8 @@ def router():
         ("look up Andromeda galaxy", Intent.KNOWLEDGE, {"topic": "Andromeda galaxy"}),
         ("list my documents", Intent.DOCUMENTS, {"action": "list"}),
         ("search my notes for black holes", Intent.DOCUMENTS, {"action": "search", "query": "black holes"}),
-        ("what do my notes say about entropy?", Intent.DOCUMENTS, {"action": "search", "query": "entropy"}),
+        # A question about the documents is answered (with citations) by the Knowledge tool.
+        ("what do my notes say about entropy?", Intent.KNOWLEDGE_BASE, {"action": "ask", "question": "entropy"}),
         ("read thesis.pdf", Intent.DOCUMENTS, {"action": "read", "name": "thesis.pdf"}),
     ],
 )

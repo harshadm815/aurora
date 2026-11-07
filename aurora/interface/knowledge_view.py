@@ -1,5 +1,6 @@
 """
-Knowledge Centre: research projects (from the research log), your
+Knowledge Centre: questions answered from your documents with citations
+(the Knowledge tool), research projects (from the research log), your
 documents (through the Documents tool, so its folder limit and permission
 apply) and saved notes.
 """
@@ -23,17 +24,68 @@ def _browser() -> QTextBrowser:
 
 class KnowledgeView(BaseView):
     title = "Knowledge Centre"
-    subtitle = "Your research projects, documents and notes in one place."
+    subtitle = "Ask your documents (answers quote their sources), and see your research, documents and notes."
     nav_icon = "📚"
     scrollable = False
 
     def __init__(self, backend, parent=None):
         super().__init__(backend, parent)
         self.tabs = QTabWidget()
+        self.tabs.addTab(self._ask_tab(), "Ask your documents")
         self.tabs.addTab(self._research_tab(), "Research projects")
         self.tabs.addTab(self._documents_tab(), "Documents")
         self.tabs.addTab(self._notes_tab(), "Notes")
         self.body.addWidget(self.tabs, 1)
+
+    # --- Ask your documents ------------------------------------------------------------
+
+    def _ask_tab(self) -> QWidget:
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+        layout.addWidget(label(
+            "Ask a question and AURORA answers with sentences quoted from your documents, each with its "
+            "source (file and page). If your documents don't answer it, it says so instead of guessing.",
+            "Faint", wrap=True))
+        row = QHBoxLayout()
+        self.question = QLineEdit()
+        self.question.setPlaceholderText("e.g. how much of the universe is dark matter?")
+        self.question.returnPressed.connect(self._ask)
+        ask = QPushButton("Ask")
+        ask.clicked.connect(self._ask)
+        summarize = QPushButton("Summarize topic")
+        summarize.clicked.connect(lambda: self._ask(action="summarize"))
+        reindex = QPushButton("Re-index")
+        reindex.clicked.connect(lambda: self._knowledge(self._index_loaded, action="reindex"))
+        for widget in (ask, summarize, reindex):
+            row.addWidget(widget)
+        row.insertWidget(0, self.question, 1)
+        layout.addLayout(row)
+        self.answer = _browser()
+        layout.addWidget(self.answer, 1)
+        self.index_status = label("", "Faint", wrap=True)
+        layout.addWidget(self.index_status)
+        return tab
+
+    def _knowledge(self, on_result, **arguments):
+        """Runs the Knowledge tool through the ToolManager (permissions apply)."""
+        engine = self.backend.engine
+        if engine is None or engine.tool_manager.get("Knowledge") is None:
+            self.answer.setPlainText("The Knowledge tool isn't available.")
+            return
+        self.backend.run_io(lambda: engine.tool_manager.execute("Knowledge", **arguments), on_result,
+                            lambda e: self.answer.setPlainText(f"That didn't work: {e}"))
+
+    def _ask(self, action: str = "ask"):
+        question = self.question.text().strip()
+        if not question:
+            return
+        self.answer.setPlainText("Looking through your documents…")
+        arguments = {"action": action, "question": question} if action == "ask" else {"action": action,
+                                                                                         "topic": question}
+        self._knowledge(lambda result: self.answer.setPlainText(result.message), **arguments)
+
+    def _index_loaded(self, result):
+        self.index_status.setText(result.message.replace("\n", "   "))
 
     # --- Research projects ----------------------------------------------------------
 
@@ -195,3 +247,4 @@ class KnowledgeView(BaseView):
         self._load_projects()
         self._load_documents()
         self._load_notes()
+        self._knowledge(self._index_loaded, action="status")

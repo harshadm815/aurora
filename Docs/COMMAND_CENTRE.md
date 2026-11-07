@@ -55,7 +55,7 @@ voice.
 | Dashboard | Greeting, clock, AI status, model, memory count, CPU, RAM, services, plugins, tools, recent activity, quick access | Engine status, Ollama check, MemoryManager, Windows APIs, event bus |
 | Chat | Conversation with timestamps, Markdown, streaming replies, a thinking indicator, Yes/No buttons when AURORA asks for confirmation, Clear | `engine.process_message()` (the same engine as the terminal) |
 | Memory Centre | All memories with category, priority, confidence, dates and use; search, category filter, add note, edit value, delete with confirmation | `MemoryManager` |
-| Knowledge Centre | Research projects and sessions; documents (list, search, read); notes | Research log; Documents tool (through the ToolManager, so its folder limit and permission apply); MemoryManager |
+| Knowledge Centre | Ask your documents (answers quoted with citations, topic summaries, re-index, index status); research projects and sessions; documents (list, search, read); notes | Research log; Documents tool (through the ToolManager, so its folder limit and permission apply); MemoryManager |
 | Tools & capabilities | Every tool as Available, Disabled (with the missing permission) or Error; calculator trial | `engine.tool_status()`, `tool.failed` events |
 | Vision Centre | Camera status, live preview, "What do you see?", "Read text", detector/OCR/permission status | Camera tool's analyser |
 | Sensor Centre | Temperature, humidity, pressure, motion, air quality (not supported yet); health on request | Sensor Hub |

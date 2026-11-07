@@ -26,6 +26,7 @@ from aurora.config import preferences, settings
 from aurora.events import topics
 from aurora.events.bus import ALL_EVENTS
 from aurora.interface import system_info
+from aurora.knowledge.sources import caption
 
 logger = logging.getLogger(__name__)
 
@@ -350,7 +351,7 @@ class Backend(QObject):
         def work():
             callback = (lambda piece: self.on_gui(on_token, piece)) if stream else None
             reply = engine.process_message(text, on_token=callback)
-            return reply, engine.pending is not None
+            return reply, engine.pending is not None, caption(getattr(engine, "last_sources", []))
 
         self.run_engine(work, on_reply, on_error)
 

@@ -175,7 +175,7 @@ def test_chat_through_the_backend_streams(backend):
 
     assert wait_for(lambda: replies, 10)
     assert pieces == ["Hello", " from", " AURORA"]
-    assert replies == [("Hello from AURORA", False)]
+    assert replies == [("Hello from AURORA", False, "Sources: language model (training data, not checked)")]
 
 
 def test_backend_reports_pending_confirmation(backend):

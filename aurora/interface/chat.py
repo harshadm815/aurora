@@ -42,7 +42,15 @@ class Bubble(QFrame):
         self.text.setOpenExternalLinks(False)
         self.text.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Minimum)
         layout.addWidget(self.text)
+        # Where the reply came from: documents, memory, live sources, the language model…
+        self.sources = label("", "BubbleMeta", wrap=True)
+        self.sources.hide()
+        layout.addWidget(self.sources)
         self.set_text(text)
+
+    def set_sources(self, text: str):
+        self.sources.setText(text)
+        self.sources.setVisible(bool(text))
 
     def set_text(self, text: str):
         if self.kind == "user":
@@ -201,12 +209,15 @@ class ChatView(BaseView):
         self.input.setFocus()
 
     def _on_reply(self, result):
-        reply, needs_confirmation = result
+        reply, needs_confirmation, *rest = result
+        sources = rest[0] if rest else ""
         if self._streaming_bubble is not None:
             # The final text may add notes (e.g. "Remembered …") after the stream.
             self._streaming_bubble.set_text(reply)
+            bubble = self._streaming_bubble
         else:
-            self._add_bubble("AURORA", reply)
+            bubble = self._add_bubble("AURORA", reply)
+        bubble.set_sources(sources)
         self._streaming_bubble = None
         self.confirm_row.setVisible(needs_confirmation)
         self._finish()

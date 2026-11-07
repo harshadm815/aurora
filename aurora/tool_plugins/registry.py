@@ -8,6 +8,7 @@ from aurora.tool_plugins.reminders import RemindersTool
 from aurora.tool_plugins.research_assistant import ResearchAssistantTool
 from aurora.tool_plugins.documents import DocumentsTool
 from aurora.tool_plugins.episodes_tool import EpisodesTool
+from aurora.tool_plugins.knowledge import KnowledgeTool
 from aurora.tool_plugins.memory_tools import ForgetTool, MemoryControlTool, RecallTool, RememberTool
 from aurora.tool_plugins.routines_tool import RoutinesTool
 from aurora.tool_plugins.numbers import NumbersTool
@@ -37,6 +38,7 @@ def default_tools(
         WikipediaTool(http_client),
         ArxivTool(http_client),
         DocumentsTool(),
+        KnowledgeTool(),
         CameraTool(),
         SensorsTool(hub),
         HealthTool(hub),

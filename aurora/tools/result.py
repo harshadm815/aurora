@@ -1,5 +1,5 @@
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 
@@ -18,6 +18,8 @@ class ToolResult:
       only calls ``confirm()`` if they say yes.
     - ``retryable``: the failure may be temporary (a timeout, a server
       error), so trying again could work. Workflows retry such steps once.
+    - ``sources``: where the answer came from (aurora.knowledge.sources):
+      a document page, a live service, AURORA's memory, a calculation…
     """
 
     success: bool
@@ -25,6 +27,7 @@ class ToolResult:
     data: Any = None
     confirm: Callable[[], "ToolResult"] | None = None
     retryable: bool = False
+    sources: list = field(default_factory=list)
 
     @property
     def needs_confirmation(self) -> bool:

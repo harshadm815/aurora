@@ -14,8 +14,11 @@ ROOT = os.path.abspath(os.path.join(SPECPATH, ".."))
 ICON = os.path.join(ROOT, "aurora", "interface", "assets", "aurora.ico")
 NAME = "AURORA Command Centre"
 
-# Every AURORA module (many are imported lazily), except personal settings.
+# Every AURORA module (many are imported lazily), except personal settings,
+# and AURORA's own neural network (the Model manager runs it, and the
+# Training monitor starts "<exe> --train …").
 hidden = collect_submodules("aurora", filter=lambda name: name != "aurora.config.local_settings")
+hidden += collect_submodules("aurora_core")
 
 datas = [(ICON, os.path.join("aurora", "interface", "assets"))]
 datas += collect_data_files("rapidocr_onnxruntime")      # OCR models and config

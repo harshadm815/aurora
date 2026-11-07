@@ -84,10 +84,31 @@ class OllamaProvider(BaseProvider):
                 "I can't reach Ollama. Is it running? (Start it with: ollama serve)"
             ) from None
 
-    def unload(self) -> None:
-        """Asks Ollama to free the model's memory now (it reloads on the next question)."""
-        self.client.generate(model=self.model, keep_alive=0)
-        logger.info("Model %s unloaded", self.model)
+    def unload(self, model: str | None = None) -> None:
+        """Asks Ollama to free a model's memory now (it reloads when next used).
+        Without a name, the model AURORA chats with."""
+        self.client.generate(model=model or self.model, keep_alive=0)
+        logger.info("Model unloaded")
+
+    def model_overview(self) -> dict:
+        """Installed models with their size and details, and which are in memory
+        (for the Model manager)."""
+        loaded = {m.model: m for m in self.client.ps().models}
+        installed = []
+        for model in self.client.list().models:
+            details = model.details
+            in_memory = loaded.get(model.model)
+            installed.append({
+                "name": model.model,
+                "size": model.size or 0,
+                "modified": model.modified_at,
+                "parameters": getattr(details, "parameter_size", None) or "",
+                "quantization": getattr(details, "quantization_level", None) or "",
+                "family": getattr(details, "family", None) or "",
+                "loaded": in_memory is not None,
+                "memory": (in_memory.size or 0) if in_memory is not None else 0,
+            })
+        return {"installed": sorted(installed, key=lambda m: m["name"]), "active": self.model}
 
     def loaded_models(self) -> list[str]:
         """Models currently held in memory by Ollama."""

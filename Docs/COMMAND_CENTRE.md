@@ -45,6 +45,9 @@ but **not your data**: `aurora_home.txt` next to the .exe points to the
 project folder, where the memory database, models, logs, Documents and
 `local_settings.py` stay. `local_settings.py` (with your contact email) is
 deliberately left out of the build, and the build script checks that.
+AURORA's own neural network (`aurora_core`) is bundled: the Model
+manager runs checkpoints with it, and the Training monitor starts
+training as `AURORA Command Centre.exe --train …` (no window opens).
 Voice isn't bundled yet (the window doesn't use it); use `main.py` for
 voice.
 
@@ -57,6 +60,8 @@ voice.
 | Memory Centre | All memories with category, priority, confidence, dates and use; search, category filter, add note, edit value, delete with confirmation | `MemoryManager` |
 | Knowledge Centre | Ask your documents (answers quoted with citations, topic summaries, re-index, index status); research projects and sessions; documents (list, search, read); notes | Research log; Documents tool (through the ToolManager, so its folder limit and permission apply); MemoryManager |
 | Tools & capabilities | Every tool as Available, Disabled (with the missing permission) or Error; calculator trial | `engine.tool_status()`, `tool.failed` events |
+| Model manager | Conversation model: Ollama's installed models (parameters, quantization, size, in memory), use for chat, unload. AURORA's own models: every checkpoint in `Models/` (parameters, precision, size, steps, test loss); load into the AURORA Core Runtime, try it (streamed, stoppable, tokens/s), unload | Ollama (`model_overview`), checkpoint headers (no weights loaded until you load one), `aurora_core.runtime` |
+| Training monitor | Every training run: loss curves (training and validation) against the unigram and bigram baselines, test loss, perplexity; start a new AURORA-T0 run on a text in `Data/` with live progress, time left and Stop | `metrics.jsonl` / `summary.json` in `Models/`; training runs as a separate process (`command_centre.py --train …`) |
 | Vision Centre | Camera status, live preview, "What do you see?", "Read text", detector/OCR/permission status | Camera tool's analyser |
 | Sensor Centre | Temperature, humidity, pressure, motion, air quality (not supported yet); health on request | Sensor Hub |
 | System monitor | CPU, system RAM, AURORA's own memory, uptime, Ollama, active and installed models, services, plugins, tools, logs | Windows APIs, Ollama, engine, AURORA's log |
@@ -127,6 +132,18 @@ real engine and a fake model: streaming, confirmation, preferences
 readings, every page opening, chat round-trips, HTML escaping, memory
 filtering, tool states, simulated-sensor badges, and that the camera
 never starts by itself.
+
+`Tests/test_command_centre_models.py` covers the Model manager and the
+Training monitor:
+- finding checkpoints, including damaged and foreign files;
+- training runs with half-written metrics;
+- loading, generating, stopping and unloading through the real runtime;
+- pausing unloads the model;
+- real training processes started, followed, stopped, and stopped at
+  shutdown;
+- the `--train` entry point;
+- Ollama model details;
+- that every tool has a description.
 
 ## Not done yet
 

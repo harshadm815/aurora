@@ -90,6 +90,10 @@ Terminal interface:
 .venv\Scripts\python.exe main.py
 ```
 
+The Command Centre's **Model manager** loads and tries AURORA's own models
+(and manages Ollama's), and its **Training monitor** shows loss curves and
+starts new training runs.
+
 Commands: `status` shows system status, `route <message>` shows how a message would be routed, `plan <message>` shows how it would be split into steps, `clear` resets the conversation, `exit` shuts down.
 Logs are written to `Logs/aurora.log` (metadata only; never your messages).
 

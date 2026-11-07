@@ -23,6 +23,11 @@ DESCRIPTIONS = {
     "Devices": "Switches configured devices, only after you confirm",
     "Reminders": "Reminders and timers for this session",
     "Research": "Runs the research agent team",
+    "Numbers": "Averages, medians, percentages and more, calculated exactly, with the working shown",
+    "MemoryControl": "\"Don't remember that\", pause learning, activity history on/off",
+    "Episodes": "Your activity history: \"what did we do today?\" (summaries only, 30 days)",
+    "Routines": "Routines you teach: \"when I say morning briefing, …\"",
+    "Knowledge": "Answers from your documents, quoted with citations; summaries and comparisons",
 }
 
 

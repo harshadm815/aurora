@@ -9,7 +9,7 @@ import sys
 from pathlib import Path
 
 APP_NAME = "AURORA"
-VERSION = "0.27.0"
+VERSION = "0.28.0"
 
 USER_NAME = "Harry"
 
@@ -39,7 +39,9 @@ def _project_root() -> Path:
         exe_folder = Path(sys.executable).resolve().parent
         pointer = exe_folder / "aurora_home.txt"
         if pointer.is_file():
-            home = pointer.read_text(encoding="utf-8").strip()
+            # utf-8-sig: Notepad (and PowerShell 5) may add a byte-order mark,
+            # which would otherwise make the path not match any folder.
+            home = pointer.read_text(encoding="utf-8-sig").strip()
             if home and Path(home).is_dir():
                 return Path(home).resolve()
         return exe_folder
@@ -158,6 +160,11 @@ DOCUMENT_READ_CHARS = 1500
 # questions ("what do my notes say about …"). Rebuilt from the Documents
 # folder whenever files change; delete the file to start afresh.
 KNOWLEDGE_INDEX_PATH = PROJECT_ROOT / "knowledge_index.db"
+
+# AURORA's own models (aurora_core): checkpoints and training runs live
+# under MODELS_DIR, training text under DATA_DIR (neither is in git).
+MODELS_DIR = PROJECT_ROOT / "Models"
+DATA_DIR = PROJECT_ROOT / "Data"
 # Mark language-model answers to factual questions as unverified
 # ("from my language model's training, not checked against a source").
 LABEL_MODEL_ANSWERS = True

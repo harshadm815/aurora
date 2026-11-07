@@ -1,5 +1,38 @@
 # Changelog
 
+## 0.28.0 — Command Centre: Model manager and Training monitor (2026-11-07)
+
+Blueprint Phase 11. The Command Centre now has all eleven sections and
+talks to both the AURORA backend and AURORA's own runtime.
+
+### Added
+- **Model manager**:
+  - Ollama's installed models (parameters, quantization, size, in
+    memory), choose the chat model, unload from memory.
+  - Every AURORA checkpoint under `Models/`, read from its header only:
+    load it into the AURORA Core Runtime, try it with streamed, stoppable
+    generation and speed figures, and unload it.
+- **Training monitor**:
+  - every training run's loss curves against the unigram and bigram
+    baselines, with test loss and perplexity;
+  - start a new AURORA-T0 run on a text in `Data/`, with live progress,
+    time left and Stop.
+- Training runs as a separate process (`command_centre.py --train …`;
+  the packaged .exe supports it too), so the window stays responsive.
+  Stopping AURORA or exiting ends it.
+- Pausing AURORA also unloads AURORA's own model.
+- `OllamaProvider.model_overview()`; `unload()` takes a model name.
+- `settings.MODELS_DIR`, `settings.DATA_DIR`.
+- The .exe bundles `aurora_core`.
+- Tools page descriptions for the Numbers, MemoryControl, Episodes,
+  Routines and Knowledge tools (a test checks every tool has one).
+- 20 new tests.
+
+### Fixed
+- `aurora_home.txt` saved with a byte-order mark (as Notepad or
+  PowerShell 5 can do) made the packaged app silently use its own folder
+  for data. The mark is now ignored.
+
 ## 0.27.0 — Knowledge and research system (2026-11-07)
 
 Blueprint Phase 10. See "Knowledge and sources" in Docs/ARCHITECTURE.md.

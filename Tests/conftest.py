@@ -27,6 +27,9 @@ def isolated_database(tmp_path, monkeypatch):
     monkeypatch.setattr(settings, "DOCUMENTS_DIR", tmp_path / "Documents")
     # And the knowledge index is built in a throwaway file.
     monkeypatch.setattr(settings, "KNOWLEDGE_INDEX_PATH", tmp_path / "knowledge_test.db")
+    # Model and training folders are never the real ones.
+    monkeypatch.setattr(settings, "MODELS_DIR", tmp_path / "Models")
+    monkeypatch.setattr(settings, "DATA_DIR", tmp_path / "Data")
     # And sensor history goes to a throwaway database.
     monkeypatch.setattr(settings, "SENSOR_DATABASE_PATH", tmp_path / "sensors_test.db")
 

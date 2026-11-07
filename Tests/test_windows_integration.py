@@ -189,6 +189,10 @@ def test_packaged_app_uses_the_data_folder(monkeypatch, tmp_path):
 
     assert settings._project_root() == data.resolve()
 
+    # Saved by Notepad or PowerShell 5 with a byte-order mark: still found.
+    (exe_folder / "aurora_home.txt").write_text(str(data), encoding="utf-8-sig")
+    assert settings._project_root() == data.resolve()
+
     (exe_folder / "aurora_home.txt").unlink()
     assert settings._project_root() == exe_folder.resolve()
 

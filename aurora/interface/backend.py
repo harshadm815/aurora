@@ -174,6 +174,10 @@ class Backend(QObject):
 
         # One shared sampler: CPU use is measured between two samples, so
         # every view must see the same series.
+        # AURORA's own models (aurora_core): runtime and training runs.
+        from aurora.interface.core_models import CoreModels
+        self.core = CoreModels(self)
+
         self._cpu = system_info.CpuMeter()
         self._cpu.percent()
         self.last_sample: dict = {}
@@ -267,6 +271,7 @@ class Backend(QObject):
 
         self._set_state("paused")
         self.run_engine(work)
+        self.core.unload()            # AURORA's own model too (a training run keeps going)
 
     def resume(self) -> None:
         """Starts AURORA again after ``pause()`` (or retries after a failed start)."""
@@ -297,6 +302,7 @@ class Backend(QObject):
         self._shut_down = True
         self._ollama_timer.stop()
         self._sample_timer.stop()
+        self.core.shutdown()          # stops a training run and unloads AURORA's model
 
         if self.engine is not None:
             engine = self.engine

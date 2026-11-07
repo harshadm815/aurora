@@ -15,11 +15,13 @@ from aurora.interface.components.widgets import Emblem, fade_in, label
 from aurora.interface.dashboard import DashboardView
 from aurora.interface.knowledge_view import KnowledgeView
 from aurora.interface.memory_view import MemoryView
+from aurora.interface.model_manager import ModelManagerView
 from aurora.interface.sensors_view import SensorsView
 from aurora.interface.settings_view import SettingsView
 from aurora.interface.styles.theme import palette, stylesheet
 from aurora.interface.system_monitor import SystemMonitorView
 from aurora.interface.tools_view import ToolsView
+from aurora.interface.training_monitor import TrainingMonitorView
 from aurora.interface.vision_view import VisionView
 from aurora.interface.windows.integration import icon_path
 from aurora.interface.windows.tray import Tray
@@ -33,6 +35,8 @@ PAGES = [
     ("Memory", MemoryView),
     ("Knowledge", KnowledgeView),
     ("Tools", ToolsView),
+    ("Models", ModelManagerView),
+    ("Training", TrainingMonitorView),
     ("Vision", VisionView),
     ("Sensors", SensorsView),
     ("System", SystemMonitorView),

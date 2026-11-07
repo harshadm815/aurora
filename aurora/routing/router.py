@@ -19,6 +19,7 @@ from aurora.config import settings
 from aurora.routing import decision as targets
 from aurora.routing.decision import RouteDecision
 from aurora.routing.intent import Intent
+from aurora.routing import memory_rules
 from aurora.routing.numbers_rule import numbers_rule
 from aurora.tool_plugins.calculator import CalculationError, evaluate
 
@@ -206,8 +207,13 @@ _DELETE_MEMORY = re.compile(
 # "forget it" / "forget that" mean "never mind", not "delete a memory".
 _NEVER_MIND = re.compile(r"^(?:it|that|this|about\s+it|it\s+then)$", re.I)
 
+_RELATIVES = (r"(?:sister|brother|mother|mom|mum|father|dad|wife|husband|partner|girlfriend|boyfriend|"
+              r"son|daughter|friend|best\s+friend|teacher|professor|cousin|roommate|manager)")
+
 _RECALL_PATTERNS = [
     (re.compile(r"\bwhat\s+do\s+you\s+(?:know|remember)\s+about\s+(?P<query>.+)$", re.I), 0.9),
+    # "where does my sister live?", "what does my brother study?" (follows links between people)
+    (re.compile(rf"^(?:what|where|who|when|which)\s+(?:does|did|is|was)\s+my\s+(?P<query>{_RELATIVES}\b.*)$", re.I), 0.8),
     (re.compile(r"\bwhat\s+(?:i\s+told\s+you|have\s+i\s+told\s+you|did\s+i\s+(?:tell\s+you|say))\s+about\s+(?P<query>.+)$", re.I), 0.9),
     (re.compile(r"^(?:do|did)\s+you\s+remember\s+(?P<query>.+)$", re.I), 0.85),
     (re.compile(r"^(?:what|who|where|when|which)(?:'s|\s+is|\s+are|\s+was|\s+were)\s+my\s+(?P<query>.+)$", re.I), 0.75),
@@ -221,11 +227,25 @@ _RECALL_PATTERNS = [
 
 
 def remember_rule(original: str, body: str) -> RouteDecision | None:
+    always = memory_rules.ALWAYS.match(body)
+    if always:
+        content = _clean(always.group("content"))
+        if content:
+            return RouteDecision(
+                Intent.REMEMBER, 0.95, targets.MEMORY, {"content": content, "pin": True},
+                "The user asked AURORA to always remember something.",
+            )
+
     match = _REMEMBER.match(body)
     if not match:
         return None
 
     content = _clean(match.group("content"))
+    arguments = {}
+    keep = memory_rules.KEEP_FOR.search(content)
+    if keep:
+        arguments["keep_for"] = " ".join((keep.group("span") or keep.group("span2")).lower().split())
+        content = _clean((content[:keep.start()] + " " + content[keep.end():]).strip(" ,"))
 
     # "Remember what I told you about X?" is a question, not a command.
     if body.rstrip().endswith("?") and _QUESTION_WORD.match(content):
@@ -237,7 +257,7 @@ def remember_rule(original: str, body: str) -> RouteDecision | None:
         )
 
     return RouteDecision(
-        Intent.REMEMBER, 0.95, targets.MEMORY, {"content": content},
+        Intent.REMEMBER, 0.95, targets.MEMORY, {"content": content, **arguments},
         "The user explicitly asked AURORA to remember something.",
     )
 
@@ -248,7 +268,7 @@ def forget_rule(original: str, body: str) -> RouteDecision | None:
         return None
 
     query = _clean(match.group("query"))
-    if not query or _NEVER_MIND.match(query):
+    if not query or _NEVER_MIND.match(query) or memory_rules.NOT_A_MEMORY_QUERY.match(query):
         return None
 
     return RouteDecision(
@@ -659,7 +679,7 @@ def vision_rule(original: str, body: str) -> RouteDecision | None:
 # Commands addressed to AURORA's memory. Anything else in the message
 # ("remember that the weather in Pune was great") is the thing to store,
 # not a competing request, so these never trigger clarification.
-_EXPLICIT_COMMANDS = {Intent.REMEMBER, Intent.FORGET}
+_EXPLICIT_COMMANDS = {Intent.REMEMBER, Intent.FORGET, Intent.MEMORY_CONTROL, Intent.EPISODES, Intent.ROUTINES}
 
 DEFAULT_RULES: tuple[Rule, ...] = (
     calculator_rule,
@@ -677,6 +697,10 @@ DEFAULT_RULES: tuple[Rule, ...] = (
     devices_rule,
     reminders_rule,
     research_session_rule,
+    memory_rules.memory_control_rule,
+    memory_rules.provenance_rule,
+    memory_rules.episodes_rule,
+    memory_rules.routines_rule,
 )
 
 

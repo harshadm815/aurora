@@ -11,6 +11,9 @@ class Intent(Enum):
     REMEMBER = "remember"           # Store something the user explicitly asked to keep.
     RECALL = "recall"               # Retrieve something from long-term memory.
     FORGET = "forget"               # Delete something from long-term memory.
+    MEMORY_CONTROL = "memory_control"  # Undo a memory, pause learning, episode switches.
+    EPISODES = "episodes"           # What AURORA has done for the user (episodic memory).
+    ROUTINES = "routines"           # Teach, list or delete routines (procedural memory).
     KNOWLEDGE = "knowledge"         # Look a topic up in an encyclopedia.
     PAPERS = "papers"               # Find research papers.
     DOCUMENTS = "documents"         # List, search or read the user's documents.

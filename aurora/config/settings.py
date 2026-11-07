@@ -9,7 +9,7 @@ import sys
 from pathlib import Path
 
 APP_NAME = "AURORA"
-VERSION = "0.25.0"
+VERSION = "0.26.0"
 
 USER_NAME = "Harry"
 
@@ -78,6 +78,18 @@ MEMORY_MIN_CONFIDENCE = 0.7
 MEMORY_CONTEXT_LIMIT = 5
 # Tell the user when AURORA saves or updates a memory on its own.
 MEMORY_ANNOUNCE = True
+# Keep the sentence each fact was learned from, so AURORA can say how it
+# knows something ("how do you know where I live?"). Deleted with the fact.
+MEMORY_KEEP_SOURCE_TEXT = True
+
+# Episodic memory: one short summary per completed task ("Checked the
+# weather in Pune"), never the text of your messages. Kept this many days.
+# Say "stop recording activity" / "clear my activity history" to control it.
+EPISODES_ENABLED = True
+EPISODE_RETENTION_DAYS = 30
+
+# Procedural memory: routines you teach ("when I say morning briefing, ...").
+ROUTINE_MAX = 20
 
 # Permissions
 #
@@ -95,6 +107,12 @@ PERMISSION_GRANTS: dict[str, list[str]] = {
     "Remember": ["memory.write"],
     "Recall": ["memory.read"],
     "Forget": ["memory.read", "memory.write"],
+    # Your memory switches: "don't remember that", "stop learning", activity history.
+    "MemoryControl": ["memory.read", "memory.write"],
+    # Episodic memory: "what did we do today?"
+    "Episodes": ["memory.read"],
+    # Procedural memory: routines you teach ("when I say morning briefing, ...").
+    "Routines": ["memory.read", "memory.write"],
     # Learns facts from conversation and gives relevant ones to the Brain.
     "AutoMemory": ["memory.read", "memory.write"],
     "Weather": ["network"],   # Sends place names to open-meteo.com.

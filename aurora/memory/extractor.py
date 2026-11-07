@@ -217,22 +217,71 @@ class _Alias:
 
 # --- Extractor --------------------------------------------------------------
 
+# --- Facts about other people (associative memory) -------------------------
+#
+# "my sister Priya lives in Delhi"  -> Sister = Priya, and Priya: Lives in = Delhi
+# "Priya likes chess"               -> Priya: Likes = chess   (only if Priya is a
+#                                       name the user already told AURORA about)
+
+_REL_WORDS = "|".join(sorted(_RELATIONS, key=len, reverse=True))
+
+_PERSON_FACTS = [
+    (r"(?:lives|stays|is\s+living)\s+in\s+(?P<value>.+)", "Personal", "Lives in", 0.8, _title),
+    (r"(?:is|comes)\s+from\s+(?P<value>.+)", "Personal", "From", 0.8, _title),
+    (r"works\s+as\s+(?:an?\s+)?(?P<value>.+)", "Work", "Occupation", 0.8, None),
+    (r"works\s+(?:at|for)\s+(?P<value>.+)", "Work", "Employer", 0.8, None),
+    (r"(?:studies|is\s+studying)\s+(?!at\b|in\b)(?P<value>.+)", "Education", "Studies", 0.75, None),
+    (r"(?:likes|loves|enjoys)\s+(?P<value>.+)", "Preference", "Likes", 0.75, "list"),
+    (r"(?:hates|dislikes|doesn'?t\s+like)\s+(?P<value>.+)", "Preference", "Dislikes", 0.75, "list"),
+]
+_PERSON_BIRTHDAY = re.compile(r"^(?P<name>[A-Z][a-z'-]+)'s\s+birthday\s+is\s+(?:on\s+)?(?P<value>.+)$")
+_INTRODUCED = re.compile(
+    r"^(?i:my\s+(?P<rel>" + _REL_WORDS + r"))(?:,)?\s+" + r"(?P<name>[A-Z][a-z'-]+)(?:,)?\s+(?P<rest>.+)$")
+
+
+def _person_facts(name: str, rest: str) -> list[Fact]:
+    for pattern, category, attribute, confidence, transform in _PERSON_FACTS:
+        match = re.match(rf"^{pattern}$", rest, re.IGNORECASE)
+        if not match:
+            continue
+        value = _clean(match.group("value"))
+        if not value:
+            return []
+        if transform == "list":
+            return [_fact(category, attribute, v, confidence, entity=name) for v in _split_list(value)]
+        value = transform(value) if transform else value
+        return [_fact(category, attribute, value, confidence, entity=name)]
+    return []
+
+
+# --- Extractor --------------------------------------------------------------
+
 class FactExtractor:
     """
     Converts natural language into candidate Facts. Does not save anything.
+
+    Each fact's ``source_text`` is set to the sentence it came from, so
+    the memory can later say how it was learned.
     """
 
-    def extract(self, text: str) -> list[Fact]:
+    def extract(self, text: str, people=()) -> list[Fact]:
+        """``people``: names already known (from relationship memories);
+        only statements about them are read as facts about someone else."""
 
         if not text or _SENSITIVE.search(text):
             return []
 
+        known = {p for p in people if p}
         facts: list[Fact] = []
         for sentence in _SENTENCE_SPLIT.split(text):
-            facts.extend(self._from_sentence(sentence))
+            for fact in self._from_sentence(sentence, known):
+                fact.source_text = " ".join(sentence.split()).strip()
+                facts.append(fact)
+                if fact.category == "Relationship":
+                    known.add(fact.value)
         return facts
 
-    def _from_sentence(self, sentence: str) -> list[Fact]:
+    def _from_sentence(self, sentence: str, people=frozenset()) -> list[Fact]:
         sentence = _FILLER.sub("", sentence.strip()).strip()
 
         if not sentence or sentence.endswith("?"):
@@ -246,4 +295,21 @@ class FactExtractor:
             match = pattern.match(sentence)
             if match:
                 return [f for f in build(match) if f.value]
+
+        # "my sister Priya lives in Delhi": the relationship and a fact about her.
+        match = _INTRODUCED.match(sentence)
+        if match:
+            about = _person_facts(match.group("name"), match.group("rest"))
+            if about:
+                relation = _fact("Relationship", _RELATIONS[match.group("rel").lower()], match.group("name"), 0.85)
+                return [relation, *about]
+
+        # "Priya lives in Delhi", for a name the user already mentioned.
+        birthday = _PERSON_BIRTHDAY.match(sentence)
+        if birthday and birthday.group("name") in people:
+            value = _clean(birthday.group("value"))
+            return [_fact("Personal", "Birthday", value, 0.8, entity=birthday.group("name"))] if value else []
+        first, _, rest = sentence.partition(" ")
+        if first in people and rest:
+            return _person_facts(first, rest)
         return []

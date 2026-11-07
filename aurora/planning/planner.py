@@ -48,7 +48,9 @@ _WEAK = re.compile(r"(\s*,\s*(?:and\s+)?|\s+and\s+)", re.IGNORECASE)
 
 _LOCATION_LIST = re.compile(r"\s*(?:,\s*(?:and\s+)?|\s+and\s+)\s*", re.IGNORECASE)
 
-_COMMANDS = {Intent.REMEMBER, Intent.FORGET}
+# Commands addressed to AURORA's memory own the whole message: "when I say
+# morning briefing, check the weather and ..." is one routine, not three steps.
+_COMMANDS = {Intent.REMEMBER, Intent.FORGET, Intent.ROUTINES, Intent.MEMORY_CONTROL, Intent.EPISODES}
 
 # Actions that need the user's confirmation are only accepted on their own.
 _SEPARATE_ONLY = {

@@ -2,18 +2,21 @@
 Automatic memory: connects the memory system to the conversation.
 
 - ``learn_from(message)``: extract → evaluate → store (with conflict
-  resolution). Runs on ordinary conversational messages.
+  resolution and provenance). Runs on ordinary conversational messages,
+  unless the user paused learning ("stop learning").
 - ``context_message(message)``: picks the memories relevant to a message
   and formats them as a system message for the Brain.
+- ``last_results``: what the most recent message taught AURORA, so the
+  user can take it back ("don't remember that").
 """
 
 import logging
 
 from aurora.config import settings
-from aurora.knowledge.fact import Fact
+from aurora.knowledge.fact import AUTOMATIC, Fact
 from aurora.memory.evaluator import MemoryEvaluator
 from aurora.memory.extractor import FactExtractor
-from aurora.memory.manager import LearnResult, MemoryManager
+from aurora.memory.manager import LearnResult, MemoryManager, importance
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +30,8 @@ CONTEXT_HEADER = (
 def describe(fact: Fact) -> str:
     if fact.category == "Note":
         return fact.value
+    if fact.entity and fact.entity != "User":
+        return f"{fact.entity} — {fact.attribute}: {fact.value}"
     return f"{fact.attribute}: {fact.value}"
 
 
@@ -45,17 +50,25 @@ class AutoMemory:
         self.context_limit = (
             settings.MEMORY_CONTEXT_LIMIT if context_limit is None else context_limit
         )
+        self.last_results: list[LearnResult] = []
 
     # --- Learning -----------------------------------------------------------
 
     def learn_from(self, message: str) -> list[LearnResult]:
+        self.last_results = []
+        if self.memory.learning_paused:
+            return []
         results = []
-        for fact in self.extractor.extract(message):
+        people = list(self.memory.people())
+        for fact in self.extractor.extract(message, people):
             evaluation = self.evaluator.evaluate(fact)
             if not evaluation.keep:
                 logger.debug("Not remembering a %s fact: %s", fact.attribute, evaluation.reason)
                 continue
-            results.append(self.memory.learn(fact))
+            result = self.memory.learn(fact, source=AUTOMATIC, source_text=fact.source_text)
+            if result.action != "blocked":
+                results.append(result)
+        self.last_results = [r for r in results if r.action in ("added", "updated")]
         return results
 
     @staticmethod
@@ -76,10 +89,10 @@ class AutoMemory:
     def relevant(self, message: str) -> list[Fact]:
         """
         The memories worth giving the Brain for this message, most useful first:
-        1. the user's name (always, if known),
-        2. memories matching the message's keywords,
+        1. the user's name (always, if known), then pinned memories,
+        2. memories matching the message's keywords (following links to people),
         3. partially matching memories,
-        4. other important memories (priority 4+), to fill the limit.
+        4. other important memories (priority 4+), most important first.
         """
         if self.context_limit <= 0:
             return []
@@ -88,23 +101,26 @@ class AutoMemory:
         recall = self.memory.recall(message) if message.strip() else None
 
         chosen: list[Fact] = []
-        seen: set[tuple[str, str]] = set()
+        seen: set[tuple[str, str, str]] = set()
 
         def add(fact: Fact):
-            key = (fact.attribute.lower(), fact.value.lower())
+            key = (fact.entity.lower(), fact.attribute.lower(), fact.value.lower())
             if key not in seen and len(chosen) < self.context_limit:
                 seen.add(key)
                 chosen.append(fact)
 
         for fact in everything:
-            if fact.attribute == "Name":
+            if fact.attribute == "Name" and fact.entity == "User":
+                add(fact)
+        for fact in everything:
+            if fact.pinned:
                 add(fact)
 
         if recall is not None and recall.keywords:
             for fact in recall.matches + recall.related:
                 add(fact)
 
-        for fact in everything:
+        for fact in sorted(everything, key=importance, reverse=True):
             if fact.priority >= 4:
                 add(fact)
 

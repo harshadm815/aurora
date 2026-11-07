@@ -148,6 +148,9 @@ engine.register_plugin(RoomSensorPlugin())
 |---|---|---|---|
 | Calculator | `calculator` | none | Safe arithmetic, e.g. `12 * (7 + 3) = 120` |
 | Numbers | `numbers` | none | Statistics and percentages with explanations, e.g. "average of 4, 8 and 15", "15% of 80" |
+| MemoryControl | `memory_control` | memory.read, memory.write | "don't remember that", "stop learning", activity history on/off/clear |
+| Episodes | `episodes` | memory.read | "what did we do today?", "when did I last check the weather?" |
+| Routines | `routines` | memory.read, memory.write | Teach, list and delete routines ("when I say morning briefing, …") |
 | Remember | `remember` | `memory.write` | Stores an explicit note ("remember that ...") as a `Note` fact |
 | Recall | `recall` | `memory.read` | Keyword lookup. Only memories containing **every** keyword count as an answer; partial matches are listed separately as "related" |
 | Forget | `forget` | `memory.read`, `memory.write` | Lists matching memories and **asks for confirmation** before deleting (including exact duplicates) |
@@ -527,7 +530,7 @@ the message to the Brain.
 | `aurora.conversation` | `conversation.py` | Working memory: message history for the current session | Yes |
 | `aurora.personality` | `personality.py` | AURORA's system prompt | Yes |
 | `aurora.plugins` | `plugin.py`, `plugin_manager.py` | Plugin lifecycle with permission checks | Yes (none registered) |
-| `aurora.memory` | `store.py`, `manager.py`, `extractor.py`, `evaluator.py`, `auto.py` | Long-term memory: extraction, evaluation, conflict resolution, keyword recall with stemming, context for the Brain | Yes |
+| `aurora.memory` | `store.py`, `manager.py`, `extractor.py`, `evaluator.py`, `auto.py`, `episodes.py`, `routines.py` | Long-term memory (see MEMORY_DESIGN.md): semantic and associative facts with provenance, retention and recall; episodic activity history; routines | Yes |
 | `aurora.knowledge` | `fact.py` | The `Fact` data model | Yes |
 | `aurora.routing` | `intent.py`, `decision.py`, `router.py` | Scored rule-based `IntentRouter` returning a structured `RouteDecision` | Yes |
 | `aurora.planning` | `plan.py`, `planner.py` | Splits a message into steps; the engine runs them | Yes |
@@ -595,8 +598,8 @@ temporary database instead of `aurora_memory.db`.
 | Vision recognises 80 everyday object classes only; no free-form scene descriptions, no recording or face recognition (by design) | Larger models need more RAM |
 | The small speech model misses uncommon names and places ("Pune" → "pony"); no voice profiles or barge-in (interrupting AURORA while it speaks) | Larger model / later voice work |
 | Document search matches words, not meaning; scanned PDFs (images) have no readable text | Semantic search / OCR later |
-| Recall matches words, not meaning ("hometown" won't find "From: Nagpur") | Semantic search, when it fits in 4 GB RAM |
-| Only semantic memory; no episodic, procedural or associative (knowledge graph) memory | Later memory work |
+| Recall matches words and a fixed synonym list, not meaning | Semantic search, when it fits in 4 GB RAM |
+| Associative memory links people to facts only (no general concept graph); routines have no conditions | Later memory work |
 | TinyLlama often ignores or garbles the memory context it is given | A stronger model (hardware-dependent) |
 | Workflows pass only numbers between steps (from the calculator, Numbers and current weather), and follow-ups are a fixed set of operations; no text results or forecasts as inputs yet | Later workflow work |
 | Routing is rule-based English only; no LLM fallback for unusual phrasing | Later, once a model good at structured output is available |

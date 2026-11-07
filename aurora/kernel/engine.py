@@ -10,7 +10,10 @@ from aurora.kernel.context import KernelContext
 from aurora.kernel.permissions import Permission, PermissionManager
 from aurora.kernel.service_manager import ServiceManager
 from aurora.memory.auto import AutoMemory
+from aurora.memory.episodes import EpisodeLog
 from aurora.memory.manager import MemoryManager
+from aurora.memory.routines import Routine, RoutineStore, normalize_name
+from aurora.routing.intent import Intent
 from aurora.plugins.plugin import BasePlugin
 from aurora.planning.plan import Plan
 from aurora.planning.planner import Planner
@@ -79,6 +82,9 @@ class AuroraEngine:
         self.last_route: RouteDecision | None = None
         self.memory = memory or MemoryManager()
         self.auto_memory = AutoMemory(self.memory)
+        # Episodic and procedural memory share the memory database.
+        self.episodes = EpisodeLog(self.memory.store.database_path)
+        self.routines = RoutineStore(self.memory.store.database_path)
 
         # Tools
         self.tool_manager = ToolManager(self.permissions)
@@ -86,9 +92,12 @@ class AuroraEngine:
             self.tool_manager.register(tool)
         # Tools that coordinate other tools (the research team) get the manager,
         # so every call they make still goes through the permission checks.
+        # Memory tools get the engine's memory systems (AutoMemory, episodes, routines).
         for tool in self.tool_manager.tools.values():
             if hasattr(tool, "attach_tools"):
                 tool.attach_tools(self.tool_manager)
+            if hasattr(tool, "attach_memory"):
+                tool.attach_memory(self)
         self.executor = ToolExecutor(self.tool_manager, self.events)
 
         # Structured workflows: calculations and requests that use an
@@ -97,8 +106,10 @@ class AuroraEngine:
         self.workflow_runner = WorkflowRunner(self.executor)
         self.last_workflow: WorkflowTrace | None = None
 
-        # An action waiting for the user's yes/no: (tool name, result).
+        # An action waiting for the user's yes/no: (tool name, result), and
+        # the request it came from (for the activity history).
         self.pending: tuple[str, ToolResult] | None = None
+        self.pending_decision: RouteDecision | None = None
 
         # Kernel managers
         self.service_manager = ServiceManager(self.events)
@@ -130,6 +141,13 @@ class AuroraEngine:
 
         self.service_manager.start_all()
         self.plugin_manager.initialize_all()
+
+        # Retention: expired memories and old activity records are deleted.
+        try:
+            self.memory.cleanup()
+            self.episodes.cleanup()
+        except Exception:
+            logger.exception("Memory clean-up failed")
 
         self.running = True
 
@@ -166,16 +184,16 @@ class AuroraEngine:
         response = self._answer_pending(message)
 
         if response is None:
-            self.last_route = self.route(message)
-            self.last_workflow = None
-            workflow = self.workflow(message)
-            plan = None if workflow else self.plan(message)
-            if workflow:
-                response = self._run_workflow(workflow)
-            elif plan.is_multi_step:
-                response = self._run_plan(plan)
+            routine = self.routines.match(message)
+            if routine is not None:
+                response = self._run_routine(routine)
             else:
-                response = self._handle(self.last_route, message)
+                self.last_route = self.route(message)
+                if self.last_route.intent is not Intent.MEMORY_CONTROL:
+                    # "don't remember that" may only take back what the
+                    # previous message taught; anything else ends that chance.
+                    self.auto_memory.last_results = []
+                response = self._respond(message, self.last_route)
 
         self.conversation.add_assistant(
             response
@@ -193,9 +211,13 @@ class AuroraEngine:
         self.pending = None
         text = message.strip()
 
+        decision, self.pending_decision = self.pending_decision, None
         if _YES.match(text):
             self.events.emit(topics.CONFIRMATION_ANSWERED, {"tool": name, "approved": True}, source=SOURCE)
-            return self.executor.confirm(name, pending).message
+            result = self.executor.confirm(name, pending)
+            if decision is not None:
+                self._record_episode(decision, result.success)
+            return result.message
 
         self.events.emit(topics.CONFIRMATION_ANSWERED, {"tool": name, "approved": False}, source=SOURCE)
 
@@ -205,6 +227,17 @@ class AuroraEngine:
         # Anything else cancels the pending action and is handled normally.
         logger.info("Pending %s action cancelled by a new message", name)
         return None
+
+    def _respond(self, message: str, decision: RouteDecision) -> str:
+        """A workflow, a multi-step plan, or a single step, whichever fits."""
+        self.last_workflow = None
+        workflow = self.workflow(message)
+        if workflow:
+            return self._run_workflow(workflow)
+        plan = self.plan(message)
+        if plan.is_multi_step:
+            return self._run_plan(plan)
+        return self._handle(decision, message)
 
     def _handle(self, decision: RouteDecision, message: str) -> str:
 
@@ -216,10 +249,60 @@ class AuroraEngine:
             if result.needs_confirmation:
                 name = self.executor.tool_for(decision)
                 self.pending = (name, result)
+                self.pending_decision = decision
                 self.events.emit(topics.CONFIRMATION_REQUESTED, {"tool": name}, source=SOURCE)
+            else:
+                self._record_episode(decision, result.success)
             return result.message
 
         return self._converse(message)
+
+    # --- Episodic and procedural memory ------------------------------------------
+
+    def _record_episode(self, decision: RouteDecision, success: bool) -> None:
+        """One line in the activity history (summaries only; see memory/episodes.py)."""
+        try:
+            self.episodes.record_decision(decision, success)
+        except Exception:
+            # The activity history must never stop AURORA from answering.
+            logger.exception("Recording an episode failed")
+
+    _ROUTINE_EXCLUDED = {Intent.FORGET, Intent.DEVICES, Intent.RESEARCH, Intent.REMEMBER,
+                         Intent.MEMORY_CONTROL, Intent.ROUTINES, Intent.CLARIFY}
+
+    def check_routine(self, name: str, steps: str) -> str | None:
+        """Why a routine can't be saved, or None if it can."""
+        name = normalize_name(name)
+        if not name or not steps.strip():
+            return "A routine needs a name and something to do."
+        if self.router.route(name).uses_tool:
+            return f"“{name}” already means something to me, so please choose another name."
+        plan = self.planner.plan(steps)
+        if plan.notes:
+            return "Routines can't include actions that need your confirmation. " + " ".join(plan.notes)
+        decisions = [step.decision for step in plan.steps] or [self.router.route(steps)]
+        for decision in decisions:
+            if decision.intent in self._ROUTINE_EXCLUDED:
+                return ("Routines can't include device control, deleting memories, research sessions, "
+                        "memory commands or other routines. Please ask for those directly.")
+        if plan.truncated:
+            return f"A routine can have at most {self.planner.max_steps} steps."
+        return None
+
+    def _run_routine(self, routine: Routine) -> str:
+        """Runs a routine's steps exactly as if the user had typed them."""
+        self.routines.mark_run(routine.name)
+        self.auto_memory.last_results = []
+        self.last_route = self.route(routine.steps)
+        if self.last_route.intent in self._ROUTINE_EXCLUDED:
+            # Checked when it was saved; checked again in case the rules changed.
+            return f"I can't run the routine “{routine.name}”: it contains an action I can only do when you ask directly."
+        reply = self._respond(routine.steps, self.last_route)
+        try:
+            self.episodes.record("routine", f"Ran your routine “{routine.name}”")
+        except Exception:
+            logger.exception("Recording an episode failed")
+        return f"Running your routine “{routine.name}”:\n\n{reply}"
 
     # --- Conversation with memory ---------------------------------------------
 
@@ -295,6 +378,9 @@ class AuroraEngine:
     def _run_workflow(self, workflow: Workflow) -> str:
         trace = self.workflow_runner.run(workflow)
         self.last_workflow = trace
+        for record in trace.records:
+            if record.step.decision is not None and record.status != "skipped":
+                self._record_episode(record.step.decision, record.status == "done")
         self.events.emit(topics.WORKFLOW_COMPLETED, trace.to_dict(), source=SOURCE)
         return trace.message
 
@@ -317,6 +403,8 @@ class AuroraEngine:
                 # The planner never includes these; refuse rather than act.
                 result.confirm = None
                 result.message = "That needs your confirmation, so please ask for it on its own."
+            else:
+                self._record_episode(step.decision, result.success)
             replies.append(result.message)
             results.append(result.message)
             self.events.emit(
@@ -365,6 +453,7 @@ class AuroraEngine:
 
         self.conversation.clear()
         self.pending = None
+        self.pending_decision = None
         logger.info("Conversation cleared")
         self.events.emit(topics.CONVERSATION_CLEARED, source=SOURCE)
 

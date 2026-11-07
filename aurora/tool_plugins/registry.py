@@ -7,7 +7,9 @@ from aurora.tool_plugins.devices import DevicesTool
 from aurora.tool_plugins.reminders import RemindersTool
 from aurora.tool_plugins.research_assistant import ResearchAssistantTool
 from aurora.tool_plugins.documents import DocumentsTool
-from aurora.tool_plugins.memory_tools import ForgetTool, RecallTool, RememberTool
+from aurora.tool_plugins.episodes_tool import EpisodesTool
+from aurora.tool_plugins.memory_tools import ForgetTool, MemoryControlTool, RecallTool, RememberTool
+from aurora.tool_plugins.routines_tool import RoutinesTool
 from aurora.tool_plugins.numbers import NumbersTool
 from aurora.tool_plugins.research import ArxivTool, WikipediaTool
 from aurora.tool_plugins.sensors import HealthTool, SensorsTool
@@ -28,6 +30,9 @@ def default_tools(
         RememberTool(memory),
         RecallTool(memory),
         ForgetTool(memory),
+        MemoryControlTool(memory),
+        EpisodesTool(),
+        RoutinesTool(),
         WeatherTool(http_client),
         WikipediaTool(http_client),
         ArxivTool(http_client),

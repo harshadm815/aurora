@@ -1,5 +1,50 @@
 # Changelog
 
+## 0.26.0 — Advanced memory system (2026-11-07)
+
+Blueprint Phase 9. See Docs/MEMORY_DESIGN.md (version 3).
+
+### Added
+- **Provenance**: every memory records how it was learned (automatic,
+  explicit, edited), when, the sentence it came from, and a history of
+  changes. "how do you know where I live?" answers from it.
+- **Confidence tracking**: repeating a fact raises its confidence; told
+  explicitly or edited, it is certain.
+- **Importance scoring** to choose what the Brain sees.
+- **Duplicate detection** that ignores case, articles and punctuation.
+- **Retention controls**:
+  - "always remember …" (pinned);
+  - "remember for today / 3 days …" (expires);
+  - "don't remember that" (undo and block);
+  - "stop learning" / "start learning again";
+  - a block list.
+- **Episodic memory**: one line per completed tool task, kept 30 days,
+  never message text. "what did we do today?", "when did I last check
+  the weather?", "stop recording activity", "clear my activity history".
+- **Procedural memory**: routines ("when I say morning briefing, …"),
+  run through the normal routing and permissions; routines needing
+  confirmation are refused.
+- **Associative memory**: facts about people the user mentions ("my
+  sister Priya lives in Delhi"), followed by recall ("where does my
+  sister live?").
+- Recall synonyms ("hometown" finds From).
+- Memory Centre:
+  - columns for about, source and kept;
+  - Pin, "How do you know?" and "Delete & don't learn again" buttons;
+  - switches for learning and the activity history;
+  - lists of the activity history, routines and blocked memories.
+- New tools: MemoryControl, Episodes, Routines (permission-checked).
+- 92 new tests.
+
+### Changed
+- Memory database schema version 1. The upgrade only adds columns and
+  tables and backs up the file first (`*.db.*.bak`, ignored by git).
+- Memory database connections are now always closed.
+
+### Fixed
+- Recall kept "does" (stemmed to "doe") as a keyword, so "where does …"
+  questions could miss.
+
 ## 0.25.0 — Workflows: structured multi-step tasks (2026-11-07)
 
 Blueprint Phase 8. See "Workflows" in Docs/ARCHITECTURE.md.

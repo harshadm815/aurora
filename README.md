@@ -7,7 +7,9 @@ Current stage: working prototype of all twelve roadmap milestones.
 AURORA chats with a local model, remembers facts about you, routes
 requests to verified tools (calculator, statistics, weather, Wikipedia,
 arXiv, your documents), plans multi-step requests and runs structured
-workflows that pass results between steps, listens and speaks offline, sees
+workflows that pass results between steps, remembers facts with their
+source (and forgets on request), keeps a short activity history, learns
+routines you teach it, listens and speaks offline, sees
 through the webcam, reads room and health sensors (simulated until the
 ESP32 is built), switches devices only after you confirm, sets reminders,
 and runs a team of research agents. Everything runs on a 4 GB laptop.

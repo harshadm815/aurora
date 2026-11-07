@@ -147,6 +147,7 @@ engine.register_plugin(RoomSensorPlugin())
 | Tool | Intent | Needs | What it does |
 |---|---|---|---|
 | Calculator | `calculator` | none | Safe arithmetic, e.g. `12 * (7 + 3) = 120` |
+| Numbers | `numbers` | none | Statistics and percentages with explanations, e.g. "average of 4, 8 and 15", "15% of 80" |
 | Remember | `remember` | `memory.write` | Stores an explicit note ("remember that ...") as a `Note` fact |
 | Recall | `recall` | `memory.read` | Keyword lookup. Only memories containing **every** keyword count as an answer; partial matches are listed separately as "related" |
 | Forget | `forget` | `memory.read`, `memory.write` | Lists matching memories and **asks for confirmation** before deleting (including exact duplicates) |
@@ -418,6 +419,56 @@ learned by AutoMemory. Events: `planning.created`,
 
 Type `plan <message>` in the terminal to preview a plan without running it.
 
+## Workflows
+
+`aurora/workflows/`. Some requests need more than a list of independent
+steps: the answer must be computed exactly, or one step needs another
+step's result. These become a **workflow**, a structured, testable
+sequence of steps that runs without the language model:
+
+| Message | Steps |
+|---|---|
+| Find the average of these numbers and explain the result: 4, 8, 15, 16, 23, 42 | Numbers (mean, explain) |
+| what's the weather in Pune and double the temperature | Weather Pune · multiply 2 (uses the temperature from step 1) |
+| what is 12 * 7, then add 5 and halve the result | Calculator · add 5 (step 1) · divide 2 (step 2) |
+| weather in Pune and convert the temperature to Fahrenheit | Weather · convert to °F (step 1) |
+
+How a message becomes a workflow (`builder.py`):
+1. Follow-up operations at the end are split off: "and double it",
+   "then add 5", "and convert the temperature to Fahrenheit".
+2. The rest is planned by the Planner as usual.
+3. Each operation depends on the step before it, so operations chain.
+
+No workflow is built if a part needs the Brain, a confirmation (devices,
+forgetting) or clarification. Those messages go through the normal plan.
+
+**Typed values** (`values.py`): tool results become named values with
+units. Calculator and Numbers give their result. Weather ("now") gives
+temperature, feels like, humidity and wind, rounded exactly as the user
+saw them. "it" / "the result" means the previous step's main value;
+"the temperature" picks it by name.
+
+**Running** (`runner.py`):
+- **Tool steps** go through the ToolExecutor (same permission checks as
+  everywhere). A failure marked `retryable` (timeout, no connection,
+  server error) is retried once after a pause. "No such place" is not
+  retried.
+- **Plausibility:** values must be finite and plausible (outdoor
+  temperature −90 to 60 °C, humidity 0–100 %). An implausible value
+  fails its step instead of being used.
+- **Dependent steps:** a step whose input failed is skipped, and the
+  reply says why. Independent steps still run, and nothing is guessed.
+- **Confirmations:** a step asking for confirmation is refused.
+- **Response validation:** text AURORA composes (operation results,
+  Numbers explanations) may only contain numbers from the message, the
+  tools or the workflow's own computations. Otherwise it is replaced by
+  a plain "Result: …" line, and the problem is recorded.
+
+Every run gives a `WorkflowTrace`: for each step, its kind, target,
+dependency, status (done / failed / skipped), attempts, values and
+message. Its `to_dict()` (metadata only) is emitted as
+`workflow.completed`. `engine.last_workflow` holds the last trace.
+
 ## Routing
 
 `IntentRouter.route(message)` (`aurora/routing/router.py`) returns a
@@ -488,7 +539,8 @@ the message to the Brain.
 | `aurora.vision` | `camera.py`, `detector.py`, `analyzer.py`, `motion.py`, `watch.py` | Webcam, object detection, OCR, scene description, motion watch | Yes (Camera tool, `watch`) |
 | `aurora.voice` | `listener.py`, `speaker.py`, `session.py` | Offline speech recognition with wake word, text-to-speech, voice conversations | Yes (from `main.py`, on demand) |
 | `aurora.tools` | `tool.py`, `tool_manager.py`, `result.py`, `executor.py`, `untrusted.py` | Tool interface, permission-checked registry, `ToolResult`, intent-to-tool execution, cleaning of outside text | Yes |
-| `aurora.tool_plugins` | `calculator.py`, `memory_tools.py`, `weather.py`, `research.py`, `documents.py`, `registry.py` | The built-in tools and `default_tools()` | Yes |
+| `aurora.tool_plugins` | `calculator.py`, `numbers.py`, `memory_tools.py`, `weather.py`, `research.py`, `documents.py`, `registry.py` | The built-in tools and `default_tools()` | Yes |
+| `aurora.workflows` | `values.py`, `operations.py`, `workflow.py`, `builder.py`, `runner.py`, `validation.py` | Structured multi-step tasks: typed values between steps, validation, retries, traces | Yes |
 | `aurora.events` | `event.py`, `bus.py`, `topics.py` | Publish/subscribe with error isolation; standard event names | Yes |
 | `aurora_core` (separate package) | `tensors/`, `transformer/`, `tokenizer/`, `training/`, `generation/`, `runtime/` | AURORA's own neural network: tensor maths with gradient checks, the AURORA-T0 Transformer with backpropagation, character and byte-level BPE tokenizers, the training pipeline and experiments, text generation, and the AURORA Core Runtime with its optimised engine (see AURORA_CORE.md) | No, not yet |
 
@@ -546,7 +598,7 @@ temporary database instead of `aurora_memory.db`.
 | Recall matches words, not meaning ("hometown" won't find "From: Nagpur") | Semantic search, when it fits in 4 GB RAM |
 | Only semantic memory; no episodic, procedural or associative (knowledge graph) memory | Later memory work |
 | TinyLlama often ignores or garbles the memory context it is given | A stronger model (hardware-dependent) |
-| Plans are fixed splits: a step can't use another step's result as input ("double the temperature in Pune") | Later planning work, needs a stronger model |
+| Workflows pass only numbers between steps (from the calculator, Numbers and current weather), and follow-ups are a fixed set of operations; no text results or forecasts as inputs yet | Later workflow work |
 | Routing is rule-based English only; no LLM fallback for unusual phrasing | Later, once a model good at structured output is available |
 | Permission grants are static config; no prompt to ask the user at runtime | Later, with physical-action tools (11) |
 | AURORA's own runtime (`aurora_core.runtime`) works, but AURORA-T0 is far too small to converse (see its model card), so the assistant still uses Ollama | Until a model good enough to converse exists |

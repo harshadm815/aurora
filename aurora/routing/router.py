@@ -19,6 +19,7 @@ from aurora.config import settings
 from aurora.routing import decision as targets
 from aurora.routing.decision import RouteDecision
 from aurora.routing.intent import Intent
+from aurora.routing.numbers_rule import numbers_rule
 from aurora.tool_plugins.calculator import CalculationError, evaluate
 
 logger = logging.getLogger(__name__)
@@ -662,6 +663,7 @@ _EXPLICIT_COMMANDS = {Intent.REMEMBER, Intent.FORGET}
 
 DEFAULT_RULES: tuple[Rule, ...] = (
     calculator_rule,
+    numbers_rule,
     weather_rule,
     remember_rule,
     forget_rule,

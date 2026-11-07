@@ -23,6 +23,9 @@ from aurora.tools.executor import ToolExecutor
 from aurora.tools.result import ToolResult
 from aurora.tools.tool import BaseTool
 from aurora.tools.tool_manager import ToolManager
+from aurora.workflows.builder import WorkflowBuilder
+from aurora.workflows.runner import WorkflowRunner
+from aurora.workflows.workflow import Workflow, WorkflowTrace
 
 logger = logging.getLogger(__name__)
 
@@ -87,6 +90,12 @@ class AuroraEngine:
             if hasattr(tool, "attach_tools"):
                 tool.attach_tools(self.tool_manager)
         self.executor = ToolExecutor(self.tool_manager, self.events)
+
+        # Structured workflows: calculations and requests that use an
+        # earlier step's result ("weather in Pune and double the temperature").
+        self.workflow_builder = WorkflowBuilder(self.planner)
+        self.workflow_runner = WorkflowRunner(self.executor)
+        self.last_workflow: WorkflowTrace | None = None
 
         # An action waiting for the user's yes/no: (tool name, result).
         self.pending: tuple[str, ToolResult] | None = None
@@ -158,8 +167,12 @@ class AuroraEngine:
 
         if response is None:
             self.last_route = self.route(message)
-            plan = self.plan(message)
-            if plan.is_multi_step:
+            self.last_workflow = None
+            workflow = self.workflow(message)
+            plan = None if workflow else self.plan(message)
+            if workflow:
+                response = self._run_workflow(workflow)
+            elif plan.is_multi_step:
                 response = self._run_plan(plan)
             else:
                 response = self._handle(self.last_route, message)
@@ -274,6 +287,16 @@ class AuroraEngine:
     def plan(self, message: str) -> Plan:
         """Returns how a message would be split into steps (without running it)."""
         return self.planner.plan(message)
+
+    def workflow(self, message: str) -> Workflow | None:
+        """The structured workflow for a message, or None if it doesn't need one."""
+        return self.workflow_builder.build(message)
+
+    def _run_workflow(self, workflow: Workflow) -> str:
+        trace = self.workflow_runner.run(workflow)
+        self.last_workflow = trace
+        self.events.emit(topics.WORKFLOW_COMPLETED, trace.to_dict(), source=SOURCE)
+        return trace.message
 
     def _run_plan(self, plan: Plan) -> str:
         """

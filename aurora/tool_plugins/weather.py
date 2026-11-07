@@ -40,7 +40,15 @@ WEATHER_CODES = {
 
 
 class WeatherError(Exception):
-    """Raised for problems that should be explained to the user."""
+    """Raised for problems that should be explained to the user.
+
+    retryable: the problem may be temporary (timeout, no connection,
+    server error), so asking again could work.
+    """
+
+    def __init__(self, message: str, retryable: bool = False):
+        super().__init__(message)
+        self.retryable = retryable
 
 
 def describe_code(code) -> str:
@@ -72,13 +80,15 @@ class WeatherTool(BaseTool):
             response.raise_for_status()
             return response.json()
         except httpx.TimeoutException:
-            raise WeatherError("The weather service took too long to respond.") from None
+            raise WeatherError("The weather service took too long to respond.", retryable=True) from None
         except httpx.HTTPStatusError as error:
+            status = error.response.status_code
             raise WeatherError(
-                f"The weather service returned an error ({error.response.status_code})."
+                f"The weather service returned an error ({status}).",
+                retryable=status >= 500 or status == 429,
             ) from None
         except httpx.HTTPError:
-            raise WeatherError("I couldn't reach the weather service.") from None
+            raise WeatherError("I couldn't reach the weather service.", retryable=True) from None
         except ValueError:
             raise WeatherError("The weather service sent a response I couldn't read.") from None
 
@@ -174,7 +184,7 @@ class WeatherTool(BaseTool):
         except WeatherError as error:
             # The user already sees the reason in the reply; keep it in the log file only.
             logger.info("Weather lookup failed: %s", type(error).__name__)
-            return ToolResult(False, f"{error} I won't guess the weather.")
+            return ToolResult(False, f"{error} I won't guess the weather.", retryable=error.retryable)
         except (KeyError, IndexError, TypeError):
             logger.exception("Unexpected weather response")
             return ToolResult(

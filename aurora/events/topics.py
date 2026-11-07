@@ -23,6 +23,8 @@ ROUTE_DECIDED = "routing.decided"
 PLAN_CREATED = "planning.created"
 PLAN_STEP_COMPLETED = "planning.step_completed"
 PLAN_COMPLETED = "planning.completed"
+# A structured workflow ran; payload is WorkflowTrace.to_dict() (no user text).
+WORKFLOW_COMPLETED = "workflow.completed"
 RESPONSE_GENERATED = "conversation.response_generated"
 CONVERSATION_CLEARED = "conversation.cleared"
 

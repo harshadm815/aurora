@@ -1,5 +1,36 @@
 # Changelog
 
+## 0.25.0 — Workflows: structured multi-step tasks (2026-11-07)
+
+Blueprint Phase 8. See "Workflows" in Docs/ARCHITECTURE.md.
+
+### Added
+- **Numbers tool**:
+  - average, median, mode, sum, count, minimum, maximum, range,
+    standard deviation;
+  - "p % of x", "what percent x is of y", increase / decrease by p %.
+  - It computes exactly (Python's `statistics`, no `eval`) and explains
+    its working from templates, so the language model never does
+    arithmetic.
+- **Routing for number questions**: "average of 4, 8 and 15" and
+  "sum of 3, 5 and 9" went to Wikipedia; "15% of 80" and "median of …"
+  went to the language model. A stated count ("these 6 numbers") is
+  checked against the numbers found.
+- **Workflows** (`aurora/workflows/`): typed values passed between steps
+  ("what's the weather in Pune and double the temperature", "what is
+  12 * 7, then add 5 and halve the result", "… convert the temperature
+  to Fahrenheit"), with a structured trace of every step.
+- **Response validation**: text AURORA composes may only contain numbers
+  it can account for; tool values are checked for plausibility.
+- **Error recovery**:
+  - temporary failures (`ToolResult.retryable`, set by the weather tool
+    for timeouts, connection and server errors) are retried once;
+  - steps that need a failed step's result are skipped and explained;
+  - independent steps still run.
+- `plan <message>` in the terminal shows the workflow if one applies.
+- Event `workflow.completed` (metadata only).
+- 122 new tests.
+
 ## 0.24.0 — Optimisation (2026-11-06)
 
 Blueprint Phase 7. See the Phase 7 section of Docs/AURORA_CORE.md.

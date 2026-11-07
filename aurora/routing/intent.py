@@ -6,6 +6,7 @@ class Intent(Enum):
 
     CONVERSATION = "conversation"   # Answer with the Brain.
     CALCULATOR = "calculator"       # Evaluate arithmetic.
+    NUMBERS = "numbers"             # Statistics and percentages on numbers in the message.
     WEATHER = "weather"             # Look up weather.
     REMEMBER = "remember"           # Store something the user explicitly asked to keep.
     RECALL = "recall"               # Retrieve something from long-term memory.

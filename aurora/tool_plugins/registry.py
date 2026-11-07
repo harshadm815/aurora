@@ -8,6 +8,7 @@ from aurora.tool_plugins.reminders import RemindersTool
 from aurora.tool_plugins.research_assistant import ResearchAssistantTool
 from aurora.tool_plugins.documents import DocumentsTool
 from aurora.tool_plugins.memory_tools import ForgetTool, RecallTool, RememberTool
+from aurora.tool_plugins.numbers import NumbersTool
 from aurora.tool_plugins.research import ArxivTool, WikipediaTool
 from aurora.tool_plugins.sensors import HealthTool, SensorsTool
 from aurora.sensors.hub import SensorHub
@@ -23,6 +24,7 @@ def default_tools(
     hub = SensorHub(client=http_client)   # Shared by the room and health tools.
     return [
         CalculatorTool(),
+        NumbersTool(),
         RememberTool(memory),
         RecallTool(memory),
         ForgetTool(memory),

@@ -54,6 +54,13 @@ def print_plan(plan) -> None:
     print()
 
 
+def print_workflow(workflow) -> None:
+    print(f"\n  workflow ({workflow.reason}):")
+    for step in workflow.steps:
+        print(f"  {step.number}. {step.describe()}")
+    print()
+
+
 def watch(engine, camera_tool) -> None:
     from aurora.vision.camera import VisionUnavailable
     from aurora.vision.watch import Watcher
@@ -183,7 +190,11 @@ def main():
                 continue
 
             if user_input.lower().startswith("plan "):
-                print_plan(engine.plan(user_input[5:]))
+                workflow = engine.workflow(user_input[5:])
+                if workflow:
+                    print_workflow(workflow)
+                else:
+                    print_plan(engine.plan(user_input[5:]))
                 continue
 
             if user_input.lower() in ("listen", "voice on"):

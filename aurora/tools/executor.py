@@ -13,6 +13,7 @@ logger = logging.getLogger(__name__)
 # Which tool handles which intent.
 INTENT_TOOLS = {
     Intent.CALCULATOR: "Calculator",
+    Intent.NUMBERS: "Numbers",
     Intent.WEATHER: "Weather",
     Intent.REMEMBER: "Remember",
     Intent.RECALL: "Recall",

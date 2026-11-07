@@ -16,12 +16,15 @@ class ToolResult:
     - ``confirm``: set when the tool wants to do something consequential
       (such as deleting memories). The kernel asks the user first and
       only calls ``confirm()`` if they say yes.
+    - ``retryable``: the failure may be temporary (a timeout, a server
+      error), so trying again could work. Workflows retry such steps once.
     """
 
     success: bool
     message: str
     data: Any = None
     confirm: Callable[[], "ToolResult"] | None = None
+    retryable: bool = False
 
     @property
     def needs_confirmation(self) -> bool:

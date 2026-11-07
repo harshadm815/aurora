@@ -8,6 +8,7 @@ from aurora.routing.intent import Intent
 # Component names a decision can target.
 BRAIN = "Brain"
 CALCULATOR = "Calculator"
+NUMBERS = "Numbers"
 WEATHER = "Weather"
 MEMORY = "Memory"
 WIKIPEDIA = "Wikipedia"

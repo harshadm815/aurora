@@ -141,6 +141,15 @@ class AuroraEngine:
         self.service_manager.register(
             BrainService(brain)
         )
+        # The Sensor Service shares the Sensors tool's hub (one set of devices,
+        # one history) and its permission.
+        sensors = self.tool_manager.get("Sensors")
+        if sensors is not None and hasattr(sensors, "hub"):
+            from aurora.sensors.service import SensorService
+
+            self.service_manager.register(SensorService(
+                sensors.hub, self.events,
+                permitted=lambda: not self.permissions.missing("Sensors", (Permission.SENSORS,))))
 
         self.running = False
 

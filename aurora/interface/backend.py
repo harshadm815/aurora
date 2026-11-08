@@ -27,6 +27,7 @@ from aurora.events import topics
 from aurora.events.bus import ALL_EVENTS
 from aurora.interface import system_info
 from aurora.knowledge.sources import caption
+from aurora.sensors.reading import QUANTITIES
 
 logger = logging.getLogger(__name__)
 
@@ -132,6 +133,13 @@ def describe_event(event) -> Activity | None:
         return Activity(now, "Conversation cleared", "info")
     if name == topics.MOTION_DETECTED:
         return Activity(now, "Motion detected", "warning")
+    if name == topics.SENSOR_ALERT:
+        label = QUANTITIES.get(data.get("quantity"), None)
+        what = label.label if label else "A sensor"
+        return Activity(now, f"Sensor alert: {what} is {data.get('level', 'poor')}"
+                             + (" (simulated)" if data.get("simulated") else ""), "warning")
+    if name == topics.SENSOR_MONITORING:
+        return Activity(now, "Background sensor watching " + ("on" if data.get("on") else "off"), "info")
     return None
 
 
@@ -146,6 +154,9 @@ class Backend(QObject):
     preferences_changed = Signal(dict)
     system_sampled = Signal(dict)          # Real CPU / RAM readings (None where unavailable)
     state_changed = Signal(str)            # starting | running | paused | failed | stopped
+    sensor_readings = Signal(dict)         # sensor.readings from background watching
+    sensor_alert = Signal(dict)            # sensor.alert: {"quantity", "level", "message", "simulated", ...}
+    sensor_monitoring = Signal(bool)       # background watching switched on / off
 
     def __init__(self, engine_factory: Callable | None = None, parent=None):
         super().__init__(parent)
@@ -330,6 +341,12 @@ class Backend(QObject):
         # Called on the engine thread.
         if event.name == topics.TOOL_FAILED and isinstance(event.data, dict):
             self.on_gui(lambda data: self.tool_errors.__setitem__(data.get("tool"), data.get("error", "")), event.data)
+        if event.name == topics.SENSOR_READINGS and isinstance(event.data, dict):
+            self.on_gui(self.sensor_readings.emit, event.data)
+        if event.name == topics.SENSOR_ALERT and isinstance(event.data, dict):
+            self.on_gui(self.sensor_alert.emit, event.data)
+        if event.name == topics.SENSOR_MONITORING and isinstance(event.data, dict):
+            self.on_gui(self.sensor_monitoring.emit, bool(event.data.get("on")))
         activity = describe_event(event)
         if activity is not None:
             self.on_gui(self._add_activity, activity)
@@ -366,6 +383,31 @@ class Backend(QObject):
             return reply, engine.pending is not None, caption(getattr(engine, "last_sources", []))
 
         self.run_engine(work, on_reply, on_error)
+
+    # --- Sensors ------------------------------------------------------------
+
+    def sensor_service(self):
+        if self.engine is None:
+            return None
+        return self.engine.service_manager.services.get("Sensors")
+
+    def set_sensor_monitoring(self, on: bool, save: bool = True) -> str | None:
+        """Turns background sensor watching on or off. Returns why it couldn't
+        be turned on, or None. Starting and stopping happen off the GUI thread."""
+        if save:
+            self.preferences["sensor_monitoring"] = on
+            preferences.save(self.preferences)
+            preferences.apply(self.preferences)
+        service = self.sensor_service()
+        if service is None:
+            return "Sensors aren't available."
+        if on:
+            if not service.permitted():
+                return "AURORA isn't allowed to read sensors (the Sensors permission is off)."
+            self.run_io(service.start_monitoring)
+        else:
+            self.run_io(service.stop_monitoring)
+        return None
 
     # --- Pictures -----------------------------------------------------------
 
@@ -450,6 +492,8 @@ class Backend(QObject):
 
             self.run_engine(live, lambda _: self.check_ollama())
         self.voice.apply_settings()      # voice, speed and volume take effect at once
+        if "sensor_monitoring" in values:
+            self.set_sensor_monitoring(bool(values["sensor_monitoring"]), save=False)
         self.preferences_changed.emit(dict(self.preferences))
         logger.info("Preferences saved")
 

@@ -11,6 +11,7 @@ import time
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest
+from conftest import release_widgets
 
 from aurora.config import preferences, settings
 from aurora.voice import speaker as speaker_module
@@ -484,6 +485,7 @@ def backend(qapp, memory, tmp_path, monkeypatch):
     assert wait_for(lambda: b.engine is not None, 10)
     yield b
     b.shutdown()
+    release_widgets()
 
 
 def test_voice_controller_listens_and_speaks(backend):

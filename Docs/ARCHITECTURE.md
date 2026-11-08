@@ -1,6 +1,6 @@
 # AURORA Architecture
 
-Version: 0.19.0
+Version: 0.20.0
 Status: Describes what exists in the code today. Planned components are listed separately at the end.
 
 ---
@@ -392,32 +392,95 @@ Settings: `VISION_CAMERA_INDEX`, `VISION_DETECTOR_MODEL`,
 
 ## Sensor Hub
 
-`aurora/sensors/` reads room and health sensors when you ask.
+`aurora/sensors/` connects AURORA to room sensors (and two optional,
+informational health readings):
 
-| You say | Tool | Answer |
-|---|---|---|
-| what's the temperature in my room? · how humid is it inside? | Sensors | "Temperature in your room: 23.4 °C (Room ESP32, just now)." |
-| is there any motion in my room? · has anyone moved? | Sensors | Motion sensor state |
-| check my sensors · how is my room? | Sensors | All room readings |
-| what's my heart rate? · my blood oxygen | Health | Reading plus "informational only, not a medical measurement" |
-| how did I sleep last night? | Health | Explains no sleep tracker is connected |
+```
+ESP32 / simulator ── device interface (sources.py: HTTP JSON, validation, timestamps, permitted list)
+      ── SensorHub (hub.py: one snapshot at a time, newest value wins, last known value fallback)
+      ── SensorStore (store.py: history; health kept separately)
+      ── SensorService (service.py: optional background watching)
+      ── event bus: sensor.readings, sensor.alert, sensor.monitoring
+      ── Sensors tool (answers) · Sensor Centre and Dashboard (display) · Windows notifications
+```
 
-- **Sources** (`sources.py`, configured in `SENSOR_SOURCES`):
-  `HttpSource` asks an ESP32 on the local network for JSON (firmware in
-  `firmware/esp32_sensor_hub/`); `SimulatedSource` gives plausible values
-  until hardware exists. **Every simulated value is labelled as such.**
-- **Validation** (`reading.py`): unknown quantities, wrong types, NaN and
-  implausible values (e.g. 150 °C, 101 % humidity, 15 bpm) are rejected
-  and reported as a note, never used.
-- **Hub** (`hub.py`): reads every source on request; if a device doesn't
-  answer, a stored reading up to `SENSOR_MAX_AGE_MINUTES` (10) old is used
-  and labelled "last known value".
+| You say | Answer |
+|---|---|
+| what's the temperature in my room? · how humid is it inside? | Value, where and when it was measured, what it means: "Temperature in your room: 23.4 °C (Room ESP32, 10:42, just now): comfortable." plus the guide it's based on and the trend |
+| what's the CO₂ level? · VOCs · pm2.5 · how bright is it in here? | The same for air and light |
+| how is the air in my room? · is it stuffy? | All air readings and a verdict ("Needs attention: CO₂. Open a window…") |
+| is my room comfortable? | Temperature, humidity, light and air with a verdict |
+| should I open a window? | Yes / no from CO₂, VOCs and humidity, with the readings behind it; "I can't tell" without an air sensor |
+| how has the temperature in my room changed today? · co2 trend | Lowest, highest and average over 24 hours with times, and the trend |
+| when was the last motion? · is there any motion in my room? | From the motion sensor and its history |
+| check my sensors | Everything, and which quantities have no reading |
+| what's my heart rate? · my blood oxygen | Health tool: reading plus "informational only, not a medical measurement"; never interpreted |
+
+**Quantities** (`reading.py`): temperature, humidity, air pressure,
+ambient light (lux), motion, CO₂ (NDIR sensors such as SCD40/MH-Z19),
+estimated CO₂ and VOCs (SGP30, labelled "estimated"), fine dust PM2.5 and
+PM10, heart rate and SpO2. Other simple sensors can be declared in
+`SENSOR_EXTRA_QUANTITIES` (name, label, unit, plausible range): they are
+read, stored and shown, but never interpreted and never health data.
+
+**Nothing is invented:**
+
+- Every value is checked against a plausible range; NaN, infinity, wrong
+  types and impossible values are refused and reported as a note.
+- Every reading carries the time it was **measured**: the moment it
+  arrived, minus the age the device reports (`"ages"`). Values older than
+  `SENSOR_MAX_SAMPLE_AGE_SECONDS` (5 minutes) are refused, not shown as
+  current. If a device doesn't answer, a stored value up to
+  `SENSOR_MAX_AGE_MINUTES` (10) old is used and labelled "last known value".
+- A source can be limited to **permitted readings** (`"quantities"` in its
+  `SENSOR_SOURCES` entry); anything else it sends is ignored.
+- A quantity no device reports shows "no reading" / NO SENSOR, never a
+  value. **Simulated values are labelled** everywhere, including alerts and
+  trends; the simulator stays within realistic ranges (e.g. CO₂ never below
+  outdoor air).
+- If two devices report the same quantity, the most recently measured
+  value is used.
+
+**Interpretation** (`interpret.py`) uses fixed bands, each with its
+reference shown to you: temperature 20–26 °C comfortable; humidity
+30–60 % (US EPA); CO₂ 1000 / 1500 ppm (outdoor air is about 420 ppm);
+VOCs 220 / 660 / 2200 ppb; PM2.5 and PM10 against the WHO 2021 24-hour
+guidelines (15 and 45 µg/m³); light against desk lighting of about
+300–500 lux (EN 12464-1). These are general indoor guidelines, not safety
+limits. Trends need at least three readings from the same device over a
+quarter of the window (1 hour; 3 hours for pressure) and use a
+least-squares slope, so one noisy reading doesn't make a trend.
+Window advice uses only CO₂, VOCs and humidity: dust isn't a reason to
+open a window (outdoor air may be dustier).
+
+**Background watching** (`service.py`, off by default; the switch is in
+the Sensor Centre, or `SENSOR_MONITOR`): room sensors are read every
+`SENSOR_MONITOR_SECONDS` (60) and each snapshot is published as
+`sensor.readings`; a reading that becomes *poor* is published as
+`sensor.alert` at most once per `SENSOR_ALERT_COOLDOWN_MINUTES` (30) per
+quantity and shown in the Sensor Centre, the activity feed, a Windows
+notification (`SENSOR_NOTIFICATIONS`) and, in the terminal, as a line like
+a reminder. Last-known values never raise alerts. Watching needs the
+`sensors` permission and stops if it is taken away; health sensors are
+never read in the background.
+
 - **Storage** (`store.py`, `sensor_data.db`, not in git): room and health
   readings in **separate tables**; room data kept 30 days, health data
-  7 days. Sensor data never enters long-term memory, and values are never
-  logged (only counts).
+  7 days. A value a device reports twice is stored once. Sensor data
+  never enters long-term memory, and values are never logged (only counts).
 - **Health** is a separate tool needing both `sensors` and `health_data`,
   so it can be switched off on its own by removing its grant.
+- **Firmware** (`firmware/esp32_sensor_hub/`): BME280, BH1750, SGP30, PIR
+  and MAX30102 on one ESP32, serving the JSON above. Not yet tested on
+  real hardware; the same JSON from a virtual device on 127.0.0.1 was read
+  end to end (readings, ages, last motion, background watching, an alert,
+  and the device going offline).
+
+Settings: `SENSOR_SOURCES`, `SENSOR_TIMEOUT_SECONDS`,
+`SENSOR_MAX_AGE_MINUTES`, `SENSOR_MAX_SAMPLE_AGE_SECONDS`,
+`SENSOR_EXTRA_QUANTITIES`, `SENSOR_MONITOR`, `SENSOR_MONITOR_SECONDS`,
+`SENSOR_ALERT_COOLDOWN_MINUTES`, `SENSOR_NOTIFICATIONS`,
+`SENSOR_RETENTION_DAYS`, `HEALTH_RETENTION_DAYS`.
 
 ## Devices and automation
 
@@ -706,7 +769,7 @@ the message to the Brain.
 | `aurora.agents` | `base.py`, `research_agents.py`, `research_session.py`, `research_log.py` | Agent framework, research team, coordinator, research log | Yes (Research tool) |
 | `aurora.devices` | `device.py`, `drivers.py`, `controller.py` | Device definitions, limits, simulated / ESP32 drivers, checks, rate limit, audit | Yes (Devices tool) |
 | `aurora.automation` | `reminders.py` | Session reminders and timers | Yes (Reminders tool) |
-| `aurora.sensors` | `reading.py`, `sources.py`, `store.py`, `hub.py` | Sensor readings, validation, ESP32 / simulated sources, history with separate health storage | Yes (Sensors and Health tools) |
+| `aurora.sensors` | `reading.py`, `sources.py`, `store.py`, `hub.py`, `interpret.py`, `service.py` | Sensor readings, validation and timestamps, ESP32 / simulated sources, history with separate health storage, interpretation and trends, background watching with events and alerts | Yes (Sensors and Health tools, Sensors service) |
 | `aurora.vision` | `image_input.py`, `camera.py`, `detector.py`, `analyzer.py`, `scene.py`, `evaluate.py`, `motion.py`, `watch.py` | Image input and preprocessing, webcam, object detection checked in two views, OCR, grounded scene reports, evaluation, motion watch | Yes (Camera and Documents tools, Command Centre, `watch`) |
 | `aurora.voice` | `listener.py`, `vad.py`, `speaker.py`, `session.py`, `selftest.py` | Offline speech recognition with wake word and voice activity detection, text-to-speech with interruption, voice conversations, loop-back test | Yes (from `main.py` and the Command Centre, on demand) |
 | `aurora.tools` | `tool.py`, `tool_manager.py`, `result.py`, `executor.py`, `untrusted.py` | Tool interface, permission-checked registry, `ToolResult`, intent-to-tool execution, cleaning of outside text | Yes |
@@ -759,7 +822,7 @@ temporary database instead of `aurora_memory.db`.
 |---|---|
 | No general web search (needs a provider with an API key) | When a provider is chosen |
 | No NASA / astronomy databases, no source cross-checking between results | Later research work |
-| ESP32 firmware (sensors and devices) not yet tested on hardware; no background monitoring, trends or alerts from sensors; no wearable (sleep) support | Later sensor work |
+| ESP32 firmware (sensors and devices) not yet tested on hardware; sensors only over Wi-Fi HTTP (no USB serial); interpretation bands are general guidelines and cheap sensors are uncalibrated; no wearable (sleep) support | Later sensor work |
 | Research agents match words, not meaning; no free-form reasoning or summarising (needs a stronger model); no deleting research projects by voice/text yet | Later |
 | No rule-based automations ("turn on the fan when it's above 28 °C"): they would act without a per-change confirmation, so they need their own safety design | Later automation work |
 | Reminders are lost when AURORA closes and are not spoken | Later |

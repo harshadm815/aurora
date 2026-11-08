@@ -32,6 +32,13 @@ MEMORY_LEARNED = "memory.learned"
 
 MOTION_DETECTED = "vision.motion_detected"
 
+# Sensor service (background watching): readings with their times and sources,
+# alerts when a reading becomes poor, and watching switched on or off.
+# Health readings are never published.
+SENSOR_READINGS = "sensor.readings"
+SENSOR_ALERT = "sensor.alert"
+SENSOR_MONITORING = "sensor.monitoring"
+
 PERMISSION_DENIED = "permission.denied"
 
 TOOL_EXECUTED = "tool.executed"

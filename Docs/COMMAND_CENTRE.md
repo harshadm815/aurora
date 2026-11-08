@@ -57,7 +57,7 @@ vision self-check.
 
 | Page | What it shows | Where the data comes from |
 |---|---|---|
-| Dashboard | Greeting, clock, AI status, model, memory count, CPU, RAM, services, plugins, tools, recent activity, quick access | Engine status, Ollama check, MemoryManager, Windows APIs, event bus |
+| Dashboard | Greeting, clock, AI status, model, memory count, CPU, RAM, room at a glance (while background sensor watching is on), services, plugins, tools, recent activity, quick access | Engine status, Ollama check, MemoryManager, Windows APIs, event bus (`sensor.readings`) |
 | Chat | Conversation with timestamps, Markdown, streaming replies, a thinking indicator, Yes/No buttons when AURORA asks for confirmation, Clear. **🖼 Image…** (describe a picture you choose, with its evidence), **🎙 Ask by voice** (one request; a level meter shows the microphone is on), **■ Stop** (stops listening or speaking), **Speak replies** | `engine.process_message()` (the same engine as the terminal); `VoiceController` |
 | Memory Centre | All memories with category, priority, confidence, dates and use; search, category filter, add note, edit value, delete with confirmation | `MemoryManager` |
 | Knowledge Centre | Ask your documents (answers quoted with citations, topic summaries, re-index, index status); research projects and sessions; documents (list, search, read); notes | Research log; Documents tool (through the ToolManager, so its folder limit and permission apply); MemoryManager |
@@ -65,7 +65,7 @@ vision self-check.
 | Model manager | Conversation model: Ollama's installed models (parameters, quantization, size, in memory), use for chat, unload. AURORA's own models: every checkpoint in `Models/` (parameters, precision, size, steps, test loss); load into the AURORA Core Runtime, try it (streamed, stoppable, tokens/s), unload | Ollama (`model_overview`), checkpoint headers (no weights loaded until you load one), `aurora_core.runtime` |
 | Training monitor | Every training run: loss curves (training and validation) against the unigram and bigram baselines, test loss, perplexity; start a new AURORA-T0 run on a text in `Data/` with live progress, time left and Stop | `metrics.jsonl` / `summary.json` in `Models/`; training runs as a separate process (`command_centre.py --train …`) |
 | Vision Centre | A picture you choose (Open image…, Paste, or drag a file in) or the live camera; **Describe** (grounded description with numbered boxes drawn on the picture and an evidence list), **Read text**; detector/OCR/permission status | The shared `VisionAnalyzer` (`backend.vision_analyzer()`) |
-| Sensor Centre | Temperature, humidity, pressure, motion, air quality (not supported yet); health on request | Sensor Hub |
+| Sensor Centre | Temperature, humidity, pressure, ambient light, motion, CO₂, VOCs, fine dust (and extra quantities), each LIVE / SIMULATED / LAST KNOWN / NO SENSOR with its measuring time and what it means; 24-hour history chart with lowest, highest, average and trend; **Watch my room in the background** switch; alerts; connections; health on request | Sensor Hub, Sensor Service, `sensor.readings` / `sensor.alert` events |
 | System monitor | CPU, system RAM, AURORA's own memory, uptime, Ollama, active and installed models, services, plugins, tools, logs | Windows APIs, Ollama, engine, AURORA's log |
 | Settings | Model, personality, streaming, memory announcements, memories given to the model, accent, start page, maximised start, animations, voice name, speed and volume, microphone, barge-in, Test the voice, Test the microphone | `aurora_preferences.json` |
 
@@ -89,7 +89,11 @@ vision self-check.
   `microphone` permission. The status line and level meter show it is on.
   Audio stays in memory and transcripts aren't logged.
 - **Health readings** are only fetched when you click "Show health
-  readings", and need the Health permission.
+  readings", and need the Health permission. They are never interpreted
+  and never read in the background.
+- **Sensor watching is off until you switch it on.** Alerts appear in
+  the Sensor Centre and as Windows notifications (switch off with
+  `SENSOR_NOTIFICATIONS`); simulated values say so in every alert.
 - **Permissions, devices and paths can't be changed from the interface.**
   They stay in `settings.py` / `local_settings.py`.
 

@@ -61,6 +61,18 @@ class Tray(QObject):
 
         backend.state_changed.connect(self.update_state)
         self.update_state(backend.state)
+        # Background sensor watching: alerts as Windows notifications (if switched on).
+        self.notified: list[str] = []
+        backend.sensor_alert.connect(self.sensor_alert)
+
+    def sensor_alert(self, alert: dict):
+        from aurora.config import settings
+
+        if not settings.SENSOR_NOTIFICATIONS:
+            return
+        message = str(alert.get("message", ""))[:250]
+        self.notified.append(message)
+        self.icon.showMessage("AURORA: room sensors", message, QSystemTrayIcon.Warning, 8000)
 
     @staticmethod
     def available() -> bool:

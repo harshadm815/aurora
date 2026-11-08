@@ -18,7 +18,7 @@ DESCRIPTIONS = {
     "arXiv": "Research papers (needs network)",
     "Documents": "Lists, searches and reads files in your Documents folder only",
     "Camera": "One picture on request: objects and text, never saved",
-    "Sensors": "Room temperature, humidity, pressure and motion",
+    "Sensors": "Room temperature, humidity, pressure, light, motion, CO₂, VOCs and dust, with what they mean and how they changed",
     "Health": "Heart rate and SpO2 (informational, separate permission)",
     "Devices": "Switches configured devices, only after you confirm",
     "Reminders": "Reminders and timers for this session",

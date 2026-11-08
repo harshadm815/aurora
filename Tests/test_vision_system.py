@@ -8,6 +8,7 @@ import os
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 import pytest
+from conftest import release_widgets
 
 cv2 = pytest.importorskip("cv2")
 np = pytest.importorskip("numpy")
@@ -567,6 +568,7 @@ def backend(qapp, memory, tmp_path, monkeypatch):
     b.tool("Camera").analyzer = FakeAnalyzer()
     yield b
     b.shutdown()
+    release_widgets()
 
 
 def test_qimage_round_trip(qapp):

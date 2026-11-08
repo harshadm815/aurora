@@ -321,7 +321,8 @@ def test_sensor_page_labels_simulated_values(window):
     window.open_page("Sensors")
 
     assert wait_for(lambda: page.cards["temperature"].badge.text() == "SIMULATED", 5)
-    assert page.air.badge.text() == "NOT SUPPORTED"
+    assert page.cards["co2"].badge.text() == "SIMULATED"            # the simulator now covers air too
+    assert page.cards["temperature"].meaning.text() != ""             # with what it means
     assert page.health_cards["heart_rate"].value.text() == "—"   # Not fetched until asked.
 
 

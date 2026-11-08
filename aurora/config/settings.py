@@ -9,7 +9,7 @@ import sys
 from pathlib import Path
 
 APP_NAME = "AURORA"
-VERSION = "0.30.0"
+VERSION = "0.31.0"
 
 USER_NAME = "Harry"
 
@@ -230,6 +230,21 @@ SENSOR_TIMEOUT_SECONDS = 5
 SENSOR_MAX_AGE_MINUTES = 10
 SENSOR_RETENTION_DAYS = 30         # Room readings are deleted after this.
 HEALTH_RETENTION_DAYS = 7          # Health readings are deleted sooner.
+# A device may say how long ago it measured each value ("ages" in its JSON);
+# values older than this are refused rather than shown as current.
+SENSOR_MAX_SAMPLE_AGE_SECONDS = 300
+# Other simple sensors, e.g. {"name": "soil_moisture", "label": "Soil moisture",
+# "unit": "%", "minimum": 0, "maximum": 100} (see aurora/sensors/reading.py).
+SENSOR_EXTRA_QUANTITIES: list[dict] = []
+# Background watching (off unless you switch it on in the Sensor Centre or here):
+# room sensors are read every SENSOR_MONITOR_SECONDS, readings go on the event
+# bus, and a reading that becomes poor (e.g. CO2 above 1500 ppm) raises an alert,
+# at most once per SENSOR_ALERT_COOLDOWN_MINUTES per quantity. Health sensors are
+# never read in the background.
+SENSOR_MONITOR = False
+SENSOR_MONITOR_SECONDS = 60
+SENSOR_ALERT_COOLDOWN_MINUTES = 30
+SENSOR_NOTIFICATIONS = True        # Show alerts as Windows notifications (Command Centre).
 
 # Devices
 #

@@ -115,7 +115,8 @@ def test_simulator_values_are_plausible_and_marked():
     readings, problems = SimulatedSource(seed=1).read()
 
     assert problems == []
-    assert {r.quantity for r in readings} == {"temperature", "humidity", "pressure", "motion", "heart_rate", "spo2"}
+    assert {r.quantity for r in readings} == {"temperature", "humidity", "pressure", "light", "motion", "co2",
+                                              "tvoc", "pm2_5", "heart_rate", "spo2"}
     assert all(r.simulated for r in readings)
 
 
@@ -193,8 +194,12 @@ def test_hub_keeps_health_out_unless_asked():
 
 def test_room_temperature():
     result = SensorsTool(SensorHub([esp32()], SensorStore())).execute(quantity="temperature")
+    at = result.data.get("temperature").time.strftime("%H:%M")
 
-    assert result.message == "Temperature in your room: 23.4 °C (Room ESP32, just now)."
+    assert result.message.splitlines() == [
+        f"Temperature in your room: 23.4 °C (Room ESP32, {at}, just now): comfortable.",
+        "Guide: 20–26 °C is a typical indoor comfort range; it depends on clothing and activity.",
+    ]
 
 
 def test_simulated_values_are_labelled():
@@ -205,13 +210,15 @@ def test_simulated_values_are_labelled():
 
 def test_all_room_readings():
     result = SensorsTool(SensorHub([esp32()], SensorStore())).execute(quantity="all")
+    at = result.data.get("temperature").time.strftime("%H:%M")
 
     assert result.message.splitlines() == [
         "Room sensors:",
-        "  Temperature: 23.4 °C (Room ESP32, just now)",
-        "  Humidity: 55% (Room ESP32, just now)",
-        "  Air pressure: 1008 hPa (Room ESP32, just now)",
-        "  Motion: no motion (Room ESP32, just now)",
+        f"  Temperature: 23.4 °C (Room ESP32, {at}, just now): comfortable",
+        f"  Humidity: 55% (Room ESP32, {at}, just now): comfortable",
+        f"  Air pressure: 1008 hPa (Room ESP32, {at}, just now)",
+        f"  Motion: no motion (Room ESP32, {at}, just now)",
+        "No reading for: ambient light, CO₂, VOCs and fine dust (PM2.5).",
     ]
     assert "Heart rate" not in result.message
 
@@ -219,7 +226,9 @@ def test_all_room_readings():
 def test_motion():
     hub = SensorHub([esp32(with_readings(motion=True))], SensorStore())
 
-    assert SensorsTool(hub).execute(quantity="motion").message == "Motion detected in your room (Room ESP32, just now)."
+    result = SensorsTool(hub).execute(quantity="motion")
+    at = result.data.get("motion").time.strftime("%H:%M")
+    assert result.message == f"Motion detected in your room (Room ESP32, {at}, just now)."
 
 
 def test_stale_value_is_explained():
@@ -242,10 +251,11 @@ def test_no_readings_at_all():
 
 def test_health_readings_carry_a_disclaimer():
     result = HealthTool(SensorHub([esp32()], SensorStore())).execute(quantity="all")
+    at = result.data.get("heart_rate").time.strftime("%H:%M")
 
     assert result.message.splitlines() == [
-        "Heart rate: 72 bpm (Room ESP32, just now)",
-        "Blood oxygen (SpO2): 98% (Room ESP32, just now)",
+        f"Heart rate: 72 bpm (Room ESP32, {at}, just now)",          # never interpreted
+        f"Blood oxygen (SpO2): 98% (Room ESP32, {at}, just now)",
         "This is informational only, not a medical measurement. If you feel unwell, please contact a doctor.",
     ]
 
@@ -281,7 +291,8 @@ def make_engine(fake_provider, memory):
 def test_temperature_question(make_engine, fake_provider):
     reply = make_engine().process_message("What's the temperature in my room?")
 
-    assert reply == "Temperature in your room: 23.4 °C (Room ESP32, just now)."
+    assert reply.startswith("Temperature in your room: 23.4 °C (Room ESP32, ")
+    assert reply.splitlines()[0].endswith(", just now): comfortable.")
     assert fake_provider.calls == []
 
 

@@ -3,15 +3,17 @@ The Sensor Hub: asks every configured source for readings, keeps the
 valid ones, stores them, and falls back to a recent stored reading
 (up to ``SENSOR_MAX_AGE_MINUTES`` old) if a device can't be reached.
 
-Readings are fetched when you ask, not continuously.
+Readings are fetched when you ask, and every minute while background
+watching (aurora/sensors/service.py) is on. One snapshot runs at a time.
 """
 
 import logging
+import threading
 from dataclasses import dataclass, field
 from datetime import timedelta
 
 from aurora.config import settings
-from aurora.sensors.reading import HEALTH_QUANTITIES, Reading
+from aurora.sensors.reading import HEALTH_QUANTITIES, Reading, register_extra
 from aurora.sensors.sources import SensorSource, SourceError, build_sources
 from aurora.sensors.store import SensorStore
 
@@ -35,6 +37,9 @@ class SensorHub:
         self._sources = sources
         self._store = store
         self._client = client   # HTTP client for ESP32 sources (tests inject a fake).
+        # Other simple sensors declared in settings (bad entries are reported, not used).
+        self.setup_problems = register_extra()
+        self._lock = threading.Lock()     # the Command Centre and the monitor may ask at once
 
     @property
     def sources(self) -> list[SensorSource]:
@@ -52,8 +57,13 @@ class SensorHub:
         """Fresh readings for ``quantities``. Health quantities only if ``include_health``."""
         if not include_health:
             quantities = quantities - HEALTH_QUANTITIES
+        with self._lock:
+            return self._snapshot(quantities)
+
+    def _snapshot(self, quantities: set[str]) -> Snapshot:
 
         snap = Snapshot()
+        snap.problems.extend(self.setup_problems)
         for source in self.sources:
             try:
                 readings, problems = source.read()
@@ -68,8 +78,10 @@ class SensorHub:
             snap.problems.extend(problems)
             wanted = [r for r in readings if r.quantity in quantities]
             self.store.add(wanted)
-            for reading in wanted:
-                snap.readings.setdefault(reading.quantity, reading)
+            for reading in wanted:      # the most recently measured value of each kind
+                current = snap.readings.get(reading.quantity)
+                if current is None or reading.time > current.time:
+                    snap.readings[reading.quantity] = reading
 
         # Anything no device answered for: use a recent stored reading, if any.
         max_age = timedelta(minutes=settings.SENSOR_MAX_AGE_MINUTES)

@@ -29,6 +29,9 @@ BACKEND = {
     "voice_barge_in": ("VOICE_BARGE_IN", bool, lambda v: True),
     # "" = the Windows default microphone (settings.VOICE_INPUT_DEVICE = None)
     "voice_input_device": ("VOICE_INPUT_DEVICE", str, lambda v: len(v) <= 200),
+    # Background sensor watching (room sensors only, never health) and its notifications.
+    "sensor_monitoring": ("SENSOR_MONITOR", bool, lambda v: True),
+    "sensor_notifications": ("SENSOR_NOTIFICATIONS", bool, lambda v: True),
 }
 
 # Preferences used only by the interface: key -> (type, default, check)

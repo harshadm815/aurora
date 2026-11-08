@@ -176,6 +176,12 @@ def main():
     if reminders_tool is not None:
         reminders_tool.scheduler.notify = lambda text: print(f"\n\a{text}\nYou: ", end="", flush=True)
 
+    # Background sensor watching (SENSOR_MONITOR, off by default): show alerts like reminders.
+    from aurora.events import topics
+
+    engine.events.subscribe(topics.SENSOR_ALERT, lambda event: print(
+        f"\n\a🌡  {event.data.get('message', '')}\nYou: ", end="", flush=True))
+
     # Show when the camera turns on and off for "what do you see?" / "read this".
     camera_tool = engine.tool_manager.get("Camera")
     if camera_tool is not None:

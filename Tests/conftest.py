@@ -72,6 +72,22 @@ def no_camera_or_microphone(monkeypatch):
     monkeypatch.setattr(MicrophoneSource, "__init__", microphone_blocked)
 
 
+def release_widgets():
+    """Pages made in a test have no parent window. Delete them while Qt is fully
+    alive; left to Python's shutdown, Qt sometimes crashes the test run on exit
+    (an access violation after every test has passed)."""
+    from PySide6.QtCore import QCoreApplication, QEvent
+    from PySide6.QtWidgets import QApplication
+
+    if QApplication.instance() is None:
+        return
+    for widget in QApplication.topLevelWidgets():
+        widget.close()
+        widget.deleteLater()
+    QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)
+    QCoreApplication.processEvents()
+
+
 @pytest.fixture
 def fake_provider():
     return FakeProvider()

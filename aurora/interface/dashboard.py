@@ -69,9 +69,15 @@ class DashboardView(BaseView):
         self.memory_card = StatCard("Memory")
         self.cpu_card = StatCard("CPU", meter=True)
         self.ram_card = StatCard("RAM", meter=True)
-        for column, card in enumerate([self.ai_card, self.model_card, self.memory_card, self.cpu_card, self.ram_card]):
+        self.room_card = StatCard("Room")
+        self.room_card.set("—", "Turn on background watching in the Sensor Centre to see your room here.")
+        for column, card in enumerate([self.ai_card, self.model_card, self.memory_card, self.cpu_card, self.ram_card,
+                                       self.room_card]):
             cards.addWidget(card, 0, column)
         self.body.addLayout(cards)
+        backend.sensor_readings.connect(self.show_room)
+        backend.sensor_monitoring.connect(
+            lambda on: None if on else self.room_card.set("—", "Background sensor watching is off."))
 
         # --- Services, activity, quick actions ------------------------------------
         lower = QHBoxLayout()
@@ -161,6 +167,31 @@ class DashboardView(BaseView):
         self.status_dot.set_state("error", pulse=False)
         self.status_text.setText(message)
         self.ai_card.set("Offline", message)
+
+    def show_room(self, data: dict):
+        """The room at a glance, from the Sensor Service's latest readings."""
+        from aurora.interface.sensors_view import readings_from_event
+        from aurora.sensors.interpret import POOR, interpret
+
+        readings, stale = readings_from_event(data)
+        fresh = {q: r for q, r in readings.items() if q not in stale}
+        temperature = fresh.get("temperature")
+        value = temperature.formatted() if temperature else "—"
+        parts = []
+        poor = [r.spec.label for r in fresh.values() if (m := interpret(r)) is not None and m.level == POOR]
+        air = fresh.get("co2") or fresh.get("eco2")
+        if air is not None and (meaning := interpret(air)) is not None:
+            parts.append(f"air {meaning.summary}")
+        if poor:
+            parts.append("check " + ", ".join(poor))
+        elif fresh and not parts:
+            parts.append("nothing needs attention")
+        newest = max((r.time for r in fresh.values()), default=None)
+        if newest is not None:
+            parts.append(f"{newest:%H:%M}")
+        if any(r.simulated for r in fresh.values()):
+            parts.append("SIMULATED")
+        self.room_card.set(value, " · ".join(parts) if parts else "No room readings.")
 
     def _refresh_status(self):
         status = self.backend.status()

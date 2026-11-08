@@ -214,7 +214,7 @@ def test_engine_conversation_round_trip(fake_provider):
 
     engine.shutdown()
     assert engine.running is False
-    assert engine.service_manager.status() == {"Brain": "Stopped"}
+    assert engine.service_manager.status() == {"Brain": "Stopped", "Sensors": "Stopped"}
 
 
 def test_clear_keeps_only_system_message(fake_provider):
@@ -240,13 +240,15 @@ def test_engine_publishes_lifecycle_and_message_events_in_order(fake_provider):
     engine.shutdown()
 
     assert seen == [
-        topics.SERVICE_STARTED,
+        topics.SERVICE_STARTED,         # Brain
+        topics.SERVICE_STARTED,         # Sensors (background watching stays off)
         topics.KERNEL_STARTED,
         topics.MESSAGE_RECEIVED,
         topics.ROUTE_DECIDED,
         topics.RESPONSE_GENERATED,
         topics.CONVERSATION_CLEARED,
         topics.KERNEL_STOPPING,
+        topics.SERVICE_STOPPED,
         topics.SERVICE_STOPPED,
         topics.KERNEL_STOPPED,
     ]
@@ -261,7 +263,7 @@ def test_engine_plugins_follow_kernel_lifecycle(fake_provider):
     engine.start()
     status = engine.status()
     assert status["running"] is True
-    assert status["services"] == {"Brain": "Running"}
+    assert status["services"] == {"Brain": "Running", "Sensors": "Running"}
     assert status["plugins"] == {"Feed": "Running"}
 
     with pytest.raises(RuntimeError):
@@ -303,7 +305,7 @@ def test_brain_service_errors_when_provider_unavailable(fake_provider):
 
     engine.start()
 
-    assert engine.status()["services"] == {"Brain": "Error"}
+    assert engine.status()["services"] == {"Brain": "Error", "Sensors": "Running"}
 
 
 def test_engine_publishes_route_decision(fake_provider):

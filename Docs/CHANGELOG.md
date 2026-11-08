@@ -1,5 +1,47 @@
 # Changelog
 
+## 0.31.0 — Sensor integration (2026-11-08)
+
+Blueprint Phase 14. See "Sensor Hub" in Docs/ARCHITECTURE.md.
+
+### Added
+- **New quantities**: ambient light, CO₂, estimated CO₂ and VOCs, PM2.5
+  and PM10; other simple sensors can be declared in
+  `SENSOR_EXTRA_QUANTITIES`.
+- **Timestamps**: each reading carries when it was measured (devices may
+  send `"ages"`); values older than 5 minutes are refused. A device's
+  `"last_motion_s"` is kept in history.
+- **Permitted readings**: `"quantities"` in a `SENSOR_SOURCES` entry.
+- **Interpretation** (`aurora/sensors/interpret.py`): comfort and air
+  bands with their references, trends from history, 24-hour summaries,
+  window advice. Health readings are never interpreted.
+- **Sensor Service** (`aurora/sensors/service.py`): optional background
+  watching (off by default), `sensor.readings` / `sensor.alert` /
+  `sensor.monitoring` events, alerts with a cooldown.
+- New questions: air quality, comfort, "should I open a window?", light,
+  CO₂ / VOCs / dust, "how has the temperature changed today?", "when was
+  the last motion?".
+- **Sensor Centre**: eight cards with meanings, a 24-hour history chart,
+  the background-watching switch, alerts. **Dashboard**: room card.
+  Windows notifications for alerts; terminal shows them too.
+- Preferences `sensor_monitoring`, `sensor_notifications`.
+- **Firmware**: BH1750 (light) and SGP30 (VOCs, estimated CO₂, with
+  humidity compensation), ages and last-motion time. Not yet tested on
+  hardware; its JSON format is checked by a test, and a virtual device on
+  127.0.0.1 was read end to end.
+- 110 new tests.
+
+### Changed
+- Sensor answers include the measuring time and what the value means.
+- With several devices, the most recently measured value is used (was:
+  the first device's).
+- The engine status lists a "Sensors" service.
+
+### Fixed
+- Test runs that create Command Centre pages could crash Python on exit
+  (an access violation after every test had passed, about one run in
+  six). The pages are now deleted while Qt is still running.
+
 ## 0.30.0 — Vision system (2026-11-07)
 
 Blueprint Phase 13. See "Vision" in Docs/ARCHITECTURE.md.

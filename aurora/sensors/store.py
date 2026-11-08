@@ -44,15 +44,41 @@ class SensorStore:
         return sqlite3.connect(self.path)
 
     def add(self, readings: list[Reading]) -> None:
+        """Stores readings. One a device reports again (same quantity, source and
+        measuring time, e.g. "last motion 40 s ago" asked twice) is stored once."""
         with self._connect() as connection:
             for reading in readings:
+                table = _TABLES[reading.is_health]
+                stamp = reading.time.isoformat(timespec="seconds")
+                if connection.execute(f"SELECT 1 FROM {table} WHERE quantity = ? AND source = ? AND time = ?",
+                                      (reading.quantity, reading.source, stamp)).fetchone():
+                    continue
                 connection.execute(
-                    f"INSERT INTO {_TABLES[reading.is_health]} "
+                    f"INSERT INTO {table} "
                     "(time, quantity, value, source, location, simulated) VALUES (?, ?, ?, ?, ?, ?)",
-                    (reading.time.isoformat(), reading.quantity, float(reading.value),
+                    (stamp, reading.quantity, float(reading.value),
                      reading.source, reading.location, int(reading.simulated)),
                 )
         self.purge()
+
+    def history(self, quantity: str, since: datetime, health: bool = False) -> list[Reading]:
+        """Readings of one quantity measured since ``since``, oldest first."""
+        with self._connect() as connection:
+            rows = connection.execute(
+                f"SELECT time, quantity, value, source, location, simulated FROM {_TABLES[health]} "
+                "WHERE quantity = ? AND time >= ? ORDER BY time",
+                (quantity, since.isoformat(timespec="seconds")),
+            ).fetchall()
+        return [self._reading(row) for row in rows]
+
+    def last_motion(self) -> Reading | None:
+        """The most recent time motion was seen (a reading of True)."""
+        with self._connect() as connection:
+            row = connection.execute(
+                f"SELECT time, quantity, value, source, location, simulated FROM {_TABLES[False]} "
+                "WHERE quantity = 'motion' AND value > 0 ORDER BY time DESC LIMIT 1",
+            ).fetchone()
+        return self._reading(row) if row else None
 
     def latest(self, quantity: str, health: bool = False, max_age: timedelta | None = None) -> Reading | None:
         with self._connect() as connection:

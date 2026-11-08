@@ -475,20 +475,89 @@ _ABOUT_ME = re.compile(r"\bmy\b|^(?:check|measure|read|take)\b", re.I)
 _SLEEP = re.compile(r"\bhow\s+(?:did|have)\s+i\s+(?:sleep|slept)\b|\bmy\s+sleep\b", re.I)
 
 
+# Quantities that only an indoor sensor can answer (no "in my room" needed).
+_SENSOR_ONLY_QUANTITY = [
+    (re.compile(r"\b(?:co2|co₂|carbon\s+dioxide)\b", re.I), "co2"),
+    (re.compile(r"\b(?:t?vocs?|volatile\s+organic(?:\s+compounds)?)\b", re.I), "tvoc"),
+    (re.compile(r"\b(?:pm\s*2[.,]?5|fine\s+dust|particulates?|particle\s+(?:level|count)s?|dust\s+levels?)\b", re.I),
+     "pm2_5"),
+    (re.compile(r"\bpm\s*10\b", re.I), "pm10"),
+    (re.compile(r"\b(?:light\s+levels?|ambient\s+light|lux|how\s+(?:bright|dark|dim)\s+is\s+it|"
+                r"is\s+it\s+(?:too\s+)?(?:dark|bright|dim)|is\s+there\s+enough\s+light)\b", re.I), "light"),
+]
+# Not plain "light": "is the light on in my room" is about the lamp (Devices).
+_INDOOR_ONLY_QUANTITY = [*_ROOM_QUANTITY,
+                         (re.compile(r"\b(?:brightness|how\s+much\s+light)\b", re.I), "light")]
+
+_LAST_MOTION = re.compile(
+    r"\b(?:when\s+(?:was|did)\s+(?:the\s+)?(?:last\s+motion|motion\s+last)|last\s+(?:motion|movement)|"
+    r"when\s+did\s+(?:anyone|anybody|someone|somebody)\s+last\s+move)\b", re.I)
+_WINDOW = re.compile(
+    r"\b(?:should\s+i\s+open\s+(?:a|the)\s+windows?|do\s+i\s+need\s+to\s+open\s+(?:a|the)\s+windows?|"
+    r"(?:does|should)\s+(?:my|the)\s+room\s+(?:need\s+)?air(?:ing)?|should\s+i\s+air\s+(?:my|the)\s+room|"
+    r"do\s+i\s+need\s+(?:some\s+)?fresh\s+air)\b", re.I)
+_AIR = re.compile(
+    r"\b(?:air\s+quality|how(?:'s|\s+is)\s+the\s+air|is\s+the\s+air\s+(?:fresh|stuffy|ok(?:ay)?|good|bad|clean)|"
+    r"is\s+it\s+stuffy)\b", re.I)
+_COMFORT = re.compile(
+    r"\b(?:is\s+(?:my|the)\s+room\s+comfortable|how\s+comfortable\s+is\s+(?:my|the)\s+room|"
+    r"is\s+it\s+comfortable\s+(?:in\s+here|in\s+my\s+room|inside)|room\s+comfort)\b", re.I)
+_TREND = re.compile(
+    r"\b(?:trend|history|how\s+(?:has|did)\s+.+\s+chang(?:e|ed)|chang(?:e|ed)\s+(?:today|over)|"
+    r"over\s+the\s+(?:last\s+|past\s+)?(?:day|24\s+hours)|(?:highest|lowest|average)\b.*\btoday|today's)\b", re.I)
+_ELSEWHERE = re.compile(r"\bin\s+(?!my\b|the\s+room\b|here\b|this\s+room\b|our\b)[a-z]", re.I)
+
+
+def _sensor(quantity: str, reason: str, view: str = "now", confidence: float = 0.9) -> RouteDecision:
+    arguments = {"quantity": quantity} if view == "now" else {"quantity": quantity, "view": view}
+    return RouteDecision(Intent.SENSORS, confidence, targets.SENSORS, arguments, reason)
+
+
+def _custom_quantity(text: str) -> str | None:
+    """Extra sensor quantities declared in settings, matched by their label ("soil moisture")."""
+    from aurora.sensors.reading import QUANTITIES
+
+    lowered = text.lower()
+    for name, spec in QUANTITIES.items():
+        if spec.custom and (spec.label.lower() in lowered or name.replace("_", " ") in lowered):
+            return name
+    return None
+
+
 def sensors_rule(original: str, body: str) -> RouteDecision | None:
     text = _clean(body)
 
     if _ALL_SENSORS.match(text):
-        return RouteDecision(Intent.SENSORS, 0.9, targets.SENSORS, {"quantity": "all"},
-                             "The user asks for all sensor readings.")
+        return _sensor("all", "The user asks for all sensor readings.")
+    if _LAST_MOTION.search(text):
+        return _sensor("motion", "The user asks when motion was last seen.", view="last_motion")
     if _MOTION.search(text):
-        return RouteDecision(Intent.SENSORS, 0.85, targets.SENSORS, {"quantity": "motion"},
-                             "The user asks whether the motion sensor saw anything.")
-    if _INDOOR.search(text):
-        for pattern, quantity in _ROOM_QUANTITY:
+        return _sensor("motion", "The user asks whether the motion sensor saw anything.", confidence=0.85)
+    if _WINDOW.search(text):
+        return _sensor("window", "The user asks whether to air the room.")
+    if _COMFORT.search(text):
+        return _sensor("comfort", "The user asks whether their room is comfortable.")
+
+    indoor = bool(_INDOOR.search(text))
+    elsewhere = bool(_ELSEWHERE.search(text)) and not indoor     # "air quality in Delhi": not our sensors
+    quantity = None
+    for pattern, name in _SENSOR_ONLY_QUANTITY:
+        if pattern.search(text):
+            quantity = name
+            break
+    if quantity is None and indoor:
+        for pattern, name in _INDOOR_ONLY_QUANTITY:
             if pattern.search(text):
-                return RouteDecision(Intent.SENSORS, 0.9, targets.SENSORS, {"quantity": quantity},
-                                     "The user asks about conditions in their room.")
+                quantity = name
+                break
+    quantity = quantity or _custom_quantity(text)
+
+    if quantity is not None and not elsewhere:
+        if _TREND.search(text):
+            return _sensor(quantity, "The user asks how a room reading has changed.", view="trend")
+        return _sensor(quantity, "The user asks about conditions in their room.")
+    if _AIR.search(text) and not elsewhere:
+        return _sensor("air", "The user asks about the air in their room.")
     return None
 
 

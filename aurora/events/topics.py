@@ -45,3 +45,10 @@ TOOL_EXECUTED = "tool.executed"
 TOOL_FAILED = "tool.failed"
 CONFIRMATION_REQUESTED = "tool.confirmation_requested"
 CONFIRMATION_ANSWERED = "tool.confirmation_answered"
+
+# Automation: a reminder is due; reminders that fell due while AURORA was
+# closed; a scheduled task ran (or was skipped). Payloads hold what to show
+# the user (the reminder or task text), which is never logged.
+REMINDER_DUE = "automation.reminder_due"
+REMINDERS_MISSED = "automation.reminders_missed"
+TASK_RAN = "automation.task_ran"

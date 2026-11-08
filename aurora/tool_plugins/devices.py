@@ -8,7 +8,7 @@ allowed action, value range, rate limit) happen in DeviceController.
 """
 
 from aurora.devices.controller import DeviceController, build_controller
-from aurora.devices.device import DeviceError
+from aurora.devices.device import Command, DeviceError, DeviceState
 from aurora.kernel.permissions import Permission
 from aurora.tools.result import ToolResult
 from aurora.tools.tool import BaseTool
@@ -63,11 +63,7 @@ class DevicesTool(BaseTool):
             return ToolResult(False, str(error))
 
         def carry_out() -> ToolResult:
-            try:
-                state = self.controller.apply(target, command)
-            except DeviceError as error:
-                return ToolResult(False, str(error))
-            return ToolResult(True, f"Done. {target.describe(state)}.{self._tag(target)}", state)
+            return self.change(target, command, "Done. ")
 
         if not target.confirm and not guessed:
             return carry_out()
@@ -77,7 +73,59 @@ class DevicesTool(BaseTool):
             f"{guessed}Shall I {command.describe(target)}?{self._tag(target)} (yes / no)",
             command,
             confirm=carry_out,
+            simulated=self.controller.driver(target).simulated,
         )
+
+    # --- Changing, and undoing a change ----------------------------------------------------
+
+    @staticmethod
+    def _restore_commands(device, before: DeviceState) -> list[Command]:
+        """The commands that put a device back to ``before``."""
+        if not before.on:
+            return [Command("off")]
+        commands = [Command("on")]
+        if before.level is not None and device.setting and "set" in device.allowed:
+            commands.append(Command("set", before.level))
+        return commands
+
+    def change(self, target, command: Command, prefix: str = "") -> ToolResult:
+        """Applies a validated command; the result can be undone ("undo that")."""
+        try:
+            before = self.controller.state(target)
+        except DeviceError:
+            before = None                       # can't read it: the change can't be undone
+        try:
+            state = self.controller.apply(target, command)
+        except DeviceError as error:
+            return ToolResult(False, str(error), simulated=self.controller.driver(target).simulated)
+        simulated = self.controller.driver(target).simulated
+        result = ToolResult(True, f"{prefix}{target.describe(state)}.{self._tag(target)}", state, simulated=simulated)
+        if before is not None and (before.on, before.level) != (state.on, state.level):
+            restore = self._restore_commands(target, before)
+            result.undo = lambda: self._restore(target, restore)
+            result.undo_label = f"put the {target.name} back ({target.describe(before).split(' is ', 1)[1]})"
+        return result
+
+    def _restore(self, target, commands: list[Command]) -> ToolResult:
+        try:
+            for command in commands:
+                state = self.controller.apply(target, command)
+        except DeviceError as error:
+            return ToolResult(False, str(error), simulated=self.controller.driver(target).simulated)
+        return ToolResult(True, f"{target.describe(state)}.{self._tag(target)}", state,
+                          simulated=self.controller.driver(target).simulated)
+
+    def run_scheduled(self, device: str, action: str, value=None) -> ToolResult:
+        """For a scheduled task you approved: only devices marked "schedulable"."""
+        try:
+            target = self.controller.find(device)
+            if not target.schedulable:
+                return ToolResult(False, f"The {target.name} isn't marked as schedulable, so a scheduled task "
+                                         "can't change it.")
+            command = self.controller.validate(target, action, value)
+        except DeviceError as error:
+            return ToolResult(False, str(error))
+        return self.change(target, command)
 
     def list(self) -> ToolResult:
         devices = list(self.controller.devices.values())

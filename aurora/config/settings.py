@@ -9,7 +9,7 @@ import sys
 from pathlib import Path
 
 APP_NAME = "AURORA"
-VERSION = "0.31.0"
+VERSION = "0.32.0"
 
 USER_NAME = "Harry"
 
@@ -137,6 +137,13 @@ PERMISSION_GRANTS: dict[str, list[str]] = {
     # The research team: reads your research log and saves sessions you approve.
     # (The tools it uses keep their own permissions.)
     "Research": ["memory.read", "memory.write"],
+    # Opening programs listed in APPS (nothing else). Closing asks first.
+    "Apps": ["apps.launch"],
+    # Tidying folders listed in ORGANIZE_FOLDERS: always previewed and confirmed,
+    # never deletes or overwrites, and can be undone.
+    "Files": ["filesystem.read", "filesystem.write"],
+    # Scheduled tasks: each is approved once, then runs at its time.
+    "Schedule": ["automation"],
 }
 
 # Research
@@ -264,9 +271,38 @@ DEVICE_CONTROLLER_URL = "http://aurora-devices.local"
 DEVICE_CONTROLLER_TOKEN = ""       # Set in local_settings.py; must match the firmware.
 DEVICE_MAX_CHANGES_PER_MINUTE = 6  # Per device, to stop rapid on/off switching.
 
-# Reminders (this session only)
+# Reminders (kept on disk: one due while AURORA is closed is reported at the next start)
 REMINDER_MAX_ACTIVE = 20
 REMINDER_MAX_HOURS = 24
+
+# Automation (aurora/automation/): the audit trail, reminders, scheduled tasks
+# and the record of file moves (for undo) live in this database (not in git).
+AUTOMATION_DATABASE_PATH = PROJECT_ROOT / "aurora_automation.db"
+AUDIT_RETENTION_DAYS = 90
+
+# Programs AURORA may open ("open notepad"). Nothing outside this list can be
+# started, and no arguments are taken from what you say. "confirm": True makes
+# AURORA ask first. Add your own, e.g.
+#   {"name": "VS Code", "aliases": ["code"], "command": [r"C:\Path\To\Code.exe"], "confirm": True}
+APPS: list[dict] = [
+    {"name": "Notepad", "aliases": ["text editor"], "command": ["notepad.exe"]},
+    {"name": "Calculator", "aliases": ["calc"], "command": ["calc.exe"]},
+    {"name": "Paint", "aliases": ["ms paint"], "command": ["mspaint.exe"]},
+    {"name": "File Explorer", "aliases": ["explorer", "my documents folder", "documents folder"],
+     "command": ["explorer.exe", "{documents}"]},
+]
+
+# Folders AURORA may tidy ("organise my documents by type / by month").
+# Only files directly in these folders are moved, into subfolders of the same
+# folder. Nothing is deleted or overwritten; programs and hidden files stay put.
+ORGANIZE_FOLDERS: list[Path] | None = None    # None = just DOCUMENTS_DIR (whatever it is set to)
+ORGANIZE_MAX_FILES = 500
+
+# Scheduled tasks ("every weekday at 18:30 turn on the desk light").
+SCHEDULE_MAX_TASKS = 20
+SCHEDULE_CHECK_SECONDS = 20        # How often due tasks are looked for.
+SCHEDULE_GRACE_MINUTES = 5         # A run missed by more than this (AURORA closed) is skipped and reported.
+SCHEDULE_MAX_FAILURES = 3          # Consecutive failures before a task is paused.
 
 # Personal overrides
 #

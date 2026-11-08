@@ -10,6 +10,7 @@ from PySide6.QtWidgets import (
 )
 
 from aurora.config import settings
+from aurora.interface.automation_view import AutomationView
 from aurora.interface.chat import ChatView
 from aurora.interface.components.widgets import Emblem, fade_in, label
 from aurora.interface.dashboard import DashboardView
@@ -39,6 +40,7 @@ PAGES = [
     ("Training", TrainingMonitorView),
     ("Vision", VisionView),
     ("Sensors", SensorsView),
+    ("Automation", AutomationView),
     ("System", SystemMonitorView),
     ("Settings", SettingsView),
 ]

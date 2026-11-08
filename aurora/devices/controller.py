@@ -140,6 +140,7 @@ def build_controller(config: list[dict] | None = None, client=None) -> DeviceCon
             id=entry["id"], name=entry["name"], kind=entry["kind"],
             aliases=entry.get("aliases", []), confirm=entry.get("confirm", True),
             allowed=set(entry["allowed"]) if entry.get("allowed") else None,
+            schedulable=bool(entry.get("schedulable", False)),
         )
         if entry.get("driver", "simulated") == "simulated":
             drivers[device.id] = simulator

@@ -1,6 +1,6 @@
 # AURORA Architecture
 
-Version: 0.20.0
+Version: 0.21.0
 Status: Describes what exists in the code today. Planned components are listed separately at the end.
 
 ---
@@ -484,46 +484,121 @@ Settings: `SENSOR_SOURCES`, `SENSOR_TIMEOUT_SECONDS`,
 
 ## Devices and automation
 
-**Rule: an AI suggestion never becomes a hardware command by itself.**
+**Rules: every action AURORA can take is listed with its permission,
+whether it asks first and how to undo it (`aurora/automation/actions.py`,
+shown on the Command Centre's Automation page). Anything not listed, it
+can't do. An AI suggestion never becomes an action by itself, and every
+action is written to the audit trail.**
 
 | You say | What happens |
 |---|---|
-| turn on my desk light · switch the fan off · set the fan speed to 2 · dim the lamp to 30% | "Shall I …? (yes / no)", then the change |
-| is the fan on? · list my devices | Current state, no confirmation needed |
-| remind me in 10 minutes to stretch · remind me at 5 pm to call home · set a timer for 3 minutes | A reminder shown in the terminal when due |
-| what are my reminders · cancel my reminders | List / cancel |
+| turn on my desk light · switch the fan off · set the fan speed to 2 | "Shall I …? (yes / no)", then the change |
+| open notepad · launch the calculator · close notepad | Opens a program from the `APPS` list; closes only what AURORA opened (asks first) |
+| organise my documents by type / by month · undo my last tidy-up | Shows every planned move, asks, moves; can be undone, even after a restart |
+| remind me in 10 minutes to stretch · cancel reminder 2 · what are my reminders | Reminders kept on disk; one missed while AURORA was closed is reported at the next start |
+| every weekday at 18:30 turn on the fan · every day at 7 run my morning briefing · every evening at 9 remind me to … · every morning at 8 check my sensors | A scheduled task, approved once |
+| what tasks are scheduled · pause task 2 · resume task 2 · delete task 2 | Managing tasks |
+| undo that | Offers to reverse the most recent reversible action (asks first) |
 
-Safety, in order:
+The catalogue (`ACTIONS`):
 
-1. **Only configured devices** (`settings.DEVICES`) exist, each with a
-   kind (`light`, `fan`, `plug`), the actions it allows and value limits
-   (brightness 1–100 %, fan speed 1–3). Anything else is refused with an
-   explanation, never clamped.
-2. **Every change asks "yes / no"** through the same confirmation flow
-   as deleting memories. A device can skip this only if you add
-   `"confirm": False` to it yourself.
-3. **Commands come only from the user's own message.** Device intents are
-   routed from what you type or say; text from Wikipedia, arXiv,
-   documents, OCR, sensors or the language model is never routed, so a
-   web page that says "turn on the desk light" can't switch anything
-   (tested). Device commands are never part of a multi-step plan.
-4. **Rate limit**: at most `DEVICE_MAX_CHANGES_PER_MINUTE` (6) changes per
-   device per minute.
-5. **Audit trail** of every change (device, change, simulated or real),
-   kept in memory and logged.
-6. Needs the `hardware_control` permission (component `Devices`).
+| Action | Needs | Asks first | Undo |
+|---|---|---|---|
+| Change a device | `hardware_control` | yes, unless you set `"confirm": False` for it | "undo that" restores the previous state |
+| Open a program | `apps.launch` | if you set `"confirm": True` for it | "close …" if AURORA started it |
+| Close a program | `apps.launch` | always | can't be undone (unsaved work is lost) |
+| Tidy a folder / undo a tidy-up | `filesystem.read`, `filesystem.write` | always | "undo that" / "undo my last tidy-up" |
+| Set / cancel a reminder | (none) | no | cancel / set again |
+| Add a scheduled task | `automation` | always | delete or pause it |
+| Pause, resume, delete a task | `automation` | only "delete all" | resume / add again |
+| Run a scheduled task | `automation` plus the task's own | no (approved when added) | depends on the task |
+| Delete memories / a routine | `memory.read`, `memory.write` | always | can't be undone / teach again |
 
-Drivers (`aurora/devices/drivers.py`): `SimulatedDriver` (default; every
-answer says "simulated device") and `HttpRelayDriver` for
-`firmware/esp32_device_controller`, which refuses requests without the
-shared secret token (`DEVICE_CONTROLLER_TOKEN`, kept in
-`local_settings.py`) and starts with everything off.
+Devices (`aurora/devices/`), safety in order:
 
-**Reminders** (`aurora/automation/reminders.py`) run on background timers
-for the current session only (AURORA says so when you set one), up to 20
-at a time and 24 hours ahead. They are shown, not spoken: the Windows
-speech engine must only be used from the main thread. Reminder text is
-never logged.
+1. **Only configured devices** (`settings.DEVICES`), each with a kind
+   (`light`, `fan`, `plug`), the actions it allows and value limits
+   (brightness 1–100 %, fan speed 1–3). Anything else is refused, never
+   clamped.
+2. **Every change asks "yes / no"**, unless you set `"confirm": False`.
+3. **Commands come only from your own message**: text from web pages,
+   documents, OCR, sensors or the language model is never routed, and
+   device commands are never part of a multi-step plan (tested).
+4. **Rate limit**: `DEVICE_MAX_CHANGES_PER_MINUTE` (6) per device.
+5. **Undo**: the state before the change is read first; "undo that" puts
+   it back (on, off, level), asking first. A change that changed nothing
+   offers no undo.
+6. Needs `hardware_control` (component `Devices`). Drivers:
+   `SimulatedDriver` (default; every answer says "simulated device") and
+   `HttpRelayDriver` for `firmware/esp32_device_controller` (shared
+   secret token, starts with everything off).
+
+**Programs** (`aurora/automation/apps.py`): only those in `APPS`
+(default: Notepad, Calculator, Paint, File Explorer opening Documents),
+each with a fixed command; nothing you say becomes part of it, there is
+no shell, and the program must exist on this PC. AURORA closes only
+programs it started this session. Some Windows programs (Calculator, the
+newer Notepad) hand over to another process at once; AURORA says so
+instead of claiming it can close them.
+
+**Tidying files** (`aurora/automation/files.py`): only folders in
+`ORGANIZE_FOLDERS` (default: Documents), only files directly in them,
+only into subfolders of the same folder (by type: Images, PDFs,
+Documents, Notes, Spreadsheets, Presentations, Audio, Video, Archives;
+or by month). **Nothing is deleted or overwritten**: clashing names get
+" (2)", a file that changed after the preview is left alone, a move onto
+an existing file is refused. Programs, scripts, shortcuts, hidden and
+system files, links, folders and unknown types stay put. Every move is
+recorded in the automation database as it happens; the tidy-up stops at
+the first problem (or when you press Stop) and whatever moved can be
+undone. Undo never overwrites a file that has appeared since, and
+removes only folders it created that are empty.
+
+**Reminders** (`aurora/automation/reminders.py`) are kept in the
+automation database: closing AURORA no longer loses them. One still
+ahead is set again at the next start; one that fell due while AURORA was
+closed is reported then (terminal line, Windows notification, Automation
+page), never shown late as if on time. Up to 20, 24 hours ahead. They
+now also appear in the Command Centre (before, only the terminal showed
+them). Reminder text is never logged.
+
+**Scheduled tasks** (`aurora/automation/schedule.py`), the safety
+design that was missing for automations:
+
+- You approve each task once, with its exact action and times spelled out.
+- Only four kinds: a reminder, a routine you taught (routines can't
+  contain device control, deletions, tidy-ups, schedules or undo), a
+  sensor report, or a device change, and only for devices you marked
+  `"schedulable": True` (checked when added and at every run).
+- Permissions are checked at every run: take away `automation` (or the
+  device's `hardware_control`) and the task stops running.
+- A task runs once per scheduled time, within `SCHEDULE_GRACE_MINUTES`
+  (5). If AURORA wasn't running, the run is skipped and reported, never
+  done late. A new task waits for its next time.
+- Every run is reported (notification / terminal line), audited
+  ("schedule #3") and, for devices, can be undone.
+- After `SCHEDULE_MAX_FAILURES` (3) failures in a row a task is paused.
+- A scheduled run never replaces a question waiting for your yes / no.
+
+**The audit trail** (`aurora/automation/audit.py`, table `audit` in
+`aurora_automation.db`, not in git): every action asked, declined,
+cancelled (you moved on), done, failed, undone or skipped, with who
+started it ("you" or "schedule #3") and whether the device was
+simulated. Kept 90 days (`AUDIT_RETENTION_DAYS`). AURORA's log file only
+records the action and outcome.
+
+The **Automation service** (`aurora/automation/service.py`) restores
+reminders at start, runs the scheduler (checked every
+`SCHEDULE_CHECK_SECONDS`, 20) and publishes `automation.reminder_due`,
+`automation.reminders_missed` and `automation.task_ran`. Requests and
+scheduled tasks share one engine lock, so they never run at once.
+
+Settings: `DEVICES`, `DEVICE_CONTROLLER_URL`, `DEVICE_CONTROLLER_TOKEN`,
+`DEVICE_MAX_CHANGES_PER_MINUTE`, `APPS`, `ORGANIZE_FOLDERS`,
+`ORGANIZE_MAX_FILES`, `REMINDER_MAX_ACTIVE`, `REMINDER_MAX_HOURS`,
+`AUTOMATION_DATABASE_PATH`, `AUDIT_RETENTION_DAYS`,
+`SCHEDULE_MAX_TASKS`, `SCHEDULE_CHECK_SECONDS`, `SCHEDULE_GRACE_MINUTES`,
+`SCHEDULE_MAX_FAILURES`.
 
 ## Multi-agent research
 
@@ -768,7 +843,7 @@ the message to the Brain.
 | `aurora.interface` | `app.py`, `backend.py`, `main_window.py`, nine views, `components/`, `styles/`, `system_info.py` | The AURORA Command Centre desktop interface (see COMMAND_CENTRE.md) | Separate front end |
 | `aurora.agents` | `base.py`, `research_agents.py`, `research_session.py`, `research_log.py` | Agent framework, research team, coordinator, research log | Yes (Research tool) |
 | `aurora.devices` | `device.py`, `drivers.py`, `controller.py` | Device definitions, limits, simulated / ESP32 drivers, checks, rate limit, audit | Yes (Devices tool) |
-| `aurora.automation` | `reminders.py` | Session reminders and timers | Yes (Reminders tool) |
+| `aurora.automation` | `actions.py`, `audit.py`, `store.py`, `reminders.py`, `files.py`, `apps.py`, `schedule.py`, `service.py` | The action catalogue, audit trail, saved reminders, tidying folders with undo, opening programs, scheduled tasks, the Automation service | Yes (Reminders, Files, Apps, Schedule tools; Automation service) |
 | `aurora.sensors` | `reading.py`, `sources.py`, `store.py`, `hub.py`, `interpret.py`, `service.py` | Sensor readings, validation and timestamps, ESP32 / simulated sources, history with separate health storage, interpretation and trends, background watching with events and alerts | Yes (Sensors and Health tools, Sensors service) |
 | `aurora.vision` | `image_input.py`, `camera.py`, `detector.py`, `analyzer.py`, `scene.py`, `evaluate.py`, `motion.py`, `watch.py` | Image input and preprocessing, webcam, object detection checked in two views, OCR, grounded scene reports, evaluation, motion watch | Yes (Camera and Documents tools, Command Centre, `watch`) |
 | `aurora.voice` | `listener.py`, `vad.py`, `speaker.py`, `session.py`, `selftest.py` | Offline speech recognition with wake word and voice activity detection, text-to-speech with interruption, voice conversations, loop-back test | Yes (from `main.py` and the Command Centre, on demand) |
@@ -824,8 +899,8 @@ temporary database instead of `aurora_memory.db`.
 | No NASA / astronomy databases, no source cross-checking between results | Later research work |
 | ESP32 firmware (sensors and devices) not yet tested on hardware; sensors only over Wi-Fi HTTP (no USB serial); interpretation bands are general guidelines and cheap sensors are uncalibrated; no wearable (sleep) support | Later sensor work |
 | Research agents match words, not meaning; no free-form reasoning or summarising (needs a stronger model); no deleting research projects by voice/text yet | Later |
-| No rule-based automations ("turn on the fan when it's above 28 °C"): they would act without a per-change confirmation, so they need their own safety design | Later automation work |
-| Reminders are lost when AURORA closes and are not spoken | Later |
+| Scheduled tasks run at times only; no conditions ("turn on the fan when it's above 28 °C"), no intervals ("every 5 minutes"); undo covers the current session (tidy-ups: any time) | Later automation work |
+| Reminders aren't spoken, and only reach 24 hours ahead | Later |
 | Vision recognises 80 everyday object classes only and misses about a third of them (silhouettes, drawings, unusual angles); no free-form scene descriptions or relations between objects; no recording or face recognition (by design) | A larger detector or captioning model needs more RAM |
 | The small speech model misses uncommon names and places ("Pune" → "pony"); no voice profiles; barge-in is energy-based (off by default) and can be set off by loud speakers | Larger model / later voice work |
 | Document answers match words (with stemming), not meaning, and quote rather than explain; scanned PDFs (images) have no readable text; no general web search | Semantic search, a stronger model, OCR, a search provider |

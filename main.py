@@ -146,6 +146,22 @@ def main():
     preferences.apply(preferences.load())
 
     engine = AuroraEngine()
+    # Automation: reminders missed while AURORA was closed (reported as it starts)
+    # and scheduled tasks as they run. (Due reminders print through the scheduler.)
+    from aurora.events import topics
+
+    def missed(event):
+        lines = [f"  {item['due'][11:16]} {item['text']}" for item in event.data.get("reminders", [])]
+        print("⏰ While AURORA was closed, these reminders were due:\n" + "\n".join(lines))
+
+    def task_ran(event):
+        data = event.data
+        mark = "⏭" if data.get("success") is None else ("✓" if data.get("success") else "✗")
+        print(f"\n{mark}  Scheduled task {data.get('id')} ({data.get('when')}): {data.get('message', '')}\nYou: ",
+              end="", flush=True)
+
+    engine.events.subscribe(topics.REMINDERS_MISSED, missed)
+    engine.events.subscribe(topics.TASK_RAN, task_ran)
 
     print("\n==============================")
     print(" AURORA KERNEL INITIALIZING ")
@@ -177,8 +193,6 @@ def main():
         reminders_tool.scheduler.notify = lambda text: print(f"\n\a{text}\nYou: ", end="", flush=True)
 
     # Background sensor watching (SENSOR_MONITOR, off by default): show alerts like reminders.
-    from aurora.events import topics
-
     engine.events.subscribe(topics.SENSOR_ALERT, lambda event: print(
         f"\n\a🌡  {event.data.get('message', '')}\nYou: ", end="", flush=True))
 

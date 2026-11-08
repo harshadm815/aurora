@@ -19,7 +19,7 @@ from aurora.config import settings
 from aurora.routing import decision as targets
 from aurora.routing.decision import RouteDecision
 from aurora.routing.intent import Intent
-from aurora.routing import knowledge_rules, memory_rules
+from aurora.routing import automation_rules, knowledge_rules, memory_rules
 from aurora.routing.numbers_rule import numbers_rule
 from aurora.tool_plugins.calculator import CalculationError, evaluate
 
@@ -642,6 +642,9 @@ _TIMER = re.compile(
 )
 _REMINDER_LIST = re.compile(r"^(?:list|show(?:\s+me)?|what\s+are)\s+(?:my\s+)?(?:reminders|timers)$", re.I)
 _REMINDER_CANCEL = re.compile(r"^(?:cancel|clear|delete|stop)\s+(?:all\s+)?(?:my\s+)?(?:reminders|timers|the\s+timer)$", re.I)
+_REMINDER_CANCEL_ONE = re.compile(
+    r"^(?:cancel|delete|remove)\s+(?:the\s+|my\s+)?reminder\s+(?:number\s+)?(?P<n>\d+)$"
+    r"|^(?:cancel|delete|remove)\s+(?:the\s+|my\s+)?reminder\s+(?:about|to|for)\s+(?P<text>.+)$", re.I)
 
 
 def _seconds(when: str) -> int | None:
@@ -678,6 +681,11 @@ def reminders_rule(original: str, body: str) -> RouteDecision | None:
         return RouteDecision(Intent.REMINDER, 0.95, targets.REMINDERS, {"action": "list"}, "List reminders.")
     if _REMINDER_CANCEL.match(text):
         return RouteDecision(Intent.REMINDER, 0.95, targets.REMINDERS, {"action": "cancel"}, "Cancel reminders.")
+    match = _REMINDER_CANCEL_ONE.match(text)
+    if match:
+        which = match.group("n") or _clean(match.group("text"))
+        return RouteDecision(Intent.REMINDER, 0.95, targets.REMINDERS, {"action": "cancel", "which": which},
+                             "Cancel one reminder.")
 
     match = _TIMER.match(text)
     if match:
@@ -765,9 +773,12 @@ def vision_rule(original: str, body: str) -> RouteDecision | None:
 # Commands addressed to AURORA's memory. Anything else in the message
 # ("remember that the weather in Pune was great") is the thing to store,
 # not a competing request, so these never trigger clarification.
-_EXPLICIT_COMMANDS = {Intent.REMEMBER, Intent.FORGET, Intent.MEMORY_CONTROL, Intent.EPISODES, Intent.ROUTINES}
+_EXPLICIT_COMMANDS = {Intent.REMEMBER, Intent.FORGET, Intent.MEMORY_CONTROL, Intent.EPISODES, Intent.ROUTINES,
+                      Intent.SCHEDULE, Intent.UNDO}
 
 DEFAULT_RULES: tuple[Rule, ...] = (
+    automation_rules.schedule_rule,      # first: "every day at 7 turn on …" is a task, never a switch now
+    automation_rules.undo_rule,
     calculator_rule,
     numbers_rule,
     weather_rule,
@@ -783,6 +794,8 @@ DEFAULT_RULES: tuple[Rule, ...] = (
     health_rule,
     devices_rule,
     reminders_rule,
+    automation_rules.apps_rule,
+    automation_rules.files_rule,
     research_session_rule,
     memory_rules.memory_control_rule,
     memory_rules.provenance_rule,

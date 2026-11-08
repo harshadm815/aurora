@@ -66,7 +66,10 @@ its "Known gaps" table for what's not done yet.
    `firmware/esp32_sensor_hub/` (wiring and flashing in its README) and
    set `SENSOR_SOURCES` in `aurora/config/local_settings.py`.
 
-7. Optional, devices: AURORA starts with a simulated desk light and fan.
+7. Optional, devices and automation: AURORA starts with a simulated desk
+   light and fan. Add `"schedulable": True` to a device to let scheduled
+   tasks switch it; programs AURORA may open are listed in `APPS`, folders
+   it may tidy in `ORGANIZE_FOLDERS` (default: Documents).
    For real switching, build `firmware/esp32_device_controller/` (read
    its safety notes first) and set `DEVICES`, `DEVICE_CONTROLLER_URL` and
    `DEVICE_CONTROLLER_TOKEN` in `aurora/config/local_settings.py`.

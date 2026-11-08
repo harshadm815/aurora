@@ -1,5 +1,6 @@
 import logging
 import re
+import threading
 
 from aurora.brain.brain import Brain
 from aurora.config import settings
@@ -7,7 +8,7 @@ from aurora.conversation.conversation import Conversation
 from aurora.events import topics
 from aurora.events.bus import EventBus
 from aurora.kernel.context import KernelContext
-from aurora.kernel.permissions import Permission, PermissionManager
+from aurora.kernel.permissions import Permission, PermissionDeniedError, PermissionManager
 from aurora.kernel.service_manager import ServiceManager
 from aurora.knowledge import sources
 from aurora.knowledge.sources import COMPUTED, MEMORY, MODEL, Source
@@ -24,7 +25,7 @@ from aurora.routing.decision import RouteDecision
 from aurora.routing.router import IntentRouter
 from aurora.services.brain_service import BrainService
 from aurora.tool_plugins.registry import default_tools
-from aurora.tools.executor import ToolExecutor
+from aurora.tools.executor import INTENT_TOOLS as INTENT_TOOL_NAMES, ToolExecutor
 from aurora.tools.result import ToolResult
 from aurora.tools.tool import BaseTool
 from aurora.tools.tool_manager import ToolManager
@@ -116,7 +117,12 @@ class AuroraEngine:
                 tool.attach_tools(self.tool_manager)
             if hasattr(tool, "attach_memory"):
                 tool.attach_memory(self)
+            if hasattr(tool, "attach_engine"):
+                tool.attach_engine(self)
         self.executor = ToolExecutor(self.tool_manager, self.events)
+        # One request at a time: scheduled tasks (another thread) wait for a
+        # message being answered, and the other way round.
+        self._lock = threading.RLock()
 
         # Structured workflows: calculations and requests that use an
         # earlier step's result ("weather in Pune and double the temperature").
@@ -141,6 +147,12 @@ class AuroraEngine:
         self.service_manager.register(
             BrainService(brain)
         )
+        # Reminders and scheduled tasks: restored at start, run in the background.
+        reminders, schedule = self.tool_manager.get("Reminders"), self.tool_manager.get("Schedule")
+        if reminders is not None or schedule is not None:
+            from aurora.automation.service import AutomationService
+
+            self.service_manager.register(AutomationService(self, reminders, schedule))
         # The Sensor Service shares the Sensors tool's hub (one set of devices,
         # one history) and its permission.
         sensors = self.tool_manager.get("Sensors")
@@ -201,11 +213,12 @@ class AuroraEngine:
                 "Kernel is not running."
             )
 
-        self._on_token = on_token
-        try:
-            return self._process(message)
-        finally:
-            self._on_token = None
+        with self._lock:
+            self._on_token = on_token
+            try:
+                return self._process(message)
+            finally:
+                self._on_token = None
 
     def _process(self, message: str) -> str:
 
@@ -255,10 +268,12 @@ class AuroraEngine:
         self.events.emit(topics.CONFIRMATION_ANSWERED, {"tool": name, "approved": False}, source=SOURCE)
 
         if _NO.match(text):
+            self.executor.declined(name, pending)
             return "Okay, I won't do that."
 
         # Anything else cancels the pending action and is handled normally.
         logger.info("Pending %s action cancelled by a new message", name)
+        self.executor.declined(name, pending, cancelled=True)
         return None
 
     def _respond(self, message: str, decision: RouteDecision) -> str:
@@ -276,6 +291,9 @@ class AuroraEngine:
 
         if decision.needs_clarification:
             return self._clarifying_question(decision)
+
+        if decision.intent is Intent.UNDO:
+            return self._undo()
 
         if self.executor.can_handle(decision):
             result = self.executor.execute(decision)
@@ -302,7 +320,8 @@ class AuroraEngine:
             logger.exception("Recording an episode failed")
 
     _ROUTINE_EXCLUDED = {Intent.FORGET, Intent.DEVICES, Intent.RESEARCH, Intent.REMEMBER,
-                         Intent.MEMORY_CONTROL, Intent.ROUTINES, Intent.CLARIFY}
+                         Intent.MEMORY_CONTROL, Intent.ROUTINES, Intent.CLARIFY,
+                         Intent.FILES, Intent.SCHEDULE, Intent.UNDO}
 
     def check_routine(self, name: str, steps: str) -> str | None:
         """Why a routine can't be saved, or None if it can."""
@@ -337,6 +356,107 @@ class AuroraEngine:
         except Exception:
             logger.exception("Recording an episode failed")
         return f"Running your routine “{routine.name}”:\n\n{reply}"
+
+    # --- Undo and scheduled tasks ---------------------------------------------------
+
+    _UNDO_TOOLS = {"devices": "Devices", "apps": "Apps", "files": "Files", "reminders": "Reminders",
+                   "schedule": "Schedule"}
+
+    NOTHING_TO_UNDO = ("There's nothing I can undo. I can undo device changes, programs I opened, tidy-ups, "
+                       "reminders and scheduled tasks from this session (for an older tidy-up, say "
+                       "\"undo my last tidy-up\").")
+
+    def _undo(self) -> str:
+        """"undo that": offers to reverse the most recent reversible action (asks first)."""
+        pending = self.undo_offer()
+        if pending is None:
+            return self.NOTHING_TO_UNDO
+        self.pending = ("Undo", pending)
+        self.pending_decision = None
+        self.events.emit(topics.CONFIRMATION_REQUESTED, {"tool": "Undo"}, source=SOURCE)
+        return pending.message
+
+    # Used by the Command Centre's Automation page: the same checked, audited
+    # path as a chat message, without changing the conversation.
+
+    def execute_action(self, intent: Intent, arguments: dict) -> ToolResult:
+        decision = RouteDecision(intent, 1.0, INTENT_TOOL_NAMES.get(intent), dict(arguments), "Automation page")
+        with self._lock:
+            return self.executor.execute(decision)
+
+    def confirm_action(self, name: str, pending: ToolResult) -> ToolResult:
+        with self._lock:
+            return self.executor.confirm(name, pending)
+
+    def decline_action(self, name: str, pending: ToolResult) -> None:
+        with self._lock:
+            self.executor.declined(name, pending)
+
+    def undo_offer(self) -> ToolResult | None:
+        """The most recent reversible action, as a question whose ``confirm`` reverses it."""
+        stack = self.executor.undo_stack
+        if not stack:
+            return None
+        entry = stack[-1]
+
+        def run() -> ToolResult:
+            if entry in stack:
+                stack.remove(entry)
+            tool_name = self._UNDO_TOOLS.get(entry.action.split(".")[0])
+            tool = self.tool_manager.get(tool_name) if tool_name else None
+            missing = self.permissions.missing(tool_name, tool.required_permissions) if tool else []
+            if missing:
+                result = ToolResult(False, f"I can't undo that: the {tool_name} tool needs the "
+                                           f"'{missing[0].value}' permission.")
+            else:
+                result = entry.undo()
+            self.executor.audit.record(entry.action, "undone" if result.success else "failed",
+                                       "Undo: " + (result.message.splitlines()[0] if result.message else ""),
+                                       "you", result.simulated)
+            return result
+
+        return ToolResult(True, f"Shall I undo that: {entry.label}? (yes / no)", entry, confirm=run,
+                          simulated=entry.simulated)
+
+    def run_task(self, task) -> ToolResult:
+        """Runs one scheduled task (called by the scheduler's thread). Permissions
+        are checked now, at every run, not just when the task was made."""
+        with self._lock:
+            waiting = (self.pending, self.pending_decision)
+            if self.permissions.missing("Schedule", (Permission.AUTOMATION,)):
+                result = ToolResult(False, "Not run: scheduled tasks are switched off (the 'automation' "
+                                           "permission for Schedule).")
+            else:
+                try:
+                    result = self._task_result(task)
+                except PermissionDeniedError as error:
+                    result = ToolResult(False, f"Not run: it needs the '{error.permission.value}' permission.")
+            # A task must never leave a question waiting for the user's yes.
+            self.pending, self.pending_decision = waiting
+            self.executor.audit_result("schedule.run", result, f"schedule #{task.id}")
+            return result
+
+    def _task_result(self, task) -> ToolResult:
+        if task.kind == "reminder":
+            return ToolResult(True, f"⏰ Reminder: {task.target.get('text', '')}")
+        if task.kind == "sensors":
+            return self.tool_manager.execute("Sensors", quantity=task.target.get("quantity", "all"))
+        if task.kind == "device":
+            devices = self.tool_manager.get("Devices")
+            if devices is None:
+                return ToolResult(False, "Not run: device control isn't available.")
+            for permission in devices.required_permissions:
+                self.permissions.require("Devices", permission)
+            target = task.target
+            return devices.run_scheduled(target.get("device", ""), target.get("device_action", ""),
+                                         target.get("value"))
+        if task.kind == "routine":
+            routine = self.routines.get(task.target.get("routine", ""))
+            if routine is None:
+                return ToolResult(False, "Not run: that routine no longer exists.")
+            reply = self._run_routine(routine)
+            return ToolResult(not reply.startswith("I can't run"), reply)
+        return ToolResult(False, f"Not run: unknown kind of task ({task.kind}).")
 
     # --- Conversation with memory ---------------------------------------------
 

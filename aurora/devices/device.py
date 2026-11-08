@@ -34,6 +34,9 @@ class Device:
     aliases: list[str] = field(default_factory=list)
     confirm: bool = True
     allowed: set[str] | None = None   # Defaults to everything the kind supports.
+    # May a scheduled task change it without asking each time? Only if you say so
+    # ("schedulable": True in settings.DEVICES); the schedule itself is still approved once.
+    schedulable: bool = False
 
     def __post_init__(self):
         if self.kind not in KINDS:

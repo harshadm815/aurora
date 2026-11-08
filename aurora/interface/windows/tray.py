@@ -64,6 +64,26 @@ class Tray(QObject):
         # Background sensor watching: alerts as Windows notifications (if switched on).
         self.notified: list[str] = []
         backend.sensor_alert.connect(self.sensor_alert)
+        # Reminders and scheduled tasks are always shown (you asked for them).
+        backend.reminder_due.connect(lambda data: self.notify("AURORA: reminder", f"⏰ {data.get('text', '')}"))
+        backend.reminders_missed.connect(self.missed)
+        backend.task_ran.connect(self.task_ran)
+
+    def notify(self, title: str, message: str, warning: bool = False) -> None:
+        message = message[:250]
+        self.notified.append(message)
+        self.icon.showMessage(title, message, QSystemTrayIcon.Warning if warning else QSystemTrayIcon.Information,
+                              8000)
+
+    def missed(self, reminders: list) -> None:
+        if reminders:
+            lines = "; ".join(f"{item.get('due', '')[11:16]} {item.get('text', '')}" for item in reminders)
+            self.notify("AURORA: missed reminders", f"While AURORA was closed: {lines}", warning=True)
+
+    def task_ran(self, data: dict) -> None:
+        state = {True: "done", False: "failed", None: "skipped"}[data.get("success")]
+        self.notify(f"AURORA: scheduled task {data.get('id')} {state}", str(data.get("message", "")),
+                    warning=data.get("success") is not True)
 
     def sensor_alert(self, alert: dict):
         from aurora.config import settings

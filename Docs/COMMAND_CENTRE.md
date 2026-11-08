@@ -67,6 +67,7 @@ vision self-check.
 | Vision Centre | A picture you choose (Open image…, Paste, or drag a file in) or the live camera; **Describe** (grounded description with numbered boxes drawn on the picture and an evidence list), **Read text**; detector/OCR/permission status | The shared `VisionAnalyzer` (`backend.vision_analyzer()`) |
 | Sensor Centre | Temperature, humidity, pressure, ambient light, motion, CO₂, VOCs, fine dust (and extra quantities), each LIVE / SIMULATED / LAST KNOWN / NO SENSOR with its measuring time and what it means; 24-hour history chart with lowest, highest, average and trend; **Watch my room in the background** switch; alerts; connections; health on request | Sensor Hub, Sensor Service, `sensor.readings` / `sensor.alert` events |
 | System monitor | CPU, system RAM, AURORA's own memory, uptime, Ollama, active and installed models, services, plugins, tools, logs | Windows APIs, Ollama, engine, AURORA's log |
+| Automation | Undo (the last reversible action and what undoing it does); scheduled tasks (pause, resume, delete) and reminders (cancel), missed reminders; tidy a folder (preview, organise with confirmation, stop, undo); the audit trail with filters; "What AURORA may do": every action, its permission and whether it is granted, whether it asks first, how it is undone | The same checked and audited path as Chat (`engine.execute_action`), audit trail, Schedule / Reminders / Files tools |
 | Settings | Model, personality, streaming, memory announcements, memories given to the model, accent, start page, maximised start, animations, voice name, speed and volume, microphone, barge-in, Test the voice, Test the microphone | `aurora_preferences.json` |
 
 ## Honest by design
@@ -94,6 +95,8 @@ vision self-check.
 - **Sensor watching is off until you switch it on.** Alerts appear in
   the Sensor Centre and as Windows notifications (switch off with
   `SENSOR_NOTIFICATIONS`); simulated values say so in every alert.
+- **Reminders, missed reminders and scheduled-task runs** appear as
+  Windows notifications (they used to show only in the terminal).
 - **Permissions, devices and paths can't be changed from the interface.**
   They stay in `settings.py` / `local_settings.py`.
 
@@ -162,6 +165,7 @@ Training monitor:
 
 - Hands-free voice (wake word) inside the window; use the terminal's
   `voice on`.
-- Device control and reminders have no page of their own yet; use Chat
-  ("turn on the desk light", "remind me in 10 minutes to stretch").
+- Device control has no page of its own yet; use Chat ("turn on the desk
+  light"). Scheduled tasks are added in Chat and managed on the Automation
+  page.
 - Light theme (only dark accents: cyan, blue, purple).

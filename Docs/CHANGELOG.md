@@ -1,5 +1,46 @@
 # Changelog
 
+## 0.32.0 — Automation and device control (2026-11-08)
+
+Blueprint Phase 15. See "Devices and automation" in Docs/ARCHITECTURE.md.
+
+### Added
+- **Action catalogue** (`aurora/automation/actions.py`): every action
+  with its permission, whether it asks first, how it is undone and
+  whether a schedule may run it; shown on the Automation page.
+- **Audit trail** (`aurora_automation.db`): every action asked,
+  declined, cancelled, done, failed, undone or skipped, by you or a
+  schedule; 90 days.
+- **Undo** ("undo that"): device changes, opened programs, tidy-ups,
+  reminders and scheduled tasks; asks first and is audited.
+- **Programs** ("open notepad", "close notepad"): only from `APPS`,
+  fixed commands, no shell; closes only what AURORA opened.
+- **Tidying folders** ("organise my documents by type / by month"):
+  allowed folders only, previewed and confirmed, nothing deleted or
+  overwritten, stops at the first problem or when you press Stop,
+  undoable even after a restart.
+- **Scheduled tasks** ("every weekday at 18:30 turn on the fan",
+  "every day at 7 run my morning briefing"): approved once; reminders,
+  routines, sensor reports and devices marked `"schedulable"`;
+  permissions checked at every run; missed runs skipped and reported;
+  paused after 3 failures; every run reported and audited.
+- Cancelling a single reminder ("cancel reminder 2", "cancel the
+  reminder about stretching").
+- **Automation page** in the Command Centre; Windows notifications for
+  reminders, missed reminders and task runs.
+- Permissions `apps.launch` and `automation`; components `Apps`,
+  `Files`, `Schedule`.
+- 82 new tests.
+
+### Changed
+- **Reminders are kept on disk**: closing AURORA no longer loses them;
+  missed ones are reported at the next start.
+- Requests and scheduled tasks share one engine lock.
+
+### Fixed
+- Reminders were never shown in the Command Centre (only the terminal
+  displayed them).
+
 ## 0.31.0 — Sensor integration (2026-11-08)
 
 Blueprint Phase 14. See "Sensor Hub" in Docs/ARCHITECTURE.md.

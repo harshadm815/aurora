@@ -32,6 +32,10 @@ def isolated_database(tmp_path, monkeypatch):
     monkeypatch.setattr(settings, "DATA_DIR", tmp_path / "Data")
     # And sensor history goes to a throwaway database.
     monkeypatch.setattr(settings, "SENSOR_DATABASE_PATH", tmp_path / "sensors_test.db")
+    # Automation (audit trail, reminders, scheduled tasks, file-move records) too,
+    # and no test may tidy a real folder.
+    monkeypatch.setattr(settings, "AUTOMATION_DATABASE_PATH", tmp_path / "automation_test.db")
+    monkeypatch.setattr(settings, "ORGANIZE_FOLDERS", None)
 
 
 @pytest.fixture(autouse=True)

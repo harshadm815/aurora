@@ -24,4 +24,8 @@ class Intent(Enum):
     DEVICES = "devices"             # Control or check a smart device (always confirmed).
     REMINDER = "reminder"           # Set, list or cancel reminders and timers.
     RESEARCH = "research"           # A research session run by the agent team.
+    APPS = "apps"                   # Open or close a program from the APPS allow-list.
+    FILES = "files"                 # Tidy an allowed folder (previewed, confirmed, undoable).
+    SCHEDULE = "schedule"           # Add, list, pause or delete scheduled tasks.
+    UNDO = "undo"                   # Reverse the last reversible action (asks first).
     CLARIFY = "clarify"             # Too ambiguous: ask the user what they meant.

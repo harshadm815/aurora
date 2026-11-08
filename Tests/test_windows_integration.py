@@ -233,7 +233,7 @@ def test_pause_stops_services_and_unloads_the_model(backend):
     assert backend.state == "paused"
     assert wait_for(lambda: not backend.engine.running, 5)
     assert wait_for(lambda: backend.provider.unloaded == 1, 5)
-    assert backend.engine.service_manager.status() == {"Brain": "Stopped", "Sensors": "Stopped"}
+    assert backend.engine.service_manager.status() == {"Brain": "Stopped", "Automation": "Stopped", "Sensors": "Stopped"}
 
     errors = []
     backend.send_message("hello", pytest.fail, errors.append)

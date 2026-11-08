@@ -365,7 +365,7 @@ def test_reminder_fires(scheduler):
 
     assert result.message == (
         "Okay, I'll remind you at 14:10 (in 10 minutes): stretch. "
-        "Reminders only work while AURORA is running."
+        "If AURORA is closed when it's due, I'll tell you the next time it starts."
     )
     timer = ManualTimer.created[0]
     assert timer.delay == 600 and timer.started
@@ -388,7 +388,7 @@ def test_list_and_cancel(scheduler):
     tool.execute(text="call home", at="17:00")
     tool.execute(text="stretch", seconds=600)
 
-    assert tool.execute(action="list").message == "Your reminders:\n  - 14:10 stretch\n  - 17:00 call home"
+    assert tool.execute(action="list").message == "Your reminders:\n  2. 14:10 stretch\n  1. 17:00 call home"
     assert tool.execute(action="cancel").message == "Cancelled 2 reminders."
     assert all(t.cancelled for t in ManualTimer.created)
 

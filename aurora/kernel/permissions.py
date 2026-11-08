@@ -26,6 +26,8 @@ class Permission(Enum):
     SENSORS = "sensors"
     HEALTH_DATA = "health_data"
     HARDWARE_CONTROL = "hardware_control"
+    APPS_LAUNCH = "apps.launch"          # open programs from APPS (an allow-list)
+    AUTOMATION = "automation"            # scheduled tasks that run without asking each time
 
 
 class PermissionDeniedError(PermissionError):

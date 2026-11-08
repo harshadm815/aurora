@@ -138,6 +138,14 @@ def describe_event(event) -> Activity | None:
         what = label.label if label else "A sensor"
         return Activity(now, f"Sensor alert: {what} is {data.get('level', 'poor')}"
                              + (" (simulated)" if data.get("simulated") else ""), "warning")
+    if name == topics.REMINDER_DUE:
+        return Activity(now, "Reminder shown", "info")
+    if name == topics.REMINDERS_MISSED:
+        count = len(data.get("reminders", []))
+        return Activity(now, f"{count} reminder{'s' if count != 1 else ''} fell due while AURORA was closed", "warning")
+    if name == topics.TASK_RAN:
+        outcome = {True: ("done", "ok"), False: ("failed", "error"), None: ("skipped", "warning")}[data.get("success")]
+        return Activity(now, f"Scheduled task {data.get('id')} {outcome[0]}", outcome[1])
     if name == topics.SENSOR_MONITORING:
         return Activity(now, "Background sensor watching " + ("on" if data.get("on") else "off"), "info")
     return None
@@ -157,6 +165,9 @@ class Backend(QObject):
     sensor_readings = Signal(dict)         # sensor.readings from background watching
     sensor_alert = Signal(dict)            # sensor.alert: {"quantity", "level", "message", "simulated", ...}
     sensor_monitoring = Signal(bool)       # background watching switched on / off
+    reminder_due = Signal(dict)            # {"id", "text"}
+    reminders_missed = Signal(list)        # [{"text", "due"}] found at start
+    task_ran = Signal(dict)                # a scheduled task ran or was skipped
 
     def __init__(self, engine_factory: Callable | None = None, parent=None):
         super().__init__(parent)
@@ -192,6 +203,7 @@ class Backend(QObject):
         from aurora.interface.voice_control import VoiceController
         self.voice = VoiceController(self)
         self._vision = None          # VisionAnalyzer for chosen pictures, when there's no Camera tool
+        self.missed_reminders: list[dict] = []     # reminders due while AURORA was closed (shown once)
 
         self._cpu = system_info.CpuMeter()
         self._cpu.percent()
@@ -325,7 +337,7 @@ class Backend(QObject):
             engine = self.engine
             reminders = engine.tool_manager.get("Reminders")
             if reminders is not None:
-                reminders.scheduler.cancel_all()
+                reminders.scheduler.stop()          # saved reminders stay for next time
             self.run_engine(engine.shutdown)
 
         engine_done = self._engine_pool.waitForDone(timeout_ms)
@@ -347,6 +359,13 @@ class Backend(QObject):
             self.on_gui(self.sensor_alert.emit, event.data)
         if event.name == topics.SENSOR_MONITORING and isinstance(event.data, dict):
             self.on_gui(self.sensor_monitoring.emit, bool(event.data.get("on")))
+        if event.name == topics.REMINDER_DUE and isinstance(event.data, dict):
+            self.on_gui(self.reminder_due.emit, event.data)
+        if event.name == topics.REMINDERS_MISSED and isinstance(event.data, dict):
+            self.missed_reminders = list(event.data.get("reminders", []))
+            self.on_gui(self.reminders_missed.emit, self.missed_reminders)
+        if event.name == topics.TASK_RAN and isinstance(event.data, dict):
+            self.on_gui(self.task_ran.emit, event.data)
         activity = describe_event(event)
         if activity is not None:
             self.on_gui(self._add_activity, activity)

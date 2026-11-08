@@ -24,6 +24,10 @@ HEALTH = "Health"
 DEVICES = "Devices"
 REMINDERS = "Reminders"
 RESEARCH = "Research"
+APPS = "Apps"
+FILES = "Files"
+SCHEDULE = "Schedule"
+UNDO = "Undo"
 
 
 @dataclass(frozen=True, eq=True)

@@ -1,6 +1,10 @@
 import logging
+from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import datetime
 
+from aurora.automation.actions import AUDITED_TOOLS, BY_NAME, action_name
+from aurora.automation.audit import AuditLog
 from aurora.events import topics
 from aurora.events.bus import EventBus
 from aurora.kernel.permissions import PermissionDeniedError
@@ -11,6 +15,17 @@ from aurora.tools.result import ToolResult
 from aurora.tools.tool_manager import ToolManager
 
 logger = logging.getLogger(__name__)
+
+UNDO_LIMIT = 20
+
+
+@dataclass
+class UndoEntry:
+    action: str
+    label: str                      # "turn the desk light back off"
+    undo: Callable[[], ToolResult]
+    simulated: bool
+    initiated: str
 
 # Which tool handles which intent.
 INTENT_TOOLS = {
@@ -33,6 +48,9 @@ INTENT_TOOLS = {
     Intent.DEVICES: "Devices",
     Intent.REMINDER: "Reminders",
     Intent.RESEARCH: "Research",
+    Intent.APPS: "Apps",
+    Intent.FILES: "Files",
+    Intent.SCHEDULE: "Schedule",
 }
 
 SOURCE = "ToolExecutor"
@@ -84,9 +102,39 @@ class ToolExecutor:
     language model to guess at.
     """
 
-    def __init__(self, tools: ToolManager, events: EventBus | None = None):
+    def __init__(self, tools: ToolManager, events: EventBus | None = None, audit: AuditLog | None = None):
         self.tools = tools
         self.events = events or EventBus()
+        # Actions (aurora/automation/actions.py) are written to the audit trail,
+        # and reversible ones remembered for "undo that" (newest last).
+        self.audit = audit or AuditLog()
+        self.undo_stack: list[UndoEntry] = []
+
+    # --- Audit trail and undo --------------------------------------------------------
+
+    def _audited(self, name: str, arguments: dict) -> str | None:
+        if name not in AUDITED_TOOLS:
+            return None
+        action = action_name(name, arguments)
+        return action if action in BY_NAME else None
+
+    def audit_result(self, action: str | None, result: ToolResult, initiated: str = "you") -> None:
+        """Records what happened; remembers how to reverse it."""
+        if action is None:
+            return
+        outcome = "asked" if result.needs_confirmation else ("done" if result.success else "failed")
+        self.audit.record(action, outcome, result.message.splitlines()[0] if result.message else "",
+                          initiated, result.simulated)
+        if outcome == "done" and result.undo is not None:
+            self.undo_stack.append(UndoEntry(action, result.undo_label or "undo that", result.undo,
+                                             result.simulated, initiated))
+            del self.undo_stack[:-UNDO_LIMIT]
+
+    def declined(self, name: str, pending: ToolResult, cancelled: bool = False) -> None:
+        action = getattr(pending, "audit_action", None)
+        if action:
+            self.audit.record(action, "cancelled" if cancelled else "declined",
+                              pending.message.splitlines()[0] if pending.message else "", "you", pending.simulated)
 
     def tool_for(self, decision: RouteDecision) -> str | None:
         name = INTENT_TOOLS.get(decision.intent)
@@ -125,19 +173,26 @@ class ToolExecutor:
 
         if result.success and not result.sources:
             result.sources = default_sources(name, result)
+        action = self._audited(name, decision.arguments)
+        if result.needs_confirmation:
+            result.audit_action = action          # for the yes / no that follows
+        self.audit_result(action, result)
         self._report(name, result)
         return result
 
     def confirm(self, name: str, pending: ToolResult) -> ToolResult:
         """Runs a pending action the user has approved."""
+        action = getattr(pending, "audit_action", None)
         try:
             result = pending.confirm()
         except Exception as error:
             logger.exception("Confirmed action from %s crashed", name)
             result = ToolResult(False, f"That didn't work ({error}).")
             self.events.emit(topics.TOOL_FAILED, {"tool": name, "error": str(error)}, source=SOURCE)
+            self.audit_result(action, result)
             return result
 
+        self.audit_result(action, result)
         self._report(name, result)
         return result
 

@@ -5,6 +5,7 @@ from PySide6.QtGui import QColor
 from PySide6.QtWidgets import QComboBox, QGridLayout, QHBoxLayout, QListWidget, QListWidgetItem, QPushButton
 
 from aurora.config import settings
+from aurora.network import gate as network_gate
 from aurora.providers.core_provider import is_core_model
 from aurora.interface import system_info
 from aurora.interface.components.base_view import BaseView
@@ -49,6 +50,26 @@ class SystemMonitorView(BaseView):
         row.addWidget(self.components, 1)
         self.body.addLayout(row)
 
+        network = Panel("Network activity (this session)")
+        network_controls = QHBoxLayout()
+        self.network_summary = label("", "Dim")
+        network_controls.addWidget(self.network_summary)
+        network_controls.addStretch(1)
+        forget = QPushButton("Ask again before going online")
+        forget.clicked.connect(self._forget_approvals)
+        clear = QPushButton("Clear list")
+        clear.clicked.connect(self._clear_network)
+        network_controls.addWidget(forget)
+        network_controls.addWidget(clear)
+        network.add_layout(network_controls)
+        self.network_list = QListWidget()
+        self.network_list.setMinimumHeight(120)
+        network.add(self.network_list)
+        network.add(label("Each request AURORA made or blocked: when, which service, which host and the outcome. "
+                          "What you asked about is never recorded.", "Faint", wrap=True))
+        self.body.addWidget(network)
+        self._network_shown = None
+
         logs = Panel("Logs")
         controls = QHBoxLayout()
         self.level = QComboBox()
@@ -84,6 +105,36 @@ class SystemMonitorView(BaseView):
         self.process.set(system_info.human_bytes(sample.get("process")),
                          "Command Centre and AURORA (Ollama runs separately)")
         self.uptime.set(system_info.human_duration(sample.get("uptime", 0)), "since the Command Centre started")
+        self._fill_network()
+
+    def _fill_network(self, force: bool = False):
+        records = network_gate.records()
+        key = (len(records), records[-1] if records else None, tuple(network_gate.approved()), settings.INTERNET_ACCESS)
+        if key == self._network_shown and not force:
+            return
+        self._network_shown = key
+        self.network_list.clear()
+        for record in reversed(records):
+            item = QListWidgetItem(record.describe() + (f"  ·  {record.purpose}" if record.purpose else ""))
+            if record.outcome != "sent":
+                item.setForeground(QColor(LEVEL_COLOURS["WARNING"]))
+            self.network_list.addItem(item)
+        if not records:
+            self.network_list.addItem(QListWidgetItem("No network requests yet."))
+        modes = {"ask": "asks before a service first goes online", "on": "allowed", "off": "off"}
+        approved = network_gate.approved()
+        self.network_summary.setText(
+            f"Internet: {modes.get(settings.INTERNET_ACCESS, 'off')}"
+            + (f" · approved this session: {', '.join(approved)}" if approved else "")
+            + f" · local network: {'allowed' if settings.LOCAL_NETWORK_ACCESS else 'off'}")
+
+    def _forget_approvals(self):
+        network_gate.forget_approvals()
+        self._fill_network(force=True)
+
+    def _clear_network(self):
+        network_gate.clear_records()
+        self._fill_network(force=True)
 
     def _show_ollama(self, state: dict):
         if state["ok"] is None:
@@ -104,6 +155,7 @@ class SystemMonitorView(BaseView):
     def on_shown(self):
         self._show_system(self.backend.last_sample)
         self._show_ollama(self.backend.ollama)
+        self._fill_network(force=True)
         for row in self.component_rows:
             discard(row)
         self.component_rows = []

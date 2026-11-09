@@ -32,6 +32,9 @@ BACKEND = {
     # Background sensor watching (room sensors only, never health) and its notifications.
     "sensor_monitoring": ("SENSOR_MONITOR", bool, lambda v: True),
     "sensor_notifications": ("SENSOR_NOTIFICATIONS", bool, lambda v: True),
+    # The network gate (aurora/network/gate.py).
+    "internet_access": ("INTERNET_ACCESS", str, lambda v: v in ("on", "ask", "off")),
+    "local_network_access": ("LOCAL_NETWORK_ACCESS", bool, lambda v: True),
 }
 
 # Preferences used only by the interface: key -> (type, default, check)

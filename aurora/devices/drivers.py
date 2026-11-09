@@ -11,6 +11,7 @@ How AURORA talks to devices.
 import httpx
 
 from aurora.config import settings
+from aurora.network import gate
 from aurora.devices.device import Command, Device, DeviceError, DeviceState
 
 
@@ -57,11 +58,12 @@ class HttpRelayDriver(Driver):
         self.url = url.rstrip("/")
         self.token = token
         self._client = client
+        gate.allow_host("Devices", self.url)   # the address you configured
 
     @property
     def client(self) -> httpx.Client:
         if self._client is None:
-            self._client = httpx.Client(timeout=settings.SENSOR_TIMEOUT_SECONDS)
+            self._client = gate.client("Devices", timeout=settings.SENSOR_TIMEOUT_SECONDS)
         return self._client
 
     def _request(self, method: str, path: str, body: dict | None = None) -> dict:

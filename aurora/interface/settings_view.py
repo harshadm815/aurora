@@ -118,6 +118,28 @@ class SettingsView(BaseView):
             "Speech is recognised on this laptop (Vosk) and never saved.", "Faint", wrap=True))
         self.body.addWidget(voice)
 
+        network = Panel("Internet and network")
+        form = QFormLayout()
+        self.internet = QComboBox()
+        for text, mode in (("Ask before each service first goes online", "ask"),
+                           ("Allowed without asking", "on"),
+                           ("Off: nothing goes to the internet", "off")):
+            self.internet.addItem(text, mode)
+        self.internet.setCurrentIndex(max(0, self.internet.findData(values["internet_access"])))
+        form.addRow("Internet access", self.internet)
+        self.local_network = QCheckBox("Allow AURORA to reach the sensor hub and device controller on my Wi-Fi")
+        self.local_network.setChecked(values["local_network_access"])
+        form.addRow("", self.local_network)
+        network.add_layout(form)
+        services = "; ".join(
+            f"{name} → {', '.join(info['hosts'])} (sends {info['sends']})"
+            for name, info in settings.NETWORK_SERVICES.items() if info.get("hosts"))
+        network.add(label(
+            "Your conversations, memories and documents never leave this PC. Only these services go online, "
+            f"each only to its own hosts: {services}. Every request is listed on the System page.",
+            "Faint", wrap=True))
+        self.body.addWidget(network)
+
         windows = Panel("Windows")
         form = QFormLayout()
         self.minimize_to_tray = QCheckBox("Minimising the window sends AURORA to the notification area")
@@ -186,6 +208,8 @@ class SettingsView(BaseView):
             "voice_barge_in": self.barge_in.isChecked(),
             "minimize_to_tray": self.minimize_to_tray.isChecked(),
             "close_to_tray": self.close_to_tray.isChecked(),
+            "internet_access": self.internet.currentData(),
+            "local_network_access": self.local_network.isChecked(),
         }
 
     def _test_voice(self):

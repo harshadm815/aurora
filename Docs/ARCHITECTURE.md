@@ -89,6 +89,40 @@ and `status` reports it instead of claiming all systems are operational.
   `PermissionDeniedError` when called.
 - At runtime a plugin can re-check with `self.require(Permission.X)`.
 
+## Network gate
+
+The `network` permission says *whether* a tool may use the network at all.
+The network gate (`aurora/network/gate.py`) controls *each request*. Every
+HTTP client AURORA creates comes from `gate.client(component)` (a test checks
+that no module creates any other), so every request, including every
+redirect, passes it:
+
+| Destination | Rule |
+|---|---|
+| Not one of that service's hosts (`NETWORK_SERVICES`, or the sensor / device URL you configured) | always blocked |
+| The internet | `INTERNET_ACCESS`: `"ask"` (default), `"on"` or `"off"` |
+| Your own network (private addresses, `.local` names) | `LOCAL_NETWORK_ACCESS` (default on) |
+| This PC (localhost) | allowed |
+
+- **Ask:** the first request from each service in a session is held back.
+  In the chat AURORA says where it would go and what it would send ("Weather
+  needs the internet for live weather: it would send the place name to
+  geocoding-api.open-meteo.com. Allow Weather to go online until AURORA
+  restarts?"). Yes repeats the request; no sends nothing.
+- **Settings → Internet and network** changes both switches. **System →
+  Network activity** lists every request made or blocked this session
+  (time, service, host, outcome) and can forget the approvals.
+- **Nothing you asked about is recorded:** only the host, never the path
+  or query. The list is kept in memory and cleared when AURORA exits; the
+  log file gets the same one-line entries.
+- **What never goes online:** conversations, memories, documents and the
+  language model. Ollama and AURORA's own model run on this PC (Ollama is
+  reached by its own client on localhost, outside the gate).
+- **Limits:** only requests from the chat can ask for approval. A blocked
+  request from the research team, a workflow or a scheduled task fails
+  with the service's ordinary "couldn't reach" message; approve the service
+  by asking for it once in the chat, or set internet access to "on".
+
 ## Writing a plugin
 
 ```python
@@ -850,6 +884,7 @@ the message to the Brain.
 | `aurora.vision` | `image_input.py`, `camera.py`, `detector.py`, `analyzer.py`, `scene.py`, `evaluate.py`, `motion.py`, `watch.py` | Image input and preprocessing, webcam, object detection checked in two views, OCR, grounded scene reports, evaluation, motion watch | Yes (Camera and Documents tools, Command Centre, `watch`) |
 | `aurora.voice` | `listener.py`, `vad.py`, `speaker.py`, `session.py`, `selftest.py` | Offline speech recognition with wake word and voice activity detection, text-to-speech with interruption, voice conversations, loop-back test | Yes (from `main.py` and the Command Centre, on demand) |
 | `aurora.tools` | `tool.py`, `tool_manager.py`, `result.py`, `executor.py`, `untrusted.py` | Tool interface, permission-checked registry, `ToolResult`, intent-to-tool execution, cleaning of outside text | Yes |
+| `aurora.network` | `gate.py` | The network gate: per-service destinations, internet and local-network switches, asking before going online, the activity record | Yes |
 | `aurora.tool_plugins` | `calculator.py`, `numbers.py`, `memory_tools.py`, `weather.py`, `research.py`, `documents.py`, `registry.py` | The built-in tools and `default_tools()` | Yes |
 | `aurora.workflows` | `values.py`, `operations.py`, `workflow.py`, `builder.py`, `runner.py`, `validation.py` | Structured multi-step tasks: typed values between steps, validation, retries, traces | Yes |
 | `aurora.events` | `event.py`, `bus.py`, `topics.py` | Publish/subscribe with error isolation; standard event names | Yes |
@@ -911,6 +946,6 @@ temporary database instead of `aurora_memory.db`.
 | TinyLlama often ignores or garbles the memory context it is given | A stronger model (hardware-dependent) |
 | Workflows pass only numbers between steps (from the calculator, Numbers and current weather), and follow-ups are a fixed set of operations; no text results or forecasts as inputs yet | Later workflow work |
 | Routing is rule-based English only; no LLM fallback for unusual phrasing | Later, once a model good at structured output is available |
-| Permission grants are static config; no prompt to ask the user at runtime | Later, with physical-action tools (11) |
+| Permission grants are static config; only internet access is asked for at runtime (the network gate), and only from the chat | Later |
 | AURORA-T0 can be chosen as the assistant's model (`aurora:` models, see AURORA_CORE.md), but it is far too small to converse, so Ollama stays the default | Until a model good enough to converse exists |
 | Event bus is synchronous; a slow subscriber delays the publisher | When voice/sensors need it (8, 10) |

@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.35.0 — Network gate (2026-11-09)
+
+Deployment plan, stage 8.
+
+### Added
+- **One gate for every network request** (`aurora/network/gate.py`). Each
+  service may contact only its own hosts (Weather → Open-Meteo, Wikipedia →
+  en.wikipedia.org, arXiv → export.arxiv.org, sensors and devices → the
+  address you configured); other hosts and redirects elsewhere are blocked.
+- **Internet access: ask (default), on or off.** In "ask", the first
+  request from each service in a session waits while AURORA asks in the
+  chat, saying where it would go and what it would send.
+- **Local network switch** for the ESP32 sensor hub and device controller.
+- **Settings → Internet and network**, and **System → Network activity**:
+  every request made or blocked this session, with time, service, host and
+  outcome, never what you asked about.
+- 25 new tests, including one that fails if any module creates an HTTP
+  client outside the gate.
+
+### Changed
+- Weather, Wikipedia and arXiv now ask before their first request each
+  session. Set Internet access to "Allowed without asking" for the old
+  behaviour.
+
 ## 0.34.0 — Model interface (2026-11-09)
 
 Deployment plan, stage 6.

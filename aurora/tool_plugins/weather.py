@@ -15,6 +15,7 @@ from datetime import date
 import httpx
 
 from aurora.config import settings
+from aurora.network import gate
 from aurora.kernel.permissions import Permission
 from aurora.tools.result import ToolResult
 from aurora.tools.tool import BaseTool
@@ -66,7 +67,8 @@ class WeatherTool(BaseTool):
     @property
     def client(self) -> httpx.Client:
         if self._client is None:
-            self._client = httpx.Client(
+            self._client = gate.client(
+                "Weather",
                 timeout=settings.WEATHER_TIMEOUT_SECONDS,
                 headers={"User-Agent": f"{settings.APP_NAME}/{settings.VERSION}"},
             )

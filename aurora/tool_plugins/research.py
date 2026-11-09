@@ -20,6 +20,7 @@ from urllib.parse import quote
 import httpx
 
 from aurora.config import settings
+from aurora.network import gate
 from aurora.kernel.permissions import Permission
 from aurora.tools.result import ToolResult
 from aurora.tools.tool import BaseTool
@@ -73,7 +74,8 @@ class _HttpTool(BaseTool):
     @property
     def client(self) -> httpx.Client:
         if self._client is None:
-            self._client = httpx.Client(
+            self._client = gate.client(
+                self.name,
                 timeout=settings.RESEARCH_TIMEOUT_SECONDS,
                 headers={"User-Agent": user_agent()},
                 follow_redirects=True,

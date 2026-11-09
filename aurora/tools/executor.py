@@ -8,6 +8,7 @@ from aurora.automation.audit import AuditLog
 from aurora.events import topics
 from aurora.events.bus import EventBus
 from aurora.kernel.permissions import PermissionDeniedError
+from aurora.network import NetworkBlocked, gate as network_gate
 from aurora.knowledge.sources import COMPUTED, DOCUMENT, LIVE, MEMORY, SENSOR, Source
 from aurora.routing.decision import RouteDecision
 from aurora.routing.intent import Intent
@@ -102,8 +103,10 @@ class ToolExecutor:
     language model to guess at.
     """
 
-    def __init__(self, tools: ToolManager, events: EventBus | None = None, audit: AuditLog | None = None):
+    def __init__(self, tools: ToolManager, events: EventBus | None = None, audit: AuditLog | None = None,
+                 network=None):
         self.tools = tools
+        self.network = network or network_gate
         self.events = events or EventBus()
         # Actions (aurora/automation/actions.py) are written to the audit trail,
         # and reversible ones remembered for "undo that" (newest last).
@@ -150,6 +153,7 @@ class ToolExecutor:
         if name is None:
             raise ValueError(f"No tool handles intent '{decision.intent.value}'.")
 
+        self.network.clear_block()
         try:
             result = self.tools.execute(name, **decision.arguments)
         except PermissionDeniedError as error:
@@ -165,10 +169,18 @@ class ToolExecutor:
                 source=SOURCE,
             )
             return result
+        except NetworkBlocked:
+            result = ToolResult(False, "")      # replaced just below
         except Exception as error:
             logger.exception("Tool %s crashed", name)
             result = ToolResult(False, f"The {name} tool failed unexpectedly ({error}).")
             self.events.emit(topics.TOOL_FAILED, {"tool": name, "error": str(error)}, source=SOURCE)
+            return result
+
+        block = self.network.take_block()
+        if block is not None and not result.success:
+            result = self.network_result(name, decision.arguments, block)
+            self._report(name, result)
             return result
 
         if result.success and not result.sources:
@@ -179,6 +191,39 @@ class ToolExecutor:
         self.audit_result(action, result)
         self._report(name, result)
         return result
+
+    def network_result(self, name: str, arguments: dict, block: NetworkBlocked) -> ToolResult:
+        """Why a tool couldn't go online, or a question asking whether it may."""
+        service = self.network.service(block.component)
+        label = service.get("name", block.component)
+        if block.can_ask:
+            sends = service.get("sends", "your request")
+            purpose = service.get("purpose", "this")
+
+            def approved() -> ToolResult:
+                self.network.approve(block.component)
+                self.network.clear_block()
+                result = self.tools.execute(name, **arguments)
+                again = self.network.take_block()
+                if again is not None and not result.success:
+                    return self.network_result(name, arguments, again)
+                if result.success and not result.sources:
+                    result.sources = default_sources(name, result)
+                return result
+
+            return ToolResult(
+                False,
+                f"{label} needs the internet for {purpose}: it would send {sends} to {block.host}. "
+                f"Allow {label} to go online until AURORA restarts?",
+                confirm=approved,
+            )
+        if block.reason == "internet access is switched off":
+            how = "Internet access is off. You can turn it on in Settings → Internet and network."
+        elif block.kind != "internet" and "local network" in block.reason:
+            how = "Access to your local network is off. You can turn it on in Settings → Internet and network."
+        else:
+            how = f"AURORA blocked the request: {block.reason}."
+        return ToolResult(False, f"{label} can't reach {block.host}. {how}")
 
     def confirm(self, name: str, pending: ToolResult) -> ToolResult:
         """Runs a pending action the user has approved."""

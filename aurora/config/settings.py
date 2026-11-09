@@ -183,6 +183,34 @@ DATA_DIR = PROJECT_ROOT / "Data"
 # ("from my language model's training, not checked against a source").
 LABEL_MODEL_ANSWERS = True
 
+# Network (aurora/network/gate.py)
+#
+# Every request AURORA makes passes one gate, and each service may contact
+# only its own hosts below (or, for sensors and devices, the address you
+# configured). The System page lists every request: when, which service,
+# which host and the outcome (never what you asked about).
+#
+# Internet access: "ask" = before a service's first request each session,
+# AURORA asks you, saying where it would go and what it would send;
+# "on" = without asking; "off" = never.
+INTERNET_ACCESS = "ask"
+# Your own network: the ESP32 sensor hub and device controller on your Wi-Fi.
+LOCAL_NETWORK_ACCESS = True
+NETWORK_SERVICES = {
+    "Weather": {"name": "Weather", "hosts": ["geocoding-api.open-meteo.com", "api.open-meteo.com"],
+                "purpose": "live weather", "sends": "the place name"},
+    "Wikipedia": {"name": "Wikipedia", "hosts": ["en.wikipedia.org"],
+                  "purpose": "encyclopedia lookups", "sends": "the topic you asked about"},
+    "arXiv": {"name": "arXiv", "hosts": ["export.arxiv.org"],
+              "purpose": "research paper search", "sends": "the topic you asked about"},
+    "Sensors": {"name": "the sensor hub", "hosts": [], "purpose": "room sensor readings",
+                "sends": "nothing (it only reads)"},
+    "Devices": {"name": "the device controller", "hosts": [], "purpose": "switching devices",
+                "sends": "the device and the command"},
+}
+# Requests kept in the activity list (memory only, cleared on exit).
+NETWORK_LOG_SIZE = 200
+
 # Weather
 #
 # Used when you ask "what's the weather?" without naming a place.

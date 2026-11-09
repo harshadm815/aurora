@@ -34,6 +34,7 @@ from datetime import datetime, timedelta
 import httpx
 
 from aurora.config import settings
+from aurora.network import gate
 from aurora.sensors.reading import QUANTITIES, Reading, validate
 
 logger = logging.getLogger(__name__)
@@ -99,11 +100,12 @@ class HttpSource(SensorSource):
             raise ValueError(f"Sensor URL for {name} must start with http:// or https://")
         self.url = url
         self._client = client
+        gate.allow_host("Sensors", url)        # the address you configured
 
     @property
     def client(self) -> httpx.Client:
         if self._client is None:
-            self._client = httpx.Client(timeout=settings.SENSOR_TIMEOUT_SECONDS)
+            self._client = gate.client("Sensors", timeout=settings.SENSOR_TIMEOUT_SECONDS)
         return self._client
 
     def read(self):

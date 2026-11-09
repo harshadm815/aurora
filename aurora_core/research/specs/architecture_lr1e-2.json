@@ -1,0 +1,32 @@
+{
+  "name": "architecture_lr1e-2",
+  "question": "Does architecture_v1's result hold at the learning rate Phase 5 found better for T0 (maximum 1e-2, falling to 1e-3, instead of 3e-3 to 3e-4)? Same data, tokenizer, model size, steps, seeds and variants; only the learning rate changes.",
+  "hypothesis": "T0 improves more from the higher learning rate than the variants, because Phase 5 found 1e-2 better for T0 specifically. The gated linear recurrence stays better than attention but by less than architecture_v1's 0.077 nats. RMSNorm and SwiGLU still show no detectable difference.",
+  "data": {
+    "file": "Data/pg1661.txt",
+    "sha256": "922e2a12ccb43a4c9544c260b2166c6ad2097aeb5957faeee113f173bb857cd0",
+    "source": "Project Gutenberg eBook #1661, The Adventures of Sherlock Holmes, https://www.gutenberg.org/ebooks/1661.txt.utf-8"
+  },
+  "splits": {"validation": 0.05, "test": 0.05},
+  "tokenizer": {"vocab_size": 512},
+  "model": {},
+  "train": {"max_lr": 0.01, "min_lr": 0.001},
+  "steps": 2000,
+  "tokens_per_step": 1024,
+  "eval_interval": 250,
+  "seeds": [0, 1, 2, 3, 4],
+  "baseline": "T0",
+  "variants": [
+    {"name": "T0", "question": "the baseline: AURORA-T0 as specified"},
+    {"name": "RMSNorm", "norm": "rms", "question": "RMSNorm in place of every layer norm"},
+    {"name": "SwiGLU", "ffn": "swiglu", "question": "SwiGLU feed-forward, width matched to the same parameter count"},
+    {"name": "Recurrent", "mixer": "recurrent", "question": "gated linear recurrence in place of attention, feed-forward widened to the same parameter count"}
+  ],
+  "decision": {"metric": "best_validation_loss", "confidence": 0.95, "min_effect": 0.01},
+  "limitations": [
+    "One small model size, one training budget and one book: results may not hold for larger models, longer training or other text.",
+    "Five seeds detect differences of a few hundredths of a nat; smaller real differences would show as 'no detectable difference'.",
+    "The learning rate 1e-2 was chosen in Phase 5 from a single-seed comparison with T0 only; it may still not suit every variant equally. Only two learning rates have now been tried.",
+    "Results are exact on this machine; another CPU or NumPy version may give slightly different numbers (the analysis, not the bits, should then agree)."
+  ]
+}

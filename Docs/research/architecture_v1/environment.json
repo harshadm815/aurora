@@ -1,0 +1,18 @@
+{
+  "python": "3.14.2",
+  "numpy": "2.5.4",
+  "platform": "Windows-11-10.0.26200-SP0",
+  "machine": "AMD64",
+  "processor": "Intel64 Family 6 Model 142 Stepping 10, GenuineIntel",
+  "code_fingerprint": "a73cac9840a36ac6f3599a3dc8e1c7d7fb1562b07aff087b037fea61e318810f",
+  "commit": "de6658d1482bd13bce74611157be71195202152d",
+  "aurora_core_uncommitted_changes": false,
+  "vocab_size": 512,
+  "data_sha256": "922e2a12ccb43a4c9544c260b2166c6ad2097aeb5957faeee113f173bb857cd0",
+  "tokenizer_sha256": "445a0a239facec5eb45c08ed4239156f5c3e999444febb42d6fb2300b1e5a32d",
+  "tokens": {
+    "train": 238215,
+    "validation": 13830,
+    "test": 12459
+  }
+}

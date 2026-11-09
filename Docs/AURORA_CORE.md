@@ -13,7 +13,9 @@ Status: **Phases 1–6 are done:**
 - the training pipeline;
 - text generation with experiments;
 - the AURORA Core Runtime;
-- optimisation (Phase 7), measured against Phase 6.
+- optimisation (Phase 7), measured against Phase 6;
+- research (blueprint Phase 16): architecture variants and reproducible experiments
+  (`aurora_core/research/`, see [RESEARCH.md](RESEARCH.md)).
 
 AURORA-T0, trained on *The Adventures of Sherlock Holmes*, beats the
 baselines on text it never saw. It writes text from its own weights,
@@ -55,7 +57,11 @@ run by AURORA's own runtime with no Ollama involved. See [AURORA_T0_MODEL_CARD.m
 | `training/checkpoint.py` | `save_checkpoint` / `load_checkpoint` (.npz, no pickle) |
 | `training/trainer.py` | `TrainConfig`, `train`, `evaluate` |
 | `training/__main__.py` | The command line: text file → trained model, metrics and summary |
-| `training/experiments.py` | Controlled comparisons of model and training settings |
+| `training/experiments.py` | Controlled comparisons of model and training settings (one seed each; see `research/`) |
+| `research/arch.py` | One-change variants of T0: RMSNorm, SwiGLU, a gated linear recurrence instead of attention; parameter matching; their backward passes |
+| `research/stats.py` | Paired comparisons over seeds with 95 % confidence intervals and the decision rule |
+| `research/runner.py` | Specification → runs → analysis → report, with data and code fingerprints, resuming and bit-for-bit verification |
+| `research/claims.py`, `research/specs/` | The claims register; experiment specifications |
 | `generation/sampling.py` | Next-token distribution: greedy, temperature, top-k, top-p, banned tokens |
 | `generation/generate.py` | `generate_text`, `generate_ids`, `stream_ids` (sliding window) |
 | `generation/quality.py` | Measures of generated text; bigram sampler for comparison |
@@ -370,7 +376,9 @@ is better:
 | learning rate 1e-3 | 30,176 | 3.914 | +0.29 | 0.05 |
 
 The three baseline seeds differ by up to 0.03, so smaller differences
-can't be told apart from chance.
+can't be told apart from chance. (Phase 16 repeats comparisons with five
+paired seeds and confidence intervals; these single-seed results are guides,
+not claims. See [RESEARCH.md](RESEARCH.md).)
 
 What that shows:
 - **Width helps most.** d_model 64 is far better, but has 2.8× the

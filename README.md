@@ -74,6 +74,12 @@ its "Known gaps" table for what's not done yet.
    its safety notes first) and set `DEVICES`, `DEVICE_CONTROLLER_URL` and
    `DEVICE_CONTROLLER_TOKEN` in `aurora/config/local_settings.py`.
 
+## Research
+
+AURORA's own model is also a research platform: every claimed improvement
+needs a reproducible experiment. See [docs/RESEARCH.md](docs/RESEARCH.md) and the
+[claims register](docs/research/CLAIMS.md).
+
 ## Run
 
 Desktop interface (AURORA Command Centre):

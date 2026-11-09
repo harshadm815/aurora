@@ -86,7 +86,11 @@ Example (temperature 0.5, seed 3; the prompt is in bold):
   it can't answer questions or follow requests. It must not be connected
   to the assistant as a conversational model.
 - **Small measurements:** the generation metrics come from 20 prompts,
-  and each experiment except the baseline was run once.
+  and the Phase 5 experiments ran each variant once.
+- **Not the best architecture at this size.** In a five-seed experiment
+  (Phase 16), an attention-free gated linear recurrence with the same
+  number of parameters reached a 0.077 nats lower validation loss, confirmed
+  on test. See [RESEARCH.md](RESEARCH.md) and [the claims register](research/CLAIMS.md).
 
 ## Running it
 

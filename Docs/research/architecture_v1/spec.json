@@ -1,0 +1,62 @@
+{
+  "name": "architecture_v1",
+  "question": "At AURORA-T0's size (about 30,000 parameters) and training budget (2,000 steps of 1,024 tokens), does replacing one part of the Transformer give a lower validation loss: RMSNorm instead of layer norm, a SwiGLU feed-forward instead of GELU, or an attention-free gated linear recurrence instead of attention?",
+  "hypothesis": "RMSNorm and SwiGLU, which help large models, make little or no difference at this size. The gated linear recurrence, which only keeps a running summary per channel instead of looking back at every token, is worse than attention but not by much, because 32-token contexts of English text are dominated by nearby tokens.",
+  "data": {
+    "file": "Data/pg1661.txt",
+    "sha256": "922e2a12ccb43a4c9544c260b2166c6ad2097aeb5957faeee113f173bb857cd0",
+    "source": "Project Gutenberg eBook #1661, The Adventures of Sherlock Holmes, https://www.gutenberg.org/ebooks/1661.txt.utf-8"
+  },
+  "splits": {
+    "validation": 0.05,
+    "test": 0.05
+  },
+  "tokenizer": {
+    "vocab_size": 512
+  },
+  "model": {},
+  "train": {},
+  "steps": 2000,
+  "tokens_per_step": 1024,
+  "eval_interval": 250,
+  "seeds": [
+    0,
+    1,
+    2,
+    3,
+    4
+  ],
+  "baseline": "T0",
+  "variants": [
+    {
+      "name": "T0",
+      "question": "the baseline: AURORA-T0 as specified"
+    },
+    {
+      "name": "RMSNorm",
+      "norm": "rms",
+      "question": "RMSNorm in place of every layer norm"
+    },
+    {
+      "name": "SwiGLU",
+      "ffn": "swiglu",
+      "question": "SwiGLU feed-forward, width matched to the same parameter count"
+    },
+    {
+      "name": "Recurrent",
+      "mixer": "recurrent",
+      "question": "gated linear recurrence in place of attention, feed-forward widened to the same parameter count"
+    }
+  ],
+  "decision": {
+    "metric": "best_validation_loss",
+    "confidence": 0.95,
+    "min_effect": 0.01
+  },
+  "limitations": [
+    "One small model size, one training budget and one book: results may not hold for larger models, longer training or other text.",
+    "Five seeds detect differences of a few hundredths of a nat; smaller real differences would show as 'no detectable difference'.",
+    "Hyperparameters (learning rate etc.) were tuned for T0 in Phase 5 and are reused unchanged for every variant, which may favour T0.",
+    "Results are exact on this machine; another CPU or NumPy version may give slightly different numbers (the analysis, not the bits, should then agree)."
+  ]
+}

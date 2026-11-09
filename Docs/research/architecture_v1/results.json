@@ -1,0 +1,343 @@
+{
+  "name": "architecture_v1",
+  "question": "At AURORA-T0's size (about 30,000 parameters) and training budget (2,000 steps of 1,024 tokens), does replacing one part of the Transformer give a lower validation loss: RMSNorm instead of layer norm, a SwiGLU feed-forward instead of GELU, or an attention-free gated linear recurrence instead of attention?",
+  "baseline": "T0",
+  "decision_rule": {
+    "metric": "best_validation_loss",
+    "confidence": 0.95,
+    "min_effect": 0.01
+  },
+  "complete": true,
+  "variants": [
+    {
+      "name": "T0",
+      "question": "the baseline: AURORA-T0 as specified",
+      "architecture": {
+        "model": {
+          "vocab_size": 512,
+          "context_length": 32,
+          "d_model": 32,
+          "n_heads": 2,
+          "n_layers": 1,
+          "d_ff": 128,
+          "layer_norm_eps": 1e-05,
+          "init_std": 0.02,
+          "dtype": "float32"
+        },
+        "norm": "layer",
+        "ffn": "gelu",
+        "mixer": "attention",
+        "label": "T0",
+        "parameters": 30176
+      },
+      "seeds": [
+        0,
+        1,
+        2,
+        3,
+        4
+      ],
+      "validation": {
+        "n": 5,
+        "mean": 3.626301334381103,
+        "std": 0.012841797031039734,
+        "ci_low": 3.6103586935862437,
+        "ci_high": 3.6422439751759623,
+        "min": 3.612547197341919,
+        "max": 3.6448526191711426
+      },
+      "test": {
+        "n": 5,
+        "mean": 3.5924237589603223,
+        "std": 0.009458560894204467,
+        "ci_low": 3.580681287216833,
+        "ci_high": 3.6041662307038114,
+        "min": 3.585853644079292,
+        "max": 3.608874855433761
+      },
+      "seconds": {
+        "n": 5,
+        "mean": 146.97999999999996,
+        "std": 10.925749402214933,
+        "ci_low": 133.41606516181972,
+        "ci_high": 160.5439348381802,
+        "min": 141.3,
+        "max": 166.5
+      }
+    },
+    {
+      "name": "RMSNorm",
+      "question": "RMSNorm in place of every layer norm",
+      "architecture": {
+        "model": {
+          "vocab_size": 512,
+          "context_length": 32,
+          "d_model": 32,
+          "n_heads": 2,
+          "n_layers": 1,
+          "d_ff": 128,
+          "layer_norm_eps": 1e-05,
+          "init_std": 0.02,
+          "dtype": "float32"
+        },
+        "norm": "rms",
+        "ffn": "gelu",
+        "mixer": "attention",
+        "label": "T0 + rms",
+        "parameters": 30080
+      },
+      "seeds": [
+        0,
+        1,
+        2,
+        3,
+        4
+      ],
+      "validation": {
+        "n": 5,
+        "mean": 3.6152522563934326,
+        "std": 0.015668937624368003,
+        "ci_low": 3.5957998196683736,
+        "ci_high": 3.6347046931184916,
+        "min": 3.5974483776092527,
+        "max": 3.6389500999450686
+      },
+      "test": {
+        "n": 5,
+        "mean": 3.59141681494627,
+        "std": 0.004166510452539916,
+        "ci_low": 3.5862442382926822,
+        "ci_high": 3.596589391599858,
+        "min": 3.5852673206966763,
+        "max": 3.596635100161202
+      },
+      "seconds": {
+        "n": 5,
+        "mean": 138.16,
+        "std": 1.6272676485446398,
+        "ci_low": 136.13980426453276,
+        "ci_high": 140.18019573546724,
+        "min": 136.2,
+        "max": 140.6
+      },
+      "validation_comparison": {
+        "n": 5,
+        "mean_difference": -0.011049077987670852,
+        "std_difference": 0.010481623680497527,
+        "ci_low": -0.02406164631289471,
+        "ci_high": 0.001963490337553003,
+        "wins": 5,
+        "decision": "no detectable difference",
+        "differences": [
+          -0.029032697677612518,
+          -0.0030438995361325993,
+          -0.005902519226073988,
+          -0.011260271072387695,
+          -0.006006002426147461
+        ]
+      },
+      "test_confirmation": null,
+      "verdict": "no detectable difference"
+    },
+    {
+      "name": "SwiGLU",
+      "question": "SwiGLU feed-forward, width matched to the same parameter count",
+      "architecture": {
+        "model": {
+          "vocab_size": 512,
+          "context_length": 32,
+          "d_model": 32,
+          "n_heads": 2,
+          "n_layers": 1,
+          "d_ff": 88,
+          "layer_norm_eps": 1e-05,
+          "init_std": 0.02,
+          "dtype": "float32"
+        },
+        "norm": "layer",
+        "ffn": "swiglu",
+        "mixer": "attention",
+        "label": "T0 + swiglu",
+        "parameters": 30272
+      },
+      "seeds": [
+        0,
+        1,
+        2,
+        3,
+        4
+      ],
+      "validation": {
+        "n": 5,
+        "mean": 3.6050844364166266,
+        "std": 0.019313290197966362,
+        "ci_low": 3.581107663738409,
+        "ci_high": 3.629061209094844,
+        "min": 3.5850350761413576,
+        "max": 3.6277720451354982
+      },
+      "test": {
+        "n": 5,
+        "mean": 3.5742634025514888,
+        "std": 0.01965918377856522,
+        "ci_low": 3.5498572151196033,
+        "ci_high": 3.5986695899833743,
+        "min": 3.5556912924759185,
+        "max": 3.5991106817838774
+      },
+      "seconds": {
+        "n": 5,
+        "mean": 136.88,
+        "std": 32.27083822896455,
+        "ci_low": 96.8168857185765,
+        "ci_high": 176.9431142814235,
+        "min": 79.2,
+        "max": 153.0
+      },
+      "validation_comparison": {
+        "n": 5,
+        "mean_difference": -0.02121689796447752,
+        "std_difference": 0.021260730001659414,
+        "ci_low": -0.04761134888389823,
+        "ci_high": 0.0051775529549431855,
+        "wins": 4,
+        "decision": "no detectable difference",
+        "differences": [
+          -0.04084537506103514,
+          0.011505794525146662,
+          -0.036643028259277344,
+          -0.01258975982666044,
+          -0.027512121200561346
+        ]
+      },
+      "test_confirmation": null,
+      "verdict": "no detectable difference"
+    },
+    {
+      "name": "Recurrent",
+      "question": "gated linear recurrence in place of attention, feed-forward widened to the same parameter count",
+      "architecture": {
+        "model": {
+          "vocab_size": 512,
+          "context_length": 32,
+          "d_model": 32,
+          "n_heads": 2,
+          "n_layers": 1,
+          "d_ff": 144,
+          "layer_norm_eps": 1e-05,
+          "init_std": 0.02,
+          "dtype": "float32"
+        },
+        "norm": "layer",
+        "ffn": "gelu",
+        "mixer": "recurrent",
+        "label": "T0 + recurrent",
+        "parameters": 30160
+      },
+      "seeds": [
+        0,
+        1,
+        2,
+        3,
+        4
+      ],
+      "validation": {
+        "n": 5,
+        "mean": 3.5492075252532955,
+        "std": 0.008904371559572877,
+        "ci_low": 3.5381530601394875,
+        "ci_high": 3.5602619903671036,
+        "min": 3.5380910205841065,
+        "max": 3.5599554443359374
+      },
+      "test": {
+        "n": 5,
+        "mean": 3.5197041412245644,
+        "std": 0.009598443208111221,
+        "ci_low": 3.5077880104924795,
+        "ci_high": 3.5316202719566494,
+        "min": 3.5095632051747376,
+        "max": 3.534152778684327
+      },
+      "seconds": {
+        "n": 5,
+        "mean": 138.48,
+        "std": 22.931463102035156,
+        "ci_low": 110.01139251051433,
+        "ci_high": 166.94860748948565,
+        "min": 97.5,
+        "max": 149.7
+      },
+      "validation_comparison": {
+        "n": 5,
+        "mean_difference": -0.07709380912780768,
+        "std_difference": 0.019764988496914902,
+        "ci_low": -0.10163134940812812,
+        "ci_high": -0.052556268847487236,
+        "wins": 5,
+        "decision": "better",
+        "differences": [
+          -0.08839005470275874,
+          -0.056310806274414205,
+          -0.09912401199340826,
+          -0.08563899993896484,
+          -0.05600517272949235
+        ]
+      },
+      "test_confirmation": {
+        "n": 5,
+        "mean_difference": -0.07271961773575741,
+        "std_difference": 0.013812574241563628,
+        "ci_low": -0.08986744440310847,
+        "ci_high": -0.05557179106840636,
+        "wins": 5,
+        "decision": "better",
+        "differences": [
+          -0.07629043890455423,
+          -0.05631995630141695,
+          -0.09177654261454249,
+          -0.07663722761492497,
+          -0.06257392324334843
+        ]
+      },
+      "verdict": "improvement (confirmed on test)"
+    }
+  ],
+  "baseline_vs_bigram": {
+    "bigram_test_loss": 3.698881984277858,
+    "comparison": {
+      "n": 5,
+      "mean_difference": -0.10645822531753613,
+      "std_difference": 0.009458560894204467,
+      "ci_low": -0.118200697061025,
+      "ci_high": -0.09471575357404725,
+      "wins": 5,
+      "decision": "better",
+      "differences": [
+        -0.11302834019856611,
+        -0.10840924929211404,
+        -0.09000712884409712,
+        -0.10832512124325921,
+        -0.11252128700964414
+      ]
+    }
+  },
+  "environment": {
+    "python": "3.14.2",
+    "numpy": "2.5.4",
+    "platform": "Windows-11-10.0.26200-SP0",
+    "machine": "AMD64",
+    "processor": "Intel64 Family 6 Model 142 Stepping 10, GenuineIntel",
+    "code_fingerprint": "a73cac9840a36ac6f3599a3dc8e1c7d7fb1562b07aff087b037fea61e318810f",
+    "commit": "de6658d1482bd13bce74611157be71195202152d",
+    "aurora_core_uncommitted_changes": false,
+    "vocab_size": 512,
+    "data_sha256": "922e2a12ccb43a4c9544c260b2166c6ad2097aeb5957faeee113f173bb857cd0",
+    "tokenizer_sha256": "445a0a239facec5eb45c08ed4239156f5c3e999444febb42d6fb2300b1e5a32d",
+    "tokens": {
+      "train": 238215,
+      "validation": 13830,
+      "test": 12459
+    }
+  }
+}

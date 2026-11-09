@@ -1,5 +1,34 @@
 # Changelog
 
+## 0.33.0 — Research platform (2026-11-09)
+
+Blueprint Phase 16. See Docs/RESEARCH.md and Docs/research/CLAIMS.md.
+
+### Added
+- **Research variants of AURORA-T0** (`aurora_core/research/arch.py`):
+  RMSNorm, SwiGLU, and an attention-free gated linear recurrence, each a
+  single change, parameter-matched (within 0.3 %), with gradient-checked
+  backward passes. The default reproduces T0 exactly.
+- **Reproducible experiments** (`python -m aurora_core.research`): a
+  specification written before running (question, hypothesis, data
+  SHA-256, seeds, decision rule); paired runs over seeds with 95 %
+  confidence intervals; validation decides, test confirms; data, code and
+  weight fingerprints; resumable runs that never mix code versions;
+  bit-for-bit `verify`; report and claims register.
+- **First experiment, architecture_v1** (20 runs): the gated linear
+  recurrence beat attention by 0.077 nats [95 % CI 0.053–0.102] on all 5
+  seeds, confirmed on test, contrary to the written hypothesis; RMSNorm and
+  SwiGLU showed no detectable difference. Three runs re-trained from
+  scratch gave identical weights; T0 seed 0 matched Phase 5's result to
+  every digit.
+- A test that no variant can see future tokens.
+- RMSNorm, SiLU and sigmoid operations.
+- 37 new tests.
+
+### Fixed
+- A flaky precision test (random sampling could stop before 5 tokens).
+- Reports for experiments with a single finished seed crashed.
+
 ## 0.32.0 — Automation and device control (2026-11-08)
 
 Blueprint Phase 15. See "Devices and automation" in Docs/ARCHITECTURE.md.

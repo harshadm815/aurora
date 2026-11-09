@@ -366,12 +366,20 @@ def report(spec: dict, analysis: dict, env: dict, runs: list[dict], verification
               f"python -m aurora_core.research run --spec aurora_core/research/specs/{spec['name']}.json --data {spec['data']['file']}",
               f"python -m aurora_core.research verify --spec aurora_core/research/specs/{spec['name']}.json "
               f"--data {spec['data']['file']} --run \"{analysis['baseline']} | seed {spec['seeds'][0]}\"",
-              "```"]
+              "```",
+              "",
+              f"The runs were made with the code at git commit `{env.get('commit', '?')[:12]}` (`git checkout "
+              f"{env.get('commit', '?')[:12]}` for exactly that code). A re-run with later code is marked below; it "
+              "still has to give identical weights, which shows training itself is unchanged."]
     if verifications:
-        lines += ["", "### Re-runs from scratch", "", "| Run | Identical weights | Recorded validation loss | Reproduced |", "|---|---|---|---|"]
+        lines += ["", "### Re-runs from scratch", "",
+                  "| Run | Identical weights | Recorded validation loss | Reproduced | Code |", "|---|---|---|---|---|"]
         for check in verifications:
-            lines.append(f"| {check['id']} | {'yes' if check['identical_weights'] else 'NO'} | "
-                         f"{check['recorded']['best_validation_loss']:.6f} | {check['reproduced']['best_validation_loss']:.6f} |")
+            run = check["id"].replace("|", "\\|")              # "T0 | seed 0" inside a table cell
+            code = "as recorded" if check.get("code_matches") else "later version"
+            lines.append(f"| {run} | {'yes' if check['identical_weights'] else 'NO'} | "
+                         f"{check['recorded']['best_validation_loss']:.6f} | {check['reproduced']['best_validation_loss']:.6f} | "
+                         f"{code} |")
     if spec.get("limitations"):
         lines += ["", "## Limitations", ""] + [f"- {item}" for item in spec["limitations"]]
     return "\n".join(lines) + "\n"

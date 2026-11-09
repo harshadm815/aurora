@@ -70,6 +70,21 @@ def test_every_variant_passes_gradient_checks(options):
         assert result.passed, (name, result)
 
 
+@pytest.mark.parametrize("options", [{}, {"norm": "rms"}, {"ffn": "swiglu"}, {"mixer": "recurrent"}])
+def test_no_variant_can_see_future_tokens(options):
+    """A model that peeks at later tokens would score a falsely low loss.
+    Changing tokens after position t must not change any prediction up to t."""
+    rng = np.random.default_rng(0)
+    model = VariantModel(matched(ArchConfig(SMALL, **options)), seed=1)
+    for param in model.params.values():
+        param += rng.normal(0, 0.3, param.shape)            # non-trivial weights, like a trained model
+    tokens = rng.integers(0, SMALL.vocab_size, size=SMALL.context_length)
+    for t in range(SMALL.context_length - 1):
+        changed = tokens.copy()
+        changed[t + 1:] = rng.integers(0, SMALL.vocab_size, size=SMALL.context_length - t - 1)
+        assert np.array_equal(model(tokens)[: t + 1], model(changed)[: t + 1])
+
+
 def test_scan_matches_its_definition_and_gradient():
     rng = np.random.default_rng(0)
     u, a = rng.normal(size=(2, 6, 3)), np.array([0.2, 0.5, 0.9])
@@ -254,7 +269,7 @@ def test_verification_detects_different_weights(tmp_path, text_file, capsys):
     assert not check["identical_weights"]
     assert main(["verify", "--spec", str(spec_path), "--data", str(text_file), "--out", str(out),
                  "--run", "T0 | seed 0"]) == 1
-    assert "| T0 | seed 0 | NO |" in (out / "report.md").read_text(encoding="utf-8")
+    assert r"| T0 \| seed 0 | NO |" in (out / "report.md").read_text(encoding="utf-8")
 
 
 def test_only_seeds_both_sides_ran_are_compared():

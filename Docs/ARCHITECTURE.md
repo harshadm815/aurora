@@ -851,7 +851,7 @@ the message to the Brain.
 | `aurora.tool_plugins` | `calculator.py`, `numbers.py`, `memory_tools.py`, `weather.py`, `research.py`, `documents.py`, `registry.py` | The built-in tools and `default_tools()` | Yes |
 | `aurora.workflows` | `values.py`, `operations.py`, `workflow.py`, `builder.py`, `runner.py`, `validation.py` | Structured multi-step tasks: typed values between steps, validation, retries, traces | Yes |
 | `aurora.events` | `event.py`, `bus.py`, `topics.py` | Publish/subscribe with error isolation; standard event names | Yes |
-| `aurora_core` (separate package) | `tensors/`, `transformer/`, `tokenizer/`, `training/`, `generation/`, `runtime/` | AURORA's own neural network: tensor maths with gradient checks, the AURORA-T0 Transformer with backpropagation, character and byte-level BPE tokenizers, the training pipeline and experiments, text generation, and the AURORA Core Runtime with its optimised engine (see AURORA_CORE.md) | No, not yet |
+| `aurora_core` (separate package) | `tensors/`, `transformer/`, `tokenizer/`, `training/`, `generation/`, `runtime/`, `research/` | AURORA's own neural network: tensor maths with gradient checks, the AURORA-T0 Transformer with backpropagation, character and byte-level BPE tokenizers, the training pipeline and experiments, text generation, the AURORA Core Runtime with its optimised engine (see AURORA_CORE.md), and reproducible research experiments (see RESEARCH.md) | No, not yet |
 
 ## Design rules
 

@@ -90,7 +90,8 @@ Example (temperature 0.5, seed 3; the prompt is in bold):
 - **Not the best architecture at this size.** In a five-seed experiment
   (Phase 16), an attention-free gated linear recurrence with the same
   number of parameters reached a 0.077 nats lower validation loss, confirmed
-  on test. See [RESEARCH.md](RESEARCH.md) and [the claims register](research/CLAIMS.md).
+  on test; repeated at T0's own learning rate (1e-2), it was still 0.051
+  nats lower on every seed. See [RESEARCH.md](RESEARCH.md) and [the claims register](research/CLAIMS.md).
 
 ## Running it
 

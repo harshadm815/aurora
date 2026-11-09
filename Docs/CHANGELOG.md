@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.33.1 — Learning-rate follow-up (2026-11-09)
+
+### Added
+- **Experiment architecture_lr1e-2** (20 runs): architecture_v1 repeated at
+  learning rate 1e-2 → 1e-3, specification committed before running. The
+  gated linear recurrence still beat attention, by 0.051 nats [95 % CI
+  0.022–0.080] on all 5 seeds, confirmed on test; RMSNorm and SwiGLU again
+  showed no detectable difference. The written hypothesis held. Two runs
+  re-trained from scratch gave identical weights.
+
 ## 0.33.0 — Research platform (2026-11-09)
 
 Blueprint Phase 16. See Docs/RESEARCH.md and Docs/research/CLAIMS.md.

@@ -42,11 +42,44 @@ What it does and doesn't show:
 - **A correction to the specification:** its limitations say hyperparameters "were tuned for T0 in Phase 5".
   In fact every run used the trainer's defaults (maximum learning rate 3e-3), the same as Phase 5's
   baseline, not the 1e-2 Phase 5 found better. The specification is left as it was recorded; the claim is
-  about this setting. Repeating the comparison at 1e-2 is the obvious next experiment.
+  about this setting. The comparison was then repeated at 1e-2: see architecture_lr1e-2 below.
 
 Reproducibility, beyond the re-runs in the report: T0 with seed 0 here gave a best validation loss of
 3.6264810752868653, the same to every digit as Phase 5's baseline run three days earlier, with different
 code around it (the research runner instead of training/experiments.py).
+
+### architecture_lr1e-2: the same comparison at learning rate 1e-2
+
+[Report](research/architecture_lr1e-2/report.md) · [runs](research/architecture_lr1e-2/runs.jsonl) ·
+[specification](../aurora_core/research/specs/architecture_lr1e-2.json). Identical to architecture_v1
+except the learning rate: maximum 1e-2 falling to 1e-3 (the setting Phase 5 found better for T0), instead of
+3e-3 to 3e-4. The specification and hypothesis were committed before any run.
+
+| Variant | Best validation loss (mean ± sd) | Difference vs T0 [95 % CI] | Seeds better | Test loss | Finding | Gain from the higher learning rate |
+|---|---|---|---|---|---|---|
+| T0 | 3.459 ± 0.025 | — | — | 3.440 | baseline | −0.167 |
+| RMSNorm | 3.454 ± 0.008 | −0.006 [−0.028, +0.017] | 2 of 5 | 3.437 | no detectable difference | −0.161 |
+| SwiGLU | 3.464 ± 0.010 | +0.005 [−0.028, +0.038] | 2 of 5 | 3.458 | no detectable difference | −0.141 |
+| **Gated linear recurrence** | **3.408 ± 0.007** | **−0.051 [−0.080, −0.022]** | **5 of 5** | **3.388** | **improvement, confirmed on test** | −0.141 |
+
+**The hypothesis held.** It predicted that T0 would gain more from the higher learning rate than the
+variants (it gained 0.167 nats, the recurrence 0.141), that the recurrence would stay better but by less
+than 0.077 (it is 0.051 better, on all 5 seeds, confirmed on test), and that RMSNorm and SwiGLU would show
+no detectable difference (they didn't).
+
+Read with care:
+
+- **The recurrence's advantage survives a change of learning rate**, which makes architecture_v1's finding
+  more robust: it was not an artefact of a learning rate that happened to suit attention badly.
+- **"The gap shrank" is not itself established.** The two confidence intervals (−0.102 to −0.053, and
+  −0.080 to −0.022) overlap; the drop from 0.077 to 0.051 is in the predicted direction but could be chance.
+- T0's spread grew (seed 4 at 3.500 against 3.44–3.47 for the others), which widens every interval here.
+- Both architectures gained about 0.14–0.17 nats from the higher learning rate on every seed, consistent
+  with Phase 5's single-seed finding. This was not the experiment's question, so it is noted, not claimed.
+- Still only two learning rates; neither experiment tuned the recurrence's own learning rate, which, if
+  anything, would favour it further.
+
+Two runs (Recurrent seed 3 and T0 seed 4) were re-trained from scratch and gave identical weights.
 
 ### Earlier findings
 

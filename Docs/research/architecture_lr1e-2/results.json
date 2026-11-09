@@ -1,0 +1,343 @@
+{
+  "name": "architecture_lr1e-2",
+  "question": "Does architecture_v1's result hold at the learning rate Phase 5 found better for T0 (maximum 1e-2, falling to 1e-3, instead of 3e-3 to 3e-4)? Same data, tokenizer, model size, steps, seeds and variants; only the learning rate changes.",
+  "baseline": "T0",
+  "decision_rule": {
+    "metric": "best_validation_loss",
+    "confidence": 0.95,
+    "min_effect": 0.01
+  },
+  "complete": true,
+  "variants": [
+    {
+      "name": "T0",
+      "question": "the baseline: AURORA-T0 as specified",
+      "architecture": {
+        "model": {
+          "vocab_size": 512,
+          "context_length": 32,
+          "d_model": 32,
+          "n_heads": 2,
+          "n_layers": 1,
+          "d_ff": 128,
+          "layer_norm_eps": 1e-05,
+          "init_std": 0.02,
+          "dtype": "float32"
+        },
+        "norm": "layer",
+        "ffn": "gelu",
+        "mixer": "attention",
+        "label": "T0",
+        "parameters": 30176
+      },
+      "seeds": [
+        0,
+        1,
+        2,
+        3,
+        4
+      ],
+      "validation": {
+        "n": 5,
+        "mean": 3.4593404350280763,
+        "std": 0.025140061301053812,
+        "ci_low": 3.428129930305515,
+        "ci_high": 3.4905509397506376,
+        "min": 3.438229522705078,
+        "max": 3.4995429420471194
+      },
+      "test": {
+        "n": 5,
+        "mean": 3.4398110437515768,
+        "std": 0.019291549238846382,
+        "ci_low": 3.4158612617118926,
+        "ci_high": 3.463760825791261,
+        "min": 3.425781601805307,
+        "max": 3.472671911465172
+      },
+      "seconds": {
+        "n": 5,
+        "mean": 184.26,
+        "std": 23.565292274868995,
+        "ci_low": 155.0045158137897,
+        "ci_high": 213.51548418621027,
+        "min": 146.2,
+        "max": 204.1
+      }
+    },
+    {
+      "name": "RMSNorm",
+      "question": "RMSNorm in place of every layer norm",
+      "architecture": {
+        "model": {
+          "vocab_size": 512,
+          "context_length": 32,
+          "d_model": 32,
+          "n_heads": 2,
+          "n_layers": 1,
+          "d_ff": 128,
+          "layer_norm_eps": 1e-05,
+          "init_std": 0.02,
+          "dtype": "float32"
+        },
+        "norm": "rms",
+        "ffn": "gelu",
+        "mixer": "attention",
+        "label": "T0 + rms",
+        "parameters": 30080
+      },
+      "seeds": [
+        0,
+        1,
+        2,
+        3,
+        4
+      ],
+      "validation": {
+        "n": 5,
+        "mean": 3.4537107715606687,
+        "std": 0.00788279295956286,
+        "ci_low": 3.4439245604633593,
+        "ci_high": 3.4634969826579782,
+        "min": 3.4437249088287354,
+        "max": 3.4627699851989746
+      },
+      "test": {
+        "n": 5,
+        "mean": 3.437262994035657,
+        "std": 0.004558549783450401,
+        "ci_low": 3.4316037142972085,
+        "ci_high": 3.4429222737741054,
+        "min": 3.4305822328307634,
+        "max": 3.442286271975402
+      },
+      "seconds": {
+        "n": 5,
+        "mean": 183.43999999999997,
+        "std": 11.762355206335169,
+        "ci_low": 168.83744838647706,
+        "ci_high": 198.04255161352287,
+        "min": 169.7,
+        "max": 201.5
+      },
+      "validation_comparison": {
+        "n": 5,
+        "mean_difference": -0.005629663467407298,
+        "std_difference": 0.01831427221901028,
+        "ci_low": -0.028366190349214636,
+        "ci_high": 0.017106863414400042,
+        "wins": 2,
+        "decision": "no detectable difference",
+        "differences": [
+          0.005495386123657298,
+          0.008605012893676545,
+          0.0010455036163330433,
+          -0.006521263122558629,
+          -0.036772956848144744
+        ]
+      },
+      "test_confirmation": null,
+      "verdict": "no detectable difference"
+    },
+    {
+      "name": "SwiGLU",
+      "question": "SwiGLU feed-forward, width matched to the same parameter count",
+      "architecture": {
+        "model": {
+          "vocab_size": 512,
+          "context_length": 32,
+          "d_model": 32,
+          "n_heads": 2,
+          "n_layers": 1,
+          "d_ff": 88,
+          "layer_norm_eps": 1e-05,
+          "init_std": 0.02,
+          "dtype": "float32"
+        },
+        "norm": "layer",
+        "ffn": "swiglu",
+        "mixer": "attention",
+        "label": "T0 + swiglu",
+        "parameters": 30272
+      },
+      "seeds": [
+        0,
+        1,
+        2,
+        3,
+        4
+      ],
+      "validation": {
+        "n": 5,
+        "mean": 3.4641314830780034,
+        "std": 0.009574772230419715,
+        "ci_low": 3.452244739034844,
+        "ci_high": 3.476018227121163,
+        "min": 3.450412254333496,
+        "max": 3.4752969932556153
+      },
+      "test": {
+        "n": 5,
+        "mean": 3.458020391071977,
+        "std": 0.010560498054206866,
+        "ci_low": 3.444909902977041,
+        "ci_high": 3.4711308791669127,
+        "min": 3.4454467069826884,
+        "max": 3.4694117322985494
+      },
+      "seconds": {
+        "n": 5,
+        "mean": 214.56,
+        "std": 8.256088662314617,
+        "ci_low": 204.31035537505812,
+        "ci_high": 224.80964462494188,
+        "min": 204.0,
+        "max": 221.3
+      },
+      "validation_comparison": {
+        "n": 5,
+        "mean_difference": 0.004791048049926694,
+        "std_difference": 0.026567003109453424,
+        "ci_low": -0.02819095490076385,
+        "ci_high": 0.03777305100061724,
+        "wins": 2,
+        "decision": "no detectable difference",
+        "differences": [
+          0.012182731628417987,
+          0.0364402008056639,
+          0.01495008468627912,
+          -0.004752378463745099,
+          -0.03486539840698244
+        ]
+      },
+      "test_confirmation": null,
+      "verdict": "no detectable difference"
+    },
+    {
+      "name": "Recurrent",
+      "question": "gated linear recurrence in place of attention, feed-forward widened to the same parameter count",
+      "architecture": {
+        "model": {
+          "vocab_size": 512,
+          "context_length": 32,
+          "d_model": 32,
+          "n_heads": 2,
+          "n_layers": 1,
+          "d_ff": 144,
+          "layer_norm_eps": 1e-05,
+          "init_std": 0.02,
+          "dtype": "float32"
+        },
+        "norm": "layer",
+        "ffn": "gelu",
+        "mixer": "recurrent",
+        "label": "T0 + recurrent",
+        "parameters": 30160
+      },
+      "seeds": [
+        0,
+        1,
+        2,
+        3,
+        4
+      ],
+      "validation": {
+        "n": 5,
+        "mean": 3.408222187042236,
+        "std": 0.007395437123648346,
+        "ci_low": 3.3990410111290585,
+        "ci_high": 3.417403362955413,
+        "min": 3.40108283996582,
+        "max": 3.420543613433838
+      },
+      "test": {
+        "n": 5,
+        "mean": 3.388014331758788,
+        "std": 0.010091296334491634,
+        "ci_low": 3.375486341149186,
+        "ci_high": 3.40054232236839,
+        "min": 3.3733588080173287,
+        "max": 3.397143576629364
+      },
+      "seconds": {
+        "n": 5,
+        "mean": 199.04000000000002,
+        "std": 13.504925027559397,
+        "ci_low": 182.27410904599463,
+        "ci_high": 215.8058909540054,
+        "min": 180.7,
+        "max": 215.4
+      },
+      "validation_comparison": {
+        "n": 5,
+        "mean_difference": -0.05111824798584008,
+        "std_difference": 0.023160782281236334,
+        "ci_low": -0.07987154719662765,
+        "ci_high": -0.022364948775052514,
+        "wins": 5,
+        "decision": "better",
+        "differences": [
+          -0.03714668273925792,
+          -0.034351043701172035,
+          -0.04851091384887729,
+          -0.044269351959228764,
+          -0.0913132476806644
+        ]
+      },
+      "test_confirmation": {
+        "n": 5,
+        "mean_difference": -0.05179671199278859,
+        "std_difference": 0.018033269283132914,
+        "ci_low": -0.07418438358135579,
+        "ci_high": -0.02940904040422139,
+        "wins": 5,
+        "decision": "better",
+        "differences": [
+          -0.05599980795597981,
+          -0.029998483878481697,
+          -0.03809953777832975,
+          -0.059357395515343914,
+          -0.07552833483580779
+        ]
+      },
+      "verdict": "improvement (confirmed on test)"
+    }
+  ],
+  "baseline_vs_bigram": {
+    "bigram_test_loss": 3.698881984277858,
+    "comparison": {
+      "n": 5,
+      "mean_difference": -0.25907094052628105,
+      "std_difference": 0.019291549238846385,
+      "ci_low": -0.2830207225659653,
+      "ci_high": -0.2351211584865968,
+      "wins": 5,
+      "decision": "better",
+      "differences": [
+        -0.2695233683045495,
+        -0.27310038247255086,
+        -0.2690757885995394,
+        -0.2574450904420793,
+        -0.22621007281268612
+      ]
+    }
+  },
+  "environment": {
+    "python": "3.14.2",
+    "numpy": "2.5.4",
+    "platform": "Windows-11-10.0.26200-SP0",
+    "machine": "AMD64",
+    "processor": "Intel64 Family 6 Model 142 Stepping 10, GenuineIntel",
+    "code_fingerprint": "0627e58ee757cd798d97f7b531c7c657bf40279738d18552fae53b55b0e95588",
+    "commit": "1e1e9ecba7adaf6292a2254118158b8cf188df9e",
+    "aurora_core_uncommitted_changes": false,
+    "vocab_size": 512,
+    "data_sha256": "922e2a12ccb43a4c9544c260b2166c6ad2097aeb5957faeee113f173bb857cd0",
+    "tokenizer_sha256": "445a0a239facec5eb45c08ed4239156f5c3e999444febb42d6fb2300b1e5a32d",
+    "tokens": {
+      "train": 238215,
+      "validation": 13830,
+      "test": 12459
+    }
+  }
+}

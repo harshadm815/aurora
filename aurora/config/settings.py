@@ -27,6 +27,13 @@ DEFAULT_MODEL = "tinyllama"
 MODEL_TIMEOUT_SECONDS = 120
 # Longest reply the model may generate (stops runaway, looping output).
 MODEL_MAX_REPLY_TOKENS = 400
+# AURORA's own models can be chosen as the model too: "aurora:<folder>"
+# means Models/<folder>/best.npz, run by the AURORA Core Runtime with no
+# Ollama and no network, for example DEFAULT_MODEL = "aurora:aurora_t0_lr1e-2".
+# They are tiny research models: they continue your message in the style
+# of the book they were trained on, and don't follow instructions yet.
+CORE_MAX_REPLY_TOKENS = 80
+CORE_TEMPERATURE = 0.8
 
 # Paths are absolute so AURORA uses the same files no matter which
 # folder it is started from.

@@ -1,7 +1,7 @@
 from collections.abc import Iterator
 
 from aurora.providers.base_provider import BaseProvider
-from aurora.providers.ollama_provider import OllamaProvider
+from aurora.providers.model_switch import ModelSwitch
 
 
 class Brain:
@@ -12,7 +12,8 @@ class Brain:
 
     def __init__(self, provider: BaseProvider | None = None):
 
-        self.provider = provider or OllamaProvider()
+        # Ollama or AURORA's own model, whichever Settings names.
+        self.provider = provider or ModelSwitch()
 
     def ask(self, messages):
 

@@ -4,13 +4,11 @@ import httpx
 import ollama
 
 from aurora.config import settings
-from aurora.providers.base_provider import BaseProvider
+from aurora.providers.base_provider import BaseProvider, ModelUnavailableError
 
 logger = logging.getLogger(__name__)
 
-
-class ModelUnavailableError(RuntimeError):
-    """The language model couldn't produce an answer."""
+__all__ = ["ModelUnavailableError", "OllamaProvider"]
 
 
 class OllamaProvider(BaseProvider):

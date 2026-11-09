@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.34.0 — Model interface (2026-11-09)
+
+Deployment plan, stage 6.
+
+### Added
+- **AURORA's own models as the assistant's model.** The Brain now talks to
+  `ModelSwitch`, which serves Ollama models or, for names like
+  `aurora:aurora_t0_lr1e-2`, AURORA's own checkpoint through the Core
+  Runtime, with no Ollama or network. AURORA's checkpoints are listed in
+  Settings → Model. Loaded when first needed, unloaded on pause or when
+  switching; replies stream and can be stopped. Ollama stays the default.
+- Status displays (dashboard, status bar, System page, Model manager) say
+  when AURORA's own model is in use instead of reporting Ollama.
+- 19 new tests, including one where Ollama is unreachable and a real
+  checkpoint answers.
+
+### Changed
+- `ModelUnavailableError` moved to `aurora/providers/base_provider.py`
+  (still importable from `ollama_provider`).
+
 ## 0.33.1 — Learning-rate follow-up (2026-11-09)
 
 ### Added

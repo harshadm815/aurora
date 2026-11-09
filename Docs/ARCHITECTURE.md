@@ -38,8 +38,9 @@ AuroraEngine  (aurora/kernel/engine.py)
    │      ├── Reminders ── ReminderScheduler (this session)
    │      └── Research ── research team (agents) ── uses the tools above
    ├── ServiceManager ── publishes service.* events
-   │      └── BrainService ── Brain ── OllamaProvider ── Ollama (tinyllama)
-   │                                    (timeout + reply length cap)
+   │      └── BrainService ── Brain ── ModelSwitch ─┬─ OllamaProvider ── Ollama (tinyllama)
+   │                                    (timeout +  └─ CoreRuntimeProvider ── AURORA Core Runtime
+   │                                    reply cap)       ("aurora:<folder>" models, no Ollama)
    ├── AutoMemory ── FactExtractor → MemoryEvaluator → MemoryManager
    └── PluginManager ── receives KernelContext, publishes plugin.* events
           (no plugins registered by default)
@@ -53,7 +54,8 @@ shutdown():  kernel.stopping → plugins shut down → services stop → kernel.
 ```
 
 Both are idempotent. `BrainService.start()` runs a provider health check,
-so if Ollama is down or the model is missing the Brain is marked `Error`
+so if Ollama is down or the model is missing (or, for an `aurora:` model,
+its checkpoint is missing) the Brain is marked `Error`
 and `status` reports it instead of claiming all systems are operational.
 
 ## Events
@@ -910,5 +912,5 @@ temporary database instead of `aurora_memory.db`.
 | Workflows pass only numbers between steps (from the calculator, Numbers and current weather), and follow-ups are a fixed set of operations; no text results or forecasts as inputs yet | Later workflow work |
 | Routing is rule-based English only; no LLM fallback for unusual phrasing | Later, once a model good at structured output is available |
 | Permission grants are static config; no prompt to ask the user at runtime | Later, with physical-action tools (11) |
-| AURORA's own runtime (`aurora_core.runtime`) works, but AURORA-T0 is far too small to converse (see its model card), so the assistant still uses Ollama | Until a model good enough to converse exists |
+| AURORA-T0 can be chosen as the assistant's model (`aurora:` models, see AURORA_CORE.md), but it is far too small to converse, so Ollama stays the default | Until a model good enough to converse exists |
 | Event bus is synchronous; a slow subscriber delays the publisher | When voice/sensors need it (8, 10) |

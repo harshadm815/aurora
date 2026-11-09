@@ -10,6 +10,7 @@ from PySide6.QtWidgets import (
 )
 
 from aurora.config import settings
+from aurora.providers.core_provider import is_core_model
 from aurora.interface.automation_view import AutomationView
 from aurora.interface.chat import ChatView
 from aurora.interface.components.widgets import Emblem, fade_in, label
@@ -168,11 +169,13 @@ class MainWindow(QMainWindow):
         names = {"running": "AURORA online", "paused": "AURORA paused (model unloaded)",
                  "failed": "AURORA couldn't start", "stopped": "AURORA stopped"}
         parts = [names.get(self.backend.state, "AURORA starting")]
-        parts.append(f"model {status.get('model', settings.DEFAULT_MODEL)}")
+        model = status.get('model', settings.DEFAULT_MODEL)
+        parts.append(f"model {model}")
+        own = is_core_model(model)
         if ollama["ok"] is True:
-            parts.append("Ollama connected")
+            parts.append("AURORA's own model ready" if own else "Ollama connected")
         elif ollama["ok"] is False:
-            parts.append("Ollama unavailable")
+            parts.append("model unavailable" if own else "Ollama unavailable")
         self.status.showMessage("   ·   ".join(parts))
 
     def apply_preferences(self, values: dict):

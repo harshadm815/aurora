@@ -6,6 +6,7 @@ from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtWidgets import QGridLayout, QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
 
 from aurora.config import settings
+from aurora.providers.core_provider import is_core_model
 from aurora.interface import system_info
 from aurora.interface.components.base_view import BaseView
 from aurora.interface.components.widgets import (
@@ -214,12 +215,13 @@ class DashboardView(BaseView):
 
         ollama = self.backend.ollama
         model = status.get("model", settings.DEFAULT_MODEL)
+        own = is_core_model(model)
         if ollama["ok"] is None:
-            self.model_card.set(model, "Checking Ollama…")
+            self.model_card.set(model, "Checking the model…" if own else "Checking Ollama…")
         elif ollama["ok"]:
-            self.model_card.set(model, "Ollama connected")
+            self.model_card.set(model, "AURORA's own model, on this PC" if own else "Ollama connected")
         else:
-            self.model_card.set(model, f"Ollama: {ollama['detail']}")
+            self.model_card.set(model, f"{'AURORA model' if own else 'Ollama'}: {ollama['detail']}")
 
         if state == "paused":
             self.status_dot.set_state("off", pulse=False)

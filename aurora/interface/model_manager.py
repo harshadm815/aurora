@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
 )
 
 from aurora.config import settings
+from aurora.providers.core_provider import is_core_model
 from aurora.interface.components.base_view import BaseView
 from aurora.interface.components.widgets import Panel, label
 from aurora.interface.models_catalog import find_core_models
@@ -161,7 +162,10 @@ class ModelManagerView(BaseView):
         def show(overview):
             self.ollama_models = overview["installed"]
             active = overview["active"]
-            self.ollama_status.setText(f"AURORA chats with {active}. Ollama is running.")
+            if is_core_model(active):
+                self.ollama_status.setText(f"AURORA chats with its own model ({active}), not Ollama. Ollama is running.")
+            else:
+                self.ollama_status.setText(f"AURORA chats with {active}. Ollama is running.")
             fill(self.ollama_table, [
                 [m["name"] + ("  (chat)" if m["name"].split(":")[0] == active.split(":")[0] else ""),
                  m["parameters"] or "—", m["quantization"] or "—", size_text(m["size"]),

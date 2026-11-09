@@ -1,6 +1,10 @@
 from abc import ABC, abstractmethod
 
 
+class ModelUnavailableError(RuntimeError):
+    """The language model couldn't produce an answer."""
+
+
 class BaseProvider(ABC):
     """
     Abstract base class for AI providers.

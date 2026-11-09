@@ -5,6 +5,7 @@ from PySide6.QtGui import QColor
 from PySide6.QtWidgets import QComboBox, QGridLayout, QHBoxLayout, QListWidget, QListWidgetItem, QPushButton
 
 from aurora.config import settings
+from aurora.providers.core_provider import is_core_model
 from aurora.interface import system_info
 from aurora.interface.components.base_view import BaseView
 from aurora.interface.components.widgets import Panel, StatCard, StatusRow, discard, label
@@ -87,6 +88,8 @@ class SystemMonitorView(BaseView):
     def _show_ollama(self, state: dict):
         if state["ok"] is None:
             self.ollama_row.set("Checking…", "warning")
+        elif state["ok"] and is_core_model(settings.DEFAULT_MODEL):
+            self.ollama_row.set("Not needed: AURORA's own model is in use", "ok")
         elif state["ok"]:
             self.ollama_row.set("Connected", "ok")
         else:

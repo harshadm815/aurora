@@ -771,6 +771,40 @@ The tests were checked by breaking the code deliberately:
   - accepting invalid Unicode;
   - ignoring `min_frequency`.
 
+## Using AURORA's own model in the assistant
+
+The assistant's Brain talks to one model interface, `ModelSwitch`
+(`aurora/providers/model_switch.py`), which serves whichever model is chosen
+in Settings → Model:
+
+```
+Brain ── ModelSwitch ─┬─ "tinyllama", "phi3", …   → OllamaProvider → Ollama
+                      └─ "aurora:<folder>"        → CoreRuntimeProvider → AuroraRuntime
+                                                    (Models/<folder>/best.npz)
+```
+
+- **Choosing it:** AURORA's checkpoints appear in the Settings model list as
+  `aurora:aurora_t0`, `aurora:aurora_t0_lr1e-2`, … (every folder in `Models/`
+  with a `best.npz`), next to Ollama's models. Or set
+  `DEFAULT_MODEL = "aurora:aurora_t0_lr1e-2"` in `aurora/config/settings.py`.
+- **No Ollama, no network:** with an `aurora:` model chosen, replies come
+  from the Core Runtime in this process; Ollama may be stopped. Tools (the
+  calculator, memory, weather…) work as before; their answers don't come
+  from the model.
+- **Memory:** the checkpoint loads the first time it is needed, and is
+  unloaded when AURORA is paused or you switch to another model, so it never
+  holds memory alongside an Ollama model.
+- **Streaming and stopping:** replies stream into the chat; stopping a reply
+  cancels generation.
+- **What it can do:** AURORA-T0 continues your message in the style of *The
+  Adventures of Sherlock Holmes*. Its context is 32 tokens and it was never
+  trained to follow instructions, so only your latest message is given to it
+  (not the personality prompt, memories or earlier messages, which it could
+  neither fit nor use), and it can't answer questions. The interface is
+  ready for a model that can; Ollama stays the default until then.
+- Limits: `CORE_MAX_REPLY_TOKENS` (80) and `CORE_TEMPERATURE` (0.8) in
+  settings. Bytes the model writes that aren't valid UTF-8 are dropped.
+
 ## Not done yet (next phases)
 
 | Missing | Phase |

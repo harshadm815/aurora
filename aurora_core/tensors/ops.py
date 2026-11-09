@@ -196,3 +196,57 @@ def layer_norm_backward(
         - x_hat * (dx_hat * x_hat).sum(axis=-1, keepdims=True)
     )
     return dx, dgamma, dbeta
+
+
+# --------------------------------------------------------------- RMS norm
+# (Phase 16 research variants; AURORA-T0 itself uses layer_norm.)
+
+
+def rms_norm(x: np.ndarray, gamma: np.ndarray, eps: float = 1e-5) -> np.ndarray:
+    """Root-mean-square normalisation: x / sqrt(mean(x^2) + eps) * gamma.
+    Like layer norm without subtracting the mean and without a shift."""
+    features = x.shape[-1]
+    if gamma.shape != (features,):
+        raise ValueError(f"gamma must have shape ({features},)")
+    return x / np.sqrt((x * x).mean(axis=-1, keepdims=True) + eps) * gamma
+
+
+def rms_norm_backward(
+    grad: np.ndarray, x: np.ndarray, gamma: np.ndarray, eps: float = 1e-5
+) -> tuple[np.ndarray, np.ndarray]:
+    """Gradients (dx, dgamma) of rms_norm()."""
+    n = x.shape[-1]
+    inv_rms = 1.0 / np.sqrt((x * x).mean(axis=-1, keepdims=True) + eps)
+    x_hat = x * inv_rms
+    dgamma = (grad * x_hat).reshape(-1, n).sum(axis=0)
+    dx_hat = grad * gamma
+    dx = inv_rms * (dx_hat - x_hat * (dx_hat * x_hat).mean(axis=-1, keepdims=True))
+    return dx, dgamma
+
+
+# --------------------------------------------------------- sigmoid / SiLU
+
+
+def sigmoid(x: np.ndarray) -> np.ndarray:
+    """1 / (1 + exp(-x)), computed without overflow for large |x|."""
+    out = np.empty_like(x)
+    positive = x >= 0
+    out[positive] = 1.0 / (1.0 + np.exp(-x[positive]))
+    e = np.exp(x[~positive])
+    out[~positive] = e / (1.0 + e)
+    return out
+
+
+def sigmoid_backward(grad: np.ndarray, x: np.ndarray) -> np.ndarray:
+    s = sigmoid(x)
+    return grad * s * (1.0 - s)
+
+
+def silu(x: np.ndarray) -> np.ndarray:
+    """SiLU (swish): x * sigmoid(x), the activation inside SwiGLU."""
+    return x * sigmoid(x)
+
+
+def silu_backward(grad: np.ndarray, x: np.ndarray) -> np.ndarray:
+    s = sigmoid(x)
+    return grad * (s + x * s * (1.0 - s))

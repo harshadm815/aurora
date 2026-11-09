@@ -219,7 +219,10 @@ def test_reduced_precision_checkpoints(tmp_path, precision, tolerance, ratio):
     assert size < ratio
     rt = AuroraRuntime()
     rt.load(tmp_path / "small.npz")
-    assert rt.generate("Hi", GenerationConfig(max_new_tokens=5)).stats.new_tokens == 5
+    # Fixed seed and no early stop: an untrained model sometimes samples the end
+    # token at random, which made this check fail about one run in ten.
+    config = GenerationConfig(max_new_tokens=5, seed=0, stop_at_eos=False)
+    assert rt.generate("Hi", config).stats.new_tokens == 5
 
 
 def test_reduced_precision_refuses_optimizer_state(tmp_path):

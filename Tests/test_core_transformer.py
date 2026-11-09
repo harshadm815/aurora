@@ -315,6 +315,8 @@ def test_aurora_core_uses_only_numpy_and_the_standard_library():
         # standard library
         "abc", "argparse", "codecs", "collections", "dataclasses", "hashlib", "heapq", "json", "math", "os",
         "pathlib", "re", "statistics", "sys", "threading", "time", "typing", "unicodedata",
+        # research runner (Phase 16): run dates, the machine description and the git commit
+        "datetime", "platform", "subprocess",
     }
     files = list(CORE_DIR.rglob("*.py"))
     assert files

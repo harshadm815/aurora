@@ -86,9 +86,12 @@ def train(model: AuroraT0, train_data: TokenDataset, validation_data: TokenDatas
     recent: list[float] = []
     started = time.perf_counter()
 
+    # Research variants (aurora_core.research) bring their own backward pass.
+    gradients = getattr(model, "loss_and_gradients", None) or (lambda x, y: loss_and_gradients(model, x, y))
+
     for step in range(start_step, config.steps):
         inputs, targets = train_data.random_batch(rng, config.batch_size)
-        loss, grads = loss_and_gradients(model, inputs, targets)
+        loss, grads = gradients(inputs, targets)
         if not math.isfinite(loss):
             raise TrainingDiverged(f"loss became {loss} at step {step}")
         norm = clip_grad_norm(grads, config.grad_clip)

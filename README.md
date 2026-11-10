@@ -1,7 +1,36 @@
 # AURORA
 
-A modular personal AI assistant that runs a local language model through
-[Ollama](https://ollama.com).
+A local-first personal AI assistant for Windows, with its own language
+model written from scratch in NumPy. Everything runs on a 4 GB laptop, and
+nothing leaves it unless you ask.
+
+## Highlights
+
+- **Its own model, from scratch.** `aurora_core/` implements the tensor
+  maths, hand-written backpropagation, a Transformer (AURORA-T0), BPE
+  tokenizers, training and text generation in NumPy only: no PyTorch, no
+  TensorFlow. AURORA's own runtime runs the trained model in the
+  assistant ([model card](Docs/AURORA_T0_MODEL_CARD.md)).
+- **Research done properly.** Architecture experiments are specified
+  before they run, repeated over five seeds and reported with confidence
+  intervals. Results are checked by re-running them bit for bit
+  ([Docs/RESEARCH.md](Docs/RESEARCH.md)). For example, a recurrent variant
+  beat the T0 baseline by 0.051 validation loss (95% CI 0.022 to 0.080),
+  on all 5 seeds.
+- **Privacy by design.** A network gate lets each component reach only
+  its own hosts. Internet access can be on, off or ask-first, and every
+  request is listed. Memories, documents and sensor data stay on the PC.
+  The camera and microphone open only when you ask.
+- **Verified tools, not guesses.** Requests are routed to tools that
+  compute or look up the answer (calculator, statistics, weather,
+  Wikipedia, arXiv, news, your documents). Every answer says where it
+  came from.
+- **News intelligence on request.** Searches GDELT, Google News, publisher
+  feeds and web search in parallel. It cross-checks publishers, flags
+  allegations and corrections, tracks the legal stages of crime reports,
+  and has an Investigation Mode ([Docs/NEWS.md](Docs/NEWS.md)).
+- **Tested.** About 2,200 automated tests, none of which use the network,
+  camera or microphone.
 
 Current stage: working prototype of all twelve roadmap milestones.
 AURORA chats with a local model, remembers facts about you, routes
@@ -138,3 +167,8 @@ Logs are written to `Logs/aurora.log` (metadata only; never your messages).
 - [Architecture](Docs/ARCHITECTURE.md)
 - [Memory design](Docs/MEMORY_DESIGN.md)
 - [Changelog](Docs/CHANGELOG.md)
+
+## License
+
+MIT; see [LICENSE](LICENSE). Trained model weights (`Models/`) and personal
+data are not part of this repository.

@@ -19,7 +19,7 @@ from aurora.config import settings
 from aurora.routing import decision as targets
 from aurora.routing.decision import RouteDecision
 from aurora.routing.intent import Intent
-from aurora.routing import automation_rules, knowledge_rules, memory_rules
+from aurora.routing import automation_rules, knowledge_rules, memory_rules, news_rules
 from aurora.routing.numbers_rule import numbers_rule
 from aurora.tool_plugins.calculator import CalculationError, evaluate
 
@@ -786,6 +786,7 @@ DEFAULT_RULES: tuple[Rule, ...] = (
     forget_rule,
     recall_rule,
     papers_rule,
+    news_rules.news_rule,
     knowledge_rule,
     documents_rule,
     knowledge_rules.knowledge_base_rule,

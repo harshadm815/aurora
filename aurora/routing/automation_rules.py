@@ -96,6 +96,8 @@ def schedule_rule(original: str, body: str) -> RouteDecision | None:
             arguments.update(kind="routine", routine=routine.group("name"))
         elif not at or _QUESTION.match(action):
             return None                       # "what is the temperature every day?" isn't a request to schedule
+        elif re.search(r"\b(?:news|headlines?|top\s+stories)\b", action, re.I):
+            return None                       # the News tool explains that it never runs on a schedule
         else:
             arguments.update(kind="unknown")
     return RouteDecision(Intent.SCHEDULE, 0.95, targets.SCHEDULE, arguments, "Add a scheduled task.")

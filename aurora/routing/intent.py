@@ -16,6 +16,7 @@ class Intent(Enum):
     ROUTINES = "routines"           # Teach, list or delete routines (procedural memory).
     KNOWLEDGE = "knowledge"         # Look a topic up in an encyclopedia.
     PAPERS = "papers"               # Find research papers.
+    NEWS = "news"                   # Search, compare or investigate news (only when asked).
     KNOWLEDGE_BASE = "knowledge_base"  # Questions, summaries and comparisons over the documents.
     DOCUMENTS = "documents"         # List, search or read the user's documents.
     VISION = "vision"               # Look through the camera, or read text in front of it.

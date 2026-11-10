@@ -323,6 +323,12 @@ class AuroraEngine:
                          Intent.MEMORY_CONTROL, Intent.ROUTINES, Intent.CLARIFY,
                          Intent.FILES, Intent.SCHEDULE, Intent.UNDO}
 
+    def routine_searches_news(self, routine) -> bool:
+        """Whether a routine includes a news search (allowed when you run it, never on a schedule)."""
+        plan = self.planner.plan(routine.steps)
+        decisions = [step.decision for step in plan.steps] or [self.router.route(routine.steps)]
+        return any(decision.intent is Intent.NEWS for decision in decisions)
+
     def check_routine(self, name: str, steps: str) -> str | None:
         """Why a routine can't be saved, or None if it can."""
         name = normalize_name(name)
@@ -454,6 +460,9 @@ class AuroraEngine:
             routine = self.routines.get(task.target.get("routine", ""))
             if routine is None:
                 return ToolResult(False, "Not run: that routine no longer exists.")
+            if self.routine_searches_news(routine):
+                return ToolResult(False, "Not run: it includes a news search, and AURORA searches the news "
+                                         "only when you ask, never on a schedule.")
             reply = self._run_routine(routine)
             return ToolResult(not reply.startswith("I can't run"), reply)
         return ToolResult(False, f"Not run: unknown kind of task ({task.kind}).")

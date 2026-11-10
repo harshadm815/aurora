@@ -71,6 +71,8 @@ def summarize(decision: RouteDecision) -> str | None:
         return f"Looked up {_short(args.get('topic', 'a topic'))} on Wikipedia"
     if intent is Intent.PAPERS:
         return f"Searched arXiv for papers on {_short(args.get('topic', 'a topic'))}"
+    if intent is Intent.NEWS:
+        return "Searched the news"          # the topic isn't kept: it may be sensitive
     if intent is Intent.DOCUMENTS:
         return "Worked with your documents"
     if intent is Intent.VISION:

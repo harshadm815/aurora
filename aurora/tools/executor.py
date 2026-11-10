@@ -41,6 +41,7 @@ INTENT_TOOLS = {
     Intent.ROUTINES: "Routines",
     Intent.KNOWLEDGE: "Wikipedia",
     Intent.PAPERS: "arXiv",
+    Intent.NEWS: "News",
     Intent.DOCUMENTS: "Documents",
     Intent.KNOWLEDGE_BASE: "Knowledge",
     Intent.VISION: "Camera",
@@ -154,6 +155,7 @@ class ToolExecutor:
             raise ValueError(f"No tool handles intent '{decision.intent.value}'.")
 
         self.network.clear_block()
+        raised = None
         try:
             result = self.tools.execute(name, **decision.arguments)
         except PermissionDeniedError as error:
@@ -169,15 +171,17 @@ class ToolExecutor:
                 source=SOURCE,
             )
             return result
-        except NetworkBlocked:
-            result = ToolResult(False, "")      # replaced just below
+        except NetworkBlocked as error:
+            # Raised by tools that search in several threads (the News tool):
+            # the gate's per-thread record can't see those.
+            result, raised = ToolResult(False, ""), error
         except Exception as error:
             logger.exception("Tool %s crashed", name)
             result = ToolResult(False, f"The {name} tool failed unexpectedly ({error}).")
             self.events.emit(topics.TOOL_FAILED, {"tool": name, "error": str(error)}, source=SOURCE)
             return result
 
-        block = self.network.take_block()
+        block = self.network.take_block() or raised
         if block is not None and not result.success:
             result = self.network_result(name, decision.arguments, block)
             self._report(name, result)
@@ -203,7 +207,10 @@ class ToolExecutor:
             def approved() -> ToolResult:
                 self.network.approve(block.component)
                 self.network.clear_block()
-                result = self.tools.execute(name, **arguments)
+                try:
+                    result = self.tools.execute(name, **arguments)
+                except NetworkBlocked as error:
+                    return self.network_result(name, arguments, error)
                 again = self.network.take_block()
                 if again is not None and not result.success:
                     return self.network_result(name, arguments, again)

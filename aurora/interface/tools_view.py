@@ -16,6 +16,7 @@ DESCRIPTIONS = {
     "Weather": "Real forecasts from Open-Meteo (needs network)",
     "Wikipedia": "Encyclopedia summaries with links (needs network and RESEARCH_CONTACT)",
     "arXiv": "Research papers (needs network)",
+    "News": "News on any topic, only when you ask: sources, dates, links and how well each story is confirmed (needs network)",
     "Documents": "Lists, searches and reads files in your Documents folder only",
     "Camera": "One picture on request: objects and text, never saved",
     "Sensors": "Room temperature, humidity, pressure, light, motion, CO₂, VOCs and dust, with what they mean and how they changed",

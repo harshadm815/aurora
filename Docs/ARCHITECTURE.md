@@ -193,6 +193,7 @@ engine.register_plugin(RoomSensorPlugin())
 | Weather | `weather` | `network` | Open-Meteo: current conditions and today, tomorrow, this week, this weekend |
 | Wikipedia | `knowledge` | `network` | Encyclopedia summary ("tell me about black holes", "who is …", "what is a neutron star") with a link to the article |
 | arXiv | `papers` | `network` | Up to 5 papers with authors, dates and links; newest first for "recent / latest", otherwise most relevant |
+| News | `news` | `network` | News search, publisher comparison and Investigation Mode over GDELT, Google News, publisher feeds and (with a key) web search, only when asked; sources, dates, links and checks for every story (see NEWS.md) |
 | Documents | `documents` | `filesystem.read` | List, search (with file and PDF page citations) and read .txt, .md and .pdf files in `Documents/` only |
 | Knowledge | `knowledge_base` | `filesystem.read` | Answers questions from your documents by quoting them with citations; summaries; comparisons (with Wikipedia through its own tool and permission) |
 
@@ -884,6 +885,7 @@ the message to the Brain.
 | `aurora.vision` | `image_input.py`, `camera.py`, `detector.py`, `analyzer.py`, `scene.py`, `evaluate.py`, `motion.py`, `watch.py` | Image input and preprocessing, webcam, object detection checked in two views, OCR, grounded scene reports, evaluation, motion watch | Yes (Camera and Documents tools, Command Centre, `watch`) |
 | `aurora.voice` | `listener.py`, `vad.py`, `speaker.py`, `session.py`, `selftest.py` | Offline speech recognition with wake word and voice activity detection, text-to-speech with interruption, voice conversations, loop-back test | Yes (from `main.py` and the Command Centre, on demand) |
 | `aurora.tools` | `tool.py`, `tool_manager.py`, `result.py`, `executor.py`, `untrusted.py` | Tool interface, permission-checked registry, `ToolResult`, intent-to-tool execution, cleaning of outside text | Yes |
+| `aurora.news` | `query.py`, `sources.py`, `processing.py`, `service.py`, `report.py`, `saved.py` | Universal News Intelligence (see NEWS.md) | Yes |
 | `aurora.network` | `gate.py` | The network gate: per-service destinations, internet and local-network switches, asking before going online, the activity record | Yes |
 | `aurora.tool_plugins` | `calculator.py`, `numbers.py`, `memory_tools.py`, `weather.py`, `research.py`, `documents.py`, `registry.py` | The built-in tools and `default_tools()` | Yes |
 | `aurora.workflows` | `values.py`, `operations.py`, `workflow.py`, `builder.py`, `runner.py`, `validation.py` | Structured multi-step tasks: typed values between steps, validation, retries, traces | Yes |

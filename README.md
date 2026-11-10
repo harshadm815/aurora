@@ -81,11 +81,19 @@ AURORA's own model is also a research platform: every claimed improvement
 needs a reproducible experiment. See [docs/RESEARCH.md](docs/RESEARCH.md) and the
 [claims register](docs/research/CLAIMS.md).
 
+## News
+
+Ask for news about anything, anywhere ("latest reported murder cases in
+India", "scientific discoveries this month", "investigate the Pune bridge
+collapse"), in the chat or the News Centre. AURORA searches only when you
+ask, sends only the search terms, and shows every story's publishers, dates,
+links and how well it is confirmed. See [Docs/NEWS.md](Docs/NEWS.md).
+
 ## Privacy and the network
 
 Conversations, memories, documents and the language model stay on this PC.
-Only Weather, Wikipedia and arXiv use the internet, each only to its own
-hosts, and by default AURORA asks before each one first goes online in a
+Only Weather, Wikipedia, arXiv and News use the internet, each only to its
+own hosts, and by default AURORA asks before each one first goes online in a
 session. Settings → Internet and network switches internet access on, off
 or back to asking; System → Network activity lists every request. See
 "Network gate" in [Docs/ARCHITECTURE.md](Docs/ARCHITECTURE.md).

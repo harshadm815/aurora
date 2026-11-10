@@ -16,6 +16,7 @@ from aurora.interface.chat import ChatView
 from aurora.interface.components.widgets import Emblem, fade_in, label
 from aurora.interface.dashboard import DashboardView
 from aurora.interface.knowledge_view import KnowledgeView
+from aurora.interface.news_view import NewsView
 from aurora.interface.memory_view import MemoryView
 from aurora.interface.model_manager import ModelManagerView
 from aurora.interface.sensors_view import SensorsView
@@ -36,6 +37,7 @@ PAGES = [
     ("Chat", ChatView),
     ("Memory", MemoryView),
     ("Knowledge", KnowledgeView),
+    ("News", NewsView),
     ("Tools", ToolsView),
     ("Models", ModelManagerView),
     ("Training", TrainingMonitorView),

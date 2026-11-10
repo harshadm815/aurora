@@ -15,6 +15,7 @@ from aurora.tool_plugins.knowledge import KnowledgeTool
 from aurora.tool_plugins.memory_tools import ForgetTool, MemoryControlTool, RecallTool, RememberTool
 from aurora.tool_plugins.routines_tool import RoutinesTool
 from aurora.tool_plugins.numbers import NumbersTool
+from aurora.tool_plugins.news import NewsTool
 from aurora.tool_plugins.research import ArxivTool, WikipediaTool
 from aurora.tool_plugins.sensors import HealthTool, SensorsTool
 from aurora.sensors.hub import SensorHub
@@ -40,6 +41,7 @@ def default_tools(
         WeatherTool(http_client),
         WikipediaTool(http_client),
         ArxivTool(http_client),
+        NewsTool(),
         DocumentsTool(),
         KnowledgeTool(),
         CameraTool(),

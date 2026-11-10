@@ -125,6 +125,8 @@ PERMISSION_GRANTS: dict[str, list[str]] = {
     # Learns facts from conversation and gives relevant ones to the Brain.
     "AutoMemory": ["memory.read", "memory.write"],
     "Weather": ["network"],   # Sends place names to open-meteo.com.
+    # News searches you ask for: search terms only (see NEWS_* below).
+    "News": ["network"],
     "Wikipedia": ["network"],  # Sends the topic to en.wikipedia.org.
     "arXiv": ["network"],      # Sends the topic to export.arxiv.org.
     # Reads .txt/.md/.pdf files, only inside DOCUMENTS_DIR.
@@ -207,9 +209,51 @@ NETWORK_SERVICES = {
                 "sends": "nothing (it only reads)"},
     "Devices": {"name": "the device controller", "hosts": [], "purpose": "switching devices",
                 "sends": "the device and the command"},
+    # Publisher feeds (NEWS_FEEDS below) are added to News's hosts at start.
+    "News": {"name": "News", "hosts": ["api.gdeltproject.org", "news.google.com", "api.search.brave.com"],
+             "purpose": "the news search you asked for",
+             "sends": "only your search terms (publisher feeds are downloaded whole and searched on this PC)"},
 }
 # Requests kept in the activity list (memory only, cleared on exit).
 NETWORK_LOG_SIZE = 200
+
+# News (aurora/news/)
+#
+# AURORA searches the news only when you ask: no background monitoring, no
+# scheduled searches. Each search uses, when switched on here:
+#   - GDELT (api.gdeltproject.org): a worldwide news index, free, no key;
+#     covers about the last 3 months and allows one request every 5 seconds;
+#   - Google News search (news.google.com, RSS): free, no key; its links go
+#     through Google News, so the original article address isn't known;
+#   - the publisher feeds in NEWS_FEEDS, downloaded whole (no search terms
+#     are sent) and searched on this PC;
+#   - web news search (Brave Search API), only if you set NEWS_WEB_SEARCH_KEY
+#     in local_settings.py (free key: https://brave.com/search/api/).
+# Article pages themselves are never downloaded, so paywalls and robots
+# rules are never in question; what you see is each publisher's own
+# headline and description, with a link.
+NEWS_USE_GDELT = True
+NEWS_USE_GOOGLE_NEWS = True
+NEWS_USE_FEEDS = True
+NEWS_WEB_SEARCH_KEY = ""          # set in local_settings.py, never here
+# Google News edition (country:language); changes ranking, not coverage.
+NEWS_EDITION = "IN:en"
+NEWS_TIMEOUT_SECONDS = 15
+NEWS_MAX_STORIES = 12
+NEWS_FEEDS = [
+    {"name": "BBC News", "url": "https://feeds.bbci.co.uk/news/world/rss.xml", "country": "United Kingdom"},
+    {"name": "The Guardian", "url": "https://www.theguardian.com/world/rss", "country": "United Kingdom"},
+    {"name": "Al Jazeera", "url": "https://www.aljazeera.com/xml/rss/all.xml", "country": "Qatar"},
+    {"name": "NPR", "url": "https://feeds.npr.org/1001/rss.xml", "country": "United States"},
+    {"name": "The Hindu", "url": "https://www.thehindu.com/news/national/feeder/default.rss", "country": "India"},
+    {"name": "The Indian Express", "url": "https://indianexpress.com/feed/", "country": "India"},
+    {"name": "UN News", "url": "https://news.un.org/feed/subscribe/en/news/all/rss.xml", "official": True},
+    {"name": "WHO", "url": "https://www.who.int/rss-feeds/news-english.xml", "official": True},
+    {"name": "NASA", "url": "https://www.nasa.gov/news-release/feed/", "official": True},
+    {"name": "ScienceDaily", "url": "https://www.sciencedaily.com/rss/all.xml"},
+]
+# Saved articles (News Centre), on this PC only.
+NEWS_DATABASE_PATH = PROJECT_ROOT / "aurora_news.db"
 
 # Weather
 #

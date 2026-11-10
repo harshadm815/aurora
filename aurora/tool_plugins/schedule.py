@@ -65,6 +65,10 @@ class ScheduleTool(BaseTool):
         if kind == "routine":
             name = (details.get("routine") or "").strip()
             routine = self.engine.routines.get(name) if self.engine is not None else None
+            if routine is not None and self.engine.routine_searches_news(routine):
+                return ToolResult(False, f"The routine “{routine.name}” includes a news search, and I search "
+                                         "the news only when you ask, so I can't schedule it. You can still run "
+                                         "it any time by saying its name.")
             if routine is None:
                 return ToolResult(False, f"I don't know a routine called “{one_line(name)}”. "
                                          "Teach it first (\"when I say …, …\").")

@@ -1,5 +1,34 @@
 # Changelog
 
+## 0.36.0 — Universal News Intelligence (2026-11-10)
+
+See Docs/NEWS.md.
+
+### Added
+- **News, on request only**, about any topic, place and dates, from four
+  sources in parallel: GDELT (worldwide index, no key), Google News search
+  (RSS), ten publisher feeds (searched on this PC, so publishers never see
+  the search) and, with a key, Brave web news search.
+- **Checks on every story**: publisher, publication and event dates,
+  duplicates and agency copies, independent publishers, official and
+  primary sources, allegations, corrections, conflicting numbers. Crime
+  reports show the legal stage (investigation, allegation, arrest, charge,
+  trial, conviction, acquittal), never present guilt before a conviction,
+  and leave out graphic details.
+- **Comparing publishers** and **Investigation Mode** (earliest report,
+  timeline, official statements, legal process, corrections,
+  disagreements).
+- **News Centre** page: search, filters (category, place, dates, publishers),
+  article cards with checks and links, saving into folders.
+- Every report says what was searched, what wasn't and why, and that it
+  isn't every report published; empty results are never filled in.
+- 63 new tests, none using the network.
+
+### Changed
+- News requests on a schedule ("every morning show me the news", "monitor
+  …") are refused with an explanation; routines with a news search can't
+  be scheduled.
+
 ## 0.35.0 — Network gate (2026-11-09)
 
 Deployment plan, stage 8.

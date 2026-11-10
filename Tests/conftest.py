@@ -36,6 +36,8 @@ def isolated_database(tmp_path, monkeypatch):
     # and no test may tidy a real folder.
     monkeypatch.setattr(settings, "AUTOMATION_DATABASE_PATH", tmp_path / "automation_test.db")
     monkeypatch.setattr(settings, "ORGANIZE_FOLDERS", None)
+    # Saved news articles likewise.
+    monkeypatch.setattr(settings, "NEWS_DATABASE_PATH", tmp_path / "news_test.db")
 
 
 @pytest.fixture(autouse=True)

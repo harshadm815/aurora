@@ -951,3 +951,4 @@ temporary database instead of `aurora_memory.db`.
 | Permission grants are static config; only internet access is asked for at runtime (the network gate), and only from the chat | Later |
 | AURORA-T0 can be chosen as the assistant's model (`aurora:` models, see AURORA_CORE.md), but it is far too small to converse, so Ollama stays the default | Until a model good enough to converse exists |
 | Event bus is synchronous; a slow subscriber delays the publisher | When voice/sensors need it (8, 10) |
+| No built-in browser, audio editing/generation or video editing/generation | Planned: Browser, then Audio Lab, then Video Studio (see BROWSER_AUDIO_VIDEO.md) |

@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.36.1 — Blueprint: Browser, Audio Lab, Video Studio (2026-11-11)
+
+Documentation only; nothing new is built yet.
+
+- Docs/BROWSER_AUDIO_VIDEO.md: requirements for three planned subsystems
+  (AURORA Browser, Audio Lab, Video Studio), their priority order, what
+  each builds on, what this laptop can and can't run, the privacy and
+  consent rules, and the first milestone (basic browsing).
+- README: Highlights section and MIT license.
+
 ## 0.36.0 — Universal News Intelligence (2026-11-10)
 
 See Docs/NEWS.md.

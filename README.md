@@ -167,6 +167,7 @@ Logs are written to `Logs/aurora.log` (metadata only; never your messages).
 - [Architecture](Docs/ARCHITECTURE.md)
 - [Memory design](Docs/MEMORY_DESIGN.md)
 - [Changelog](Docs/CHANGELOG.md)
+- [Planned: Browser, Audio Lab, Video Studio](Docs/BROWSER_AUDIO_VIDEO.md)
 
 ## License
 

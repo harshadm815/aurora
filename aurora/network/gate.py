@@ -145,13 +145,15 @@ class NetworkGate:
             self._approved.clear()
         logger.info("Internet approvals cleared")
 
-    def check(self, component: str, url: httpx.URL, method: str = "GET") -> str:
-        """Returns the destination's kind, or raises NetworkBlocked (and records it)."""
-        host = (url.host or "").lower()
+    def decide(self, component: str, host: str) -> tuple[str, str, bool]:
+        """(kind, reason, can_ask) for a request to host; reason is "" when it's allowed.
+        Records nothing (check() does)."""
+        host = (host or "").lower()
         kind = classify(host)
-        name = self.service(component).get("name", component)
+        service = self.service(component)
+        name = service.get("name", component)
         reason, can_ask = "", False
-        if host not in self.destinations(component):
+        if host not in self.destinations(component) and not (service.get("any_host") and host):
             reason = f"{host} isn't one of {name}'s destinations"
         elif kind == LOCAL and not settings.LOCAL_NETWORK_ACCESS:
             reason = "access to your local network is switched off"
@@ -159,6 +161,12 @@ class NetworkGate:
             reason = "internet access is switched off"
         elif kind == INTERNET and self.mode == "ask" and component not in self.approved():
             reason, can_ask = "internet access for this service hasn't been approved yet", True
+        return kind, reason, can_ask
+
+    def check(self, component: str, url: httpx.URL, method: str = "GET") -> str:
+        """Returns the destination's kind, or raises NetworkBlocked (and records it)."""
+        host = (url.host or "").lower()
+        kind, reason, can_ask = self.decide(component, host)
         if reason:
             block = NetworkBlocked(component, host, kind, reason, can_ask)
             self._local.block = block
@@ -192,6 +200,11 @@ class NetworkGate:
     def clear_records(self) -> None:
         with self._lock:
             self._records.clear()
+
+    def record(self, component, host, kind, method, outcome, status=None, reason="") -> None:
+        """Adds a request to the activity list (for connections not made through
+        an httpx client, such as the AURORA Browser's)."""
+        self._record(component, host, kind, method, outcome, status, reason)
 
     def _record(self, component, host, kind, method, outcome, status=None, reason="") -> None:
         record = NetworkRecord(self.clock(), component, host, kind,

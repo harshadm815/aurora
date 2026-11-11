@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (
 from aurora.config import settings
 from aurora.providers.core_provider import is_core_model
 from aurora.interface.automation_view import AutomationView
+from aurora.interface.browser_view import BrowserView
 from aurora.interface.chat import ChatView
 from aurora.interface.components.widgets import Emblem, fade_in, label
 from aurora.interface.dashboard import DashboardView
@@ -38,6 +39,7 @@ PAGES = [
     ("Memory", MemoryView),
     ("Knowledge", KnowledgeView),
     ("News", NewsView),
+    ("Browser", BrowserView),
     ("Tools", ToolsView),
     ("Models", ModelManagerView),
     ("Training", TrainingMonitorView),

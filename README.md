@@ -25,6 +25,9 @@ nothing leaves it unless you ask.
   compute or look up the answer (calculator, statistics, weather,
   Wikipedia, arXiv, news, your documents). Every answer says where it
   came from.
+- **Its own web browser.** Tabs, history, bookmarks, reader mode, and
+  questions about the open page answered by quoting it. Every site a page
+  contacts is listed and checked by the network gate.
 - **News intelligence on request.** Searches GDELT, Google News, publisher
   feeds and web search in parallel. It cross-checks publishers, flags
   allegations and corrections, tracks the legal stages of crime reports,
@@ -118,12 +121,22 @@ collapse"), in the chat or the News Centre. AURORA searches only when you
 ask, sends only the search terms, and shows every story's publishers, dates,
 links and how well it is confirmed. See [Docs/NEWS.md](Docs/NEWS.md).
 
+## Browser
+
+The Browser page is AURORA's own web browser (Qt WebEngine): tabs, an
+address bar that also searches, history and bookmarks kept on this PC,
+find in page, PDF viewing and downloads you confirm. Reader mode shows a
+page's article without menus and adverts; "Ask" answers questions about
+the open page by quoting it; "Save to Knowledge" adds it to your documents.
+Every site a page contacts is listed, and the network gate applies. See
+[Docs/BROWSER_AUDIO_VIDEO.md](Docs/BROWSER_AUDIO_VIDEO.md).
+
 ## Privacy and the network
 
 Conversations, memories, documents and the language model stay on this PC.
-Only Weather, Wikipedia, arXiv and News use the internet, each only to its
-own hosts, and by default AURORA asks before each one first goes online in a
-session. Settings → Internet and network switches internet access on, off
+Only Weather, Wikipedia, arXiv, News and the Browser use the internet (each
+service only to its own hosts; the Browser to the sites you open), and by
+default AURORA asks before each one first goes online in a session. Settings → Internet and network switches internet access on, off
 or back to asking; System → Network activity lists every request. See
 "Network gate" in [Docs/ARCHITECTURE.md](Docs/ARCHITECTURE.md).
 

@@ -102,6 +102,11 @@ def run(argv: list[str] | None = None) -> int:
     # Before any window exists: AURORA's own taskbar identity (not Python's).
     integration.set_app_id()
 
+    # Qt WebEngine (the Browser page, started only when opened) needs this
+    # set before the application exists.
+    from PySide6.QtCore import QCoreApplication, Qt
+    QCoreApplication.setAttribute(Qt.AA_ShareOpenGLContexts)
+
     app = QApplication(argv)
     app.setApplicationName("AURORA Command Centre")
     app.setStyle("Fusion")

@@ -1,5 +1,37 @@
 # Changelog
 
+## 0.37.0 — AURORA Browser, first milestone (2026-11-11)
+
+See "AURORA Browser" in Docs/BROWSER_AUDIO_VIDEO.md.
+
+### Added
+- **Browser page**: AURORA's own browser (Qt WebEngine, Chromium 140).
+  Tabs (up to 6), address bar that opens addresses or searches
+  (DuckDuckGo by default), suggestions from history and bookmarks,
+  back/forward/reload, find in page, PDF viewer, bookmarks, and downloads
+  that are asked for first and saved where you choose.
+- **Ask about the page**: answers quoted from the open page's own
+  sentences, with the page as the source; says so when the page doesn't
+  answer.
+- **Reader mode**: the article without menus, adverts, cookie banners,
+  share buttons or hidden text.
+- **Save to Knowledge**: the page's text as Markdown in
+  `Documents/Web pages/`, with its address and date, so document
+  questions can quote and cite it. Files are never overwritten.
+- **History and bookmarks** on this PC only (`aurora_browser.db`): search,
+  delete, clear, switch off; history older than 90 days is deleted.
+- **Sites contacted**: every site the open page loaded something from,
+  with other sites and blocked ones marked.
+- 47 new tests, using a fake web engine (no Chromium, no network).
+
+### Changed
+- The network gate checks every browser request (internet on / ask /
+  off, local network). New `gate.decide()` and `gate.record()`; services
+  marked `any_host` (only the Browser) may contact any host.
+- Sites can't use the camera, microphone, location or notifications.
+- New requirements: `PySide6-Addons` and `PySide6-WebEngine` (6.12.0).
+- Tests can't start Chromium (conftest), like the camera and microphone.
+
 ## 0.36.1 — Blueprint: Browser, Audio Lab, Video Studio (2026-11-11)
 
 Documentation only; nothing new is built yet.

@@ -38,6 +38,9 @@ def isolated_database(tmp_path, monkeypatch):
     monkeypatch.setattr(settings, "ORGANIZE_FOLDERS", None)
     # Saved news articles likewise.
     monkeypatch.setattr(settings, "NEWS_DATABASE_PATH", tmp_path / "news_test.db")
+    # And browser history, bookmarks and the browser profile.
+    monkeypatch.setattr(settings, "BROWSER_DATABASE_PATH", tmp_path / "browser_test.db")
+    monkeypatch.setattr(settings, "BROWSER_PROFILE_DIR", tmp_path / "Data" / "browser")
 
 
 @pytest.fixture(autouse=True)
@@ -76,6 +79,22 @@ def no_camera_or_microphone(monkeypatch):
 
     monkeypatch.setattr(Camera, "__init__", camera_blocked)
     monkeypatch.setattr(MicrophoneSource, "__init__", microphone_blocked)
+
+
+@pytest.fixture(autouse=True)
+def no_browser_engine(monkeypatch):
+    """Tests must never start Chromium (Qt WebEngine): it would be slow and could
+    go online. The Browser page shows its "couldn't start" message instead, and
+    browser tests pass a fake factory."""
+    try:
+        from aurora.interface import browser_view
+    except ImportError:              # PySide6 not installed: no interface tests either
+        return
+
+    def engine_blocked(network):
+        raise RuntimeError("Tests must not start the browser engine; pass a fake factory.")
+
+    monkeypatch.setattr(browser_view, "_qt_web_factory", engine_blocked)
 
 
 def release_widgets():

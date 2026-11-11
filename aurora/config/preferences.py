@@ -35,6 +35,8 @@ BACKEND = {
     # The network gate (aurora/network/gate.py).
     "internet_access": ("INTERNET_ACCESS", str, lambda v: v in ("on", "ask", "off")),
     "local_network_access": ("LOCAL_NETWORK_ACCESS", bool, lambda v: True),
+    # AURORA Browser history on/off.
+    "browser_history": ("BROWSER_HISTORY", bool, lambda v: True),
 }
 
 # Preferences used only by the interface: key -> (type, default, check)

@@ -34,6 +34,11 @@ OCR_PARTS = ["ch_ppocr_v3_det", "ch_ppocr_v3_rec", "ch_ppocr_v2_cls"]
 hidden += OCR_PARTS + [f"{part}.{module}" for part in OCR_PARTS for module in ("utils",)]
 hidden += ["ch_ppocr_v3_det.text_detect", "ch_ppocr_v3_rec.text_recognize", "ch_ppocr_v2_cls.text_cls"]
 
+# The AURORA Browser: Qt WebEngine is imported only when the Browser page
+# opens, so PyInstaller has to be told (its hook adds QtWebEngineProcess.exe
+# and Chromium's resources).
+hidden += ["PySide6.QtWebEngineCore", "PySide6.QtWebEngineWidgets"]
+
 datas = [(ICON, os.path.join("aurora", "interface", "assets"))]
 datas += collect_data_files("rapidocr_onnxruntime")      # OCR models and config
 datas += collect_data_files("vosk")

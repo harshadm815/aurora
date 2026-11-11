@@ -1,7 +1,8 @@
 # Blueprint: AURORA Browser, Audio Lab and Video Studio
 
-Three planned subsystems, added to the blueprint on 2026-11-11. **None of
-them is built yet.** This file holds their requirements, what already
+Three subsystems, added to the blueprint on 2026-11-11. **The Browser's
+first milestone is built** (0.37.0); the Audio Lab and Video Studio are
+not started. This file holds their requirements, what already
 exists in AURORA that each builds on, and what this laptop (i3-8130U,
 4 GB RAM, no GPU) can and can't do, so that each feature is planned as
 something that will really work.
@@ -10,7 +11,7 @@ Order: **Browser first, then Audio Lab, then Video Studio.**
 
 | Subsystem | Package (planned) | Builds on | Status |
 |---|---|---|---|
-| AURORA Browser | `aurora/browser/` | Command Centre (PySide6), network gate, Knowledge (documents and citations), News | Planned: priority 1 |
+| AURORA Browser | `aurora/browser/` | Command Centre (PySide6), network gate, Knowledge (documents and citations), News | **First milestone done** |
 | AURORA Audio Lab | `aurora/audio/` | Voice (Vosk speech recognition, Windows SAPI speech), NumPy | Planned: priority 2 |
 | AURORA Video Studio | `aurora/video/` | Vision (OpenCV), Audio Lab, NumPy | Planned: priority 3 |
 
@@ -47,33 +48,49 @@ A browser page inside the Command Centre.
 
 | Requirement | How | Status |
 |---|---|---|
-| Tabs, address bar, search, back/forward/reload | Qt WebEngine (Chromium) in PySide6 | Planned |
-| Bookmarks and history | Local SQLite database, not in git; history can be paused and cleared, like activity history | Planned |
-| Download manager | Qt WebEngine downloads, saved only after you confirm, to a folder you choose | Planned |
-| Reader mode | Extract the article text from the page (main content, without menus and adverts) | Planned |
-| PDF viewing | Qt WebEngine's built-in PDF viewer | Planned |
-| Find in page | Qt WebEngine | Planned |
-| Extract information | Tables, links, headings, dates and numbers from the page text, rule-based like News | Planned |
-| Save pages to the knowledge base | Reader-mode text saved into Knowledge, with the address and date, so answers can quote and cite it | Planned |
-| Questions about the page you're viewing | Knowledge's quoting with citations over the page text; model-written answers when a capable local model exists | Planned (quoting first) |
+| Tabs, address bar, search, back/forward/reload | Qt WebEngine (Chromium 140) in PySide6; up to `BROWSER_MAX_TABS` (6) tabs; searches go to `BROWSER_SEARCH_URL` (DuckDuckGo by default) | **Done** |
+| Bookmarks and history | `aurora_browser.db` on this PC (not in git); history search, delete, clear, switch off; older than 90 days deleted | **Done** |
+| Download manager | Asked first (file name, site, size), then saved where you choose | **Done** (basic: no list of past downloads) |
+| Reader mode | Article text without menus, adverts, cookie banners, share buttons and hidden text (`aurora/browser/reader.py`) | **Done** (a heuristic, like every reader mode) |
+| PDF viewing | Qt WebEngine's built-in PDF viewer | **Done** (reader mode and Ask don't work on PDFs yet) |
+| Find in page | Qt WebEngine | **Done** |
+| Extract information | Tables, links, headings, dates and numbers from the page text, rule-based like News | Headings (outline) only; the rest planned |
+| Save pages to the knowledge base | Reader-mode text saved as Markdown in `Documents/Web pages/`, with the address and date; Knowledge indexes it with your documents and cites it | **Done** |
+| Questions about the page you're viewing | Sentences quoted from the open page, with the page as the source; "doesn't answer that" when no sentence does (`aurora/browser/answers.py`) | **Done** (in the Browser page; not yet from the chat) |
 | Compare sources ("compare these three papers") | Side by side: titles, authors, dates, methods and results sections, figures quoted with links; a written comparison needs a capable model | Planned (extraction first) |
 | Website summaries | Needs a capable local model; until then, the page's own description and its headings | Waits for a model |
 | Translation | Needs a translation model (several hundred MB per language pair) or an external service through the gate | Later |
 | Voice-controlled browsing | Voice commands routed to the browser ("open …", "next tab", "read this page") | Planned (after the basics) |
 
-**Privacy:**
+**Privacy (built):**
 - Chromium makes its own connections, not through AURORA's httpx gate. A
-  request interceptor (`QWebEngineUrlRequestInterceptor`) will record and
-  check every host it contacts. Because you are browsing on purpose, page
-  loads you start count as your request. Pages never load by themselves
-  in the background.
-- Cookies and site data stay in AURORA's own browser profile, separate
-  from your other browsers, and can be cleared.
-- AURORA reads a page only when you ask about it, and keeps the page text
-  only when you save it.
+  request interceptor checks every request (the page and everything it
+  loads) with the network gate: internet on / ask / off and the
+  local-network switch. With "ask", the first page each session asks you.
+  `file:` addresses are never opened, and only http/https from the
+  address bar.
+- Each host goes into System → Network activity the first time it is
+  contacted in a session (host only, never the path or search), and the
+  Sites tab lists every site the open page contacted, marking other sites
+  (often adverts and trackers) and blocked ones.
+- Sites can't use the camera, microphone, location, notifications or
+  screen capture: every such request is refused. DNS prefetching and the
+  spell-check dictionary download are off.
+- Cookies, cache and site data stay in AURORA's own profile
+  (`Data/browser/`, not in git or the OneDrive backup), separate from your
+  other browsers, and can be cleared from the Sites tab.
+- AURORA reads a page only when you press Ask, Reader or Save, and keeps
+  its text only when you save it.
+- Chromium starts only when you first open the Browser page.
+- Limit: the interceptor sees requests, not every connection. A page that
+  is allowed to load can ask Chromium to look up or open a connection to
+  another site in advance ("preconnect"), and that can happen even if the
+  site's requests are then blocked. No page data is requested from it,
+  but the site can see the connection. DNS prefetching is off.
 
 **On this laptop:**
-- It needs `PySide6-Addons` (about 200–300 MB more, and a larger `.exe`).
+- It needs `PySide6-Addons` and `PySide6-WebEngine` (about 165 MB of
+  downloads, more installed, and a larger `.exe`).
 - Each Chromium tab uses about 100–300 MB of RAM. With Ollama loaded,
   expect a few tabs at a time, not dozens. The browser should limit the
   number of open tabs and warn when memory is low.
@@ -114,15 +131,16 @@ video comes last, and not locally.
 | Video summaries | Transcription and scene changes; written summaries wait for a model | Later |
 | Text-to-video and image-to-video generation | Needs GPU-class computing far beyond 4 GB of RAM | Not on this laptop; optional external computing |
 
-## First milestone
+## Browser milestones
 
-The AURORA Browser, basic browsing:
-1. tabs, address bar and search;
-2. history and bookmarks (local and clearable);
-3. every host recorded through the interceptor;
-4. reader mode;
-5. "save this page" into Knowledge;
-6. questions answered by quoting the open page.
+**1. Basic browsing: done (0.37.0).** Tabs, address bar and search;
+history and bookmarks (local and clearable); every host checked and
+recorded through the interceptor; reader mode; Save to Knowledge;
+questions answered by quoting the open page. Tested with a fake web
+engine (`Tests/test_browser.py`, no Chromium, no network).
 
-Done means: it works in the Command Centre on this laptop, with tests for
-everything except the real Chromium rendering.
+**2. Next:** questions about the open page from the chat ("what does this
+page say about …"); comparing several open pages side by side (titles,
+dates, headings, quoted sentences); tables, links and dates extracted;
+reader mode and Ask for PDFs; a downloads list; voice commands for the
+browser.

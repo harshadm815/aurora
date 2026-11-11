@@ -213,6 +213,12 @@ NETWORK_SERVICES = {
     "News": {"name": "News", "hosts": ["api.gdeltproject.org", "news.google.com", "api.search.brave.com"],
              "purpose": "the news search you asked for",
              "sends": "only your search terms (publisher feeds are downloaded whole and searched on this PC)"},
+    # The AURORA Browser may open any site, because you choose the sites. Every
+    # host it contacts is still checked (internet on/ask/off, local network)
+    # and listed, including what pages load from other sites.
+    "Browser": {"name": "the AURORA Browser", "hosts": [], "any_host": True,
+                "purpose": "web pages you open",
+                "sends": "the addresses of the pages you open, and whatever those pages load or send"},
 }
 # Requests kept in the activity list (memory only, cleared on exit).
 NETWORK_LOG_SIZE = 200
@@ -254,6 +260,22 @@ NEWS_FEEDS = [
 ]
 # Saved articles (News Centre), on this PC only.
 NEWS_DATABASE_PATH = PROJECT_ROOT / "aurora_news.db"
+
+# AURORA Browser (aurora/browser/, the Browser page)
+#
+# Pages load only when you open them. The browser has its own profile
+# (cookies, cache) in BROWSER_PROFILE_DIR, separate from your other browsers.
+# History and bookmarks are kept in BROWSER_DATABASE_PATH on this PC only.
+# Words typed in the address bar that aren't an address go to this search
+# engine ({query} is replaced by them).
+BROWSER_SEARCH_URL = "https://duckduckgo.com/?q={query}"
+BROWSER_HISTORY = True                 # False: nothing new is added to history
+BROWSER_HISTORY_DAYS = 90              # older history is deleted
+BROWSER_MAX_TABS = 6                   # each tab uses about 100-300 MB of RAM
+BROWSER_DATABASE_PATH = PROJECT_ROOT / "aurora_browser.db"
+BROWSER_PROFILE_DIR = DATA_DIR / "browser"
+# Pages saved with "Save to Knowledge" go here, inside the Documents folder.
+BROWSER_SAVED_FOLDER = "Web pages"
 
 # Weather
 #

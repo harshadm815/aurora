@@ -885,6 +885,7 @@ the message to the Brain.
 | `aurora.vision` | `image_input.py`, `camera.py`, `detector.py`, `analyzer.py`, `scene.py`, `evaluate.py`, `motion.py`, `watch.py` | Image input and preprocessing, webcam, object detection checked in two views, OCR, grounded scene reports, evaluation, motion watch | Yes (Camera and Documents tools, Command Centre, `watch`) |
 | `aurora.voice` | `listener.py`, `vad.py`, `speaker.py`, `session.py`, `selftest.py` | Offline speech recognition with wake word and voice activity detection, text-to-speech with interruption, voice conversations, loop-back test | Yes (from `main.py` and the Command Centre, on demand) |
 | `aurora.tools` | `tool.py`, `tool_manager.py`, `result.py`, `executor.py`, `untrusted.py` | Tool interface, permission-checked registry, `ToolResult`, intent-to-tool execution, cleaning of outside text | Yes |
+| `aurora.browser` | `addresses.py`, `store.py`, `reader.py`, `answers.py`, `saving.py`, `network.py` | The AURORA Browser without Qt: address bar, history and bookmarks, reader mode, page answers, saving to Knowledge, network decisions (the Qt WebEngine parts are `interface/browser_web.py` and `browser_view.py`; see BROWSER_AUDIO_VIDEO.md) | Yes |
 | `aurora.news` | `query.py`, `sources.py`, `processing.py`, `service.py`, `report.py`, `saved.py` | Universal News Intelligence (see NEWS.md) | Yes |
 | `aurora.network` | `gate.py` | The network gate: per-service destinations, internet and local-network switches, asking before going online, the activity record | Yes |
 | `aurora.tool_plugins` | `calculator.py`, `numbers.py`, `memory_tools.py`, `weather.py`, `research.py`, `documents.py`, `registry.py` | The built-in tools and `default_tools()` | Yes |
@@ -951,4 +952,5 @@ temporary database instead of `aurora_memory.db`.
 | Permission grants are static config; only internet access is asked for at runtime (the network gate), and only from the chat | Later |
 | AURORA-T0 can be chosen as the assistant's model (`aurora:` models, see AURORA_CORE.md), but it is far too small to converse, so Ollama stays the default | Until a model good enough to converse exists |
 | Event bus is synchronous; a slow subscriber delays the publisher | When voice/sensors need it (8, 10) |
-| No built-in browser, audio editing/generation or video editing/generation | Planned: Browser, then Audio Lab, then Video Studio (see BROWSER_AUDIO_VIDEO.md) |
+| Browser: no page summaries or written comparisons (needs a capable model), no translation, no voice control, no questions about the open page from the chat (only in the Browser page); reader mode is a heuristic | Browser milestone 2 (see BROWSER_AUDIO_VIDEO.md) |
+| No audio editing/generation or video editing/generation | Planned: Audio Lab, then Video Studio (see BROWSER_AUDIO_VIDEO.md) |

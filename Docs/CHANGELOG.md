@@ -1,5 +1,42 @@
 # Changelog
 
+## 0.38.0 — Command Centre design: AI core, top bar, new dashboard (2026-11-12)
+
+See "Layout" in Docs/COMMAND_CENTRE.md.
+
+### Added
+- **The AI core**: an orb on the Dashboard that shows what AURORA is
+  doing: ready (slow breathing), thinking (turning rings with linked
+  nodes), responding and speaking (particles flowing out), listening
+  (rings expanding with the voice's loudness), starting (progress arc),
+  error and paused (still). Driven by a new `Backend.ai_state` that
+  follows real events (message sent, first reply text, reply finished or
+  failed, microphone open, speaking, paused, failed).
+- **Top bar** on every page: AURORA's state, model, internet access,
+  CPU/RAM, time; each opens the page behind it.
+- **Round gauges** for CPU, RAM, AURORA's own memory and tools ready.
+- **Coming up**: the next reminders and scheduled tasks on the Dashboard.
+- **Ask bar** on the Dashboard: type, speak or choose a picture; the
+  answer appears in Chat.
+- Ctrl+1 … Ctrl+9 open the first nine pages.
+- 10 new tests (Tests/test_command_centre_ui.py).
+
+### Changed
+- Dashboard redesigned (core in the centre, status and activity on the
+  right, ask bar at the bottom); services are listed in the AI status
+  card and its tooltip. The quick-access buttons are gone (the sidebar
+  and Ctrl+number do it).
+- Panels have a faint top-lit gradient and a lit top edge ("glass"
+  without blur).
+- The status bar is hidden; the top bar shows the same state.
+- `settings.VERSION` is 0.38.0 (it had stayed at 0.33.0).
+
+### Not done
+- Light theme (many pages still use fixed dark colours), QML/Qt Quick
+  (kept QWidgets: lower memory on 4 GB), 3D space visualisation, live
+  resource graphs on the Dashboard (the System monitor has the numbers),
+  a network diagram of services, a custom SVG icon set (emoji icons stay).
+
 ## 0.37.0 — AURORA Browser, first milestone (2026-11-11)
 
 See "AURORA Browser" in Docs/BROWSER_AUDIO_VIDEO.md.

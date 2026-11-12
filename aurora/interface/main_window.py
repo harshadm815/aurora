@@ -3,7 +3,7 @@
 import logging
 
 from PySide6.QtCore import QEvent, Qt, QTimer
-from PySide6.QtGui import QIcon
+from PySide6.QtGui import QIcon, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QApplication, QButtonGroup, QFrame, QHBoxLayout, QMainWindow, QPushButton, QStackedWidget, QStatusBar,
     QVBoxLayout, QWidget,
@@ -14,6 +14,7 @@ from aurora.providers.core_provider import is_core_model
 from aurora.interface.automation_view import AutomationView
 from aurora.interface.browser_view import BrowserView
 from aurora.interface.chat import ChatView
+from aurora.interface.components.top_bar import TopBar
 from aurora.interface.components.widgets import Emblem, fade_in, label
 from aurora.interface.dashboard import DashboardView
 from aurora.interface.knowledge_view import KnowledgeView
@@ -108,15 +109,34 @@ class MainWindow(QMainWindow):
         side.addStretch(1)
         side.addWidget(label(f"   v{settings.VERSION} · local", "Faint"))
 
+        # Right of the sidebar: the top bar (on every page) above the pages.
+        content = QWidget()
+        column = QVBoxLayout(content)
+        column.setContentsMargins(0, 0, 0, 0)
+        column.setSpacing(0)
+        self.top_bar = TopBar(backend)
+        self.top_bar.navigate.connect(self.open_page)
+        column.addWidget(self.top_bar)
+        column.addWidget(self.stack, 1)
+
         layout.addWidget(sidebar)
-        layout.addWidget(self.stack, 1)
+        layout.addWidget(content, 1)
         self.setCentralWidget(root)
 
+        # The top bar shows AURORA's state; the status bar is kept for messages only.
         self.status = QStatusBar()
         self.setStatusBar(self.status)
+        self.status.hide()
         self.status.showMessage("Starting AURORA…")
 
-        self.pages["Dashboard"].navigate.connect(self.open_page)
+        dashboard = self.pages["Dashboard"]
+        dashboard.navigate.connect(self.open_page)
+        dashboard.ask.connect(self.ask_in_chat)
+        dashboard.listen_requested.connect(lambda: self._in_chat(lambda chat: chat.listen()))
+        dashboard.picture_requested.connect(lambda: self._in_chat(lambda chat: chat.ask_image()))
+        # Ctrl+1 … Ctrl+9 open the first nine pages.
+        for number, (name, _) in enumerate(PAGES[:9], start=1):
+            QShortcut(QKeySequence(f"Ctrl+{number}"), self, activated=lambda n=name: self.open_page(n))
         backend.engine_ready.connect(self._ready)
         backend.engine_failed.connect(lambda message: self.status.showMessage(message))
         backend.ollama_checked.connect(lambda _: self._update_status())
@@ -153,12 +173,21 @@ class MainWindow(QMainWindow):
         view = self.pages[name]
         self.stack.setCurrentWidget(view)
         self.buttons[name].setChecked(True)
+        self.top_bar.set_page(view.title)
         if self.backend.preferences.get("animations", True):
             fade_in(view)
         try:
             view.on_shown()
         except Exception:
             logger.exception("Opening %s failed", name)
+
+    def _in_chat(self, action):
+        self.open_page("Chat")
+        action(self.pages["Chat"])
+
+    def ask_in_chat(self, text: str):
+        """A question from the Dashboard: answered in Chat, like any other."""
+        self._in_chat(lambda chat: chat.send(text))
 
     # --- State ------------------------------------------------------------------------
 
@@ -189,6 +218,7 @@ class MainWindow(QMainWindow):
             app.setStyleSheet(stylesheet(colours))
         self.emblem.set_accent(colours.accent)
         self.pages["Dashboard"].set_accent(colours.accent)
+        self.top_bar.refresh()
 
     # --- Tray behaviour ---------------------------------------------------------------
 

@@ -30,11 +30,16 @@ class Palette:
     violet: str = "#8b5cf6"
     user_bubble: str = "#14213a"
     aurora_bubble: str = "#0f1a2c"
+    glass_edge: str = "#2a3a5c"          # the lit top edge of panels
+    core_glow: str = "#0c2a3a"           # behind the AI core
+
+
+CORE_GLOWS = {"cyan": "#0b2a36", "blue": "#0d1f3d", "purple": "#1b1538"}
 
 
 def palette(accent: str = "cyan") -> Palette:
     bright, dim = ACCENTS.get(accent, ACCENTS["cyan"])
-    return Palette(accent=bright, accent_dim=dim)
+    return Palette(accent=bright, accent_dim=dim, core_glow=CORE_GLOWS.get(accent, CORE_GLOWS["cyan"]))
 
 
 def stylesheet(p: Palette) -> str:
@@ -71,9 +76,32 @@ QLabel#BigValue {{ font-size: 20pt; font-weight: 600; }}
 QLabel#Clock {{ font-size: 26pt; font-weight: 300; color: {p.text}; }}
 QLabel#Accent {{ color: {p.accent}; }}
 
-/* Panels */
-QFrame#Panel {{ background: {p.surface}; border: 1px solid {p.border}; border-radius: 14px; }}
-QFrame#Card {{ background: {p.surface_raised}; border: 1px solid {p.border}; border-radius: 12px; }}
+/* Panels: a faint top-lit gradient and a hairline edge, like glass (no blur: it's costly) */
+QFrame#Panel, QFrame#AskBar {{
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 {p.surface_raised}, stop:1 {p.surface});
+    border: 1px solid {p.border}; border-top-color: {p.glass_edge}; border-radius: 14px;
+}}
+QFrame#CorePanel {{
+    background: qradialgradient(cx:0.5, cy:0.38, radius:0.75, fx:0.5, fy:0.38,
+                                stop:0 {p.core_glow}, stop:0.6 {p.surface}, stop:1 {p.background});
+    border: 1px solid {p.border}; border-top-color: {p.glass_edge}; border-radius: 16px;
+}}
+QFrame#Card {{
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 {p.surface_raised}, stop:1 {p.surface});
+    border: 1px solid {p.border}; border-radius: 12px;
+}}
+QLabel#OrbState {{ font-size: 16pt; font-weight: 600; letter-spacing: 2px; color: {p.accent}; }}
+QLineEdit#AskBox {{ font-size: 11pt; padding: 9px 12px; border-radius: 10px; }}
+
+/* Top bar */
+QFrame#TopBar {{ background: {p.surface}; border-bottom: 1px solid {p.border}; }}
+QLabel#TopBarTitle {{ color: {p.text_dim}; font-size: 9pt; font-weight: 600; letter-spacing: 2px; }}
+QLabel#TopBarClock {{ font-size: 13pt; font-weight: 300; color: {p.text}; }}
+QPushButton#Chip {{
+    background: {p.background}; border: 1px solid {p.border}; border-radius: 14px; padding: 0;
+}}
+QPushButton#Chip:hover {{ border-color: {p.accent_dim}; }}
+QLabel#ChipText {{ color: {p.text_dim}; font-size: 9pt; }}
 QFrame#Divider {{ background: {p.border}; max-height: 1px; min-height: 1px; }}
 
 /* Buttons */

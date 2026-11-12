@@ -53,11 +53,60 @@ model stays in `Models/`. `AURORA Command Centre.exe --voice-check` runs
 the voice loop-back test without a window, and `--vision-check` the
 vision self-check.
 
+## Layout
+
+```
+┌──────────┬───────────────────────────────────────────────────────────────┐
+│          │ PAGE TITLE    ● AURORA · Ready  ● model  ● Internet  ● CPU/RAM │  top bar
+│ sidebar  ├───────────────────────────────────────────────────────────────┤
+│ (pages,  │                                                               │
+│ Ctrl+1-9)│   the page                                                    │
+│          │                                                               │
+└──────────┴───────────────────────────────────────────────────────────────┘
+```
+
+**Top bar** (every page): what AURORA is doing, the language model and
+whether it's reachable, internet access (on / asks first / off, how many
+services are allowed this session, and the local-network switch in the
+tooltip), CPU and RAM, and the time. Each item opens the page that
+explains or changes it.
+
+**The AI core** (Dashboard) shows `Backend.ai_state`, which follows real
+events:
+
+| State | When | Looks like |
+|---|---|---|
+| Ready | running, nothing happening | the core breathes slowly (10 frames/s, only the core redrawn) |
+| Thinking | a message was sent, no reply text yet | the three rings turn, with linked nodes |
+| Responding | the reply is being written | particles flow out from the core |
+| Speaking | a reply is spoken aloud | as Responding |
+| Listening | the microphone is open | rings expand with your voice's loudness |
+| Starting | the kernel is starting | a progress arc sweeps |
+| Something went wrong | a reply failed (5 seconds), or AURORA couldn't start | red core with a warning mark, still |
+| Paused | paused or stopped | grey and still |
+
+Drawn with QPainter only (no images, blur, particle systems or OpenGL),
+15 frames a second while busy, and only while visible; with
+**Animations** off in Settings each state is a still picture. The glow and
+the still rings are drawn once and reused. Measured on this laptop's
+i3-8130U (420 px orb): Ready about 1-3 % of one core, Listening about
+14 %, Thinking and Responding about 25-30 % of one core (6-8 % of the
+whole processor) for as long as the reply takes.
+
+**Look**: deep navy, one accent (cyan, electric blue or violet), panels
+with a faint top-lit gradient and a hairline edge (glass without blur,
+which is expensive), round gauges that turn amber above 75 % and red above
+90 % (tools: amber when any is unavailable).
+
+**Keyboard**: Ctrl+1 … Ctrl+9 open the first nine pages (Dashboard, Chat,
+Memory, Knowledge, News, Browser, Tools, Models, Training). In the
+Browser: Ctrl+T, Ctrl+W, Ctrl+L, Ctrl+F.
+
 ## Pages
 
 | Page | What it shows | Where the data comes from |
 |---|---|---|
-| Dashboard | Greeting, clock, AI status, model, memory count, CPU, RAM, room at a glance (while background sensor watching is on), services, plugins, tools, recent activity, quick access | Engine status, Ollama check, MemoryManager, Windows APIs, event bus (`sensor.readings`) |
+| Dashboard | Greeting and date; **the AI core** (what AURORA is doing now, in motion and in words); round gauges for CPU, RAM, AURORA's own memory and tools ready; AI status (with the services), model, memory count and the room; **Coming up** (next reminders and scheduled tasks); recent activity; Pause / Start; an **ask bar** (question, microphone, picture) that answers in Chat | `Backend.ai_state`, engine status, system sampler, Reminders and Schedule tools, activity feed |
 | Chat | Conversation with timestamps, Markdown, streaming replies, a thinking indicator, Yes/No buttons when AURORA asks for confirmation, Clear. **🖼 Image…** (describe a picture you choose, with its evidence), **🎙 Ask by voice** (one request; a level meter shows the microphone is on), **■ Stop** (stops listening or speaking), **Speak replies** | `engine.process_message()` (the same engine as the terminal); `VoiceController` |
 | Memory Centre | All memories with category, priority, confidence, dates and use; search, category filter, add note, edit value, delete with confirmation | `MemoryManager` |
 | Knowledge Centre | Ask your documents (answers quoted with citations, topic summaries, re-index, index status); research projects and sessions; documents (list, search, read); notes | Research log; Documents tool (through the ToolManager, so its folder limit and permission apply); MemoryManager |
@@ -106,7 +155,7 @@ vision self-check.
 ```
 command_centre.py ── aurora/interface/app.py
                        │
-                       ├── MainWindow ── sidebar + QStackedWidget of views
+                       ├── MainWindow ── sidebar + top bar + QStackedWidget of views
                        │                  (each view: BaseView with on_shown / on_hidden)
                        │
                        └── Backend (QObject)

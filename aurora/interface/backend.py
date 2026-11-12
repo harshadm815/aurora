@@ -168,6 +168,9 @@ class Backend(QObject):
     reminder_due = Signal(dict)            # {"id", "text"}
     reminders_missed = Signal(list)        # [{"text", "due"}] found at start
     task_ran = Signal(dict)                # a scheduled task ran or was skipped
+    # What AURORA is doing right now, for the AI core and the top bar:
+    # idle | thinking | responding | listening | speaking | processing | error | offline
+    ai_state_changed = Signal(str)
 
     def __init__(self, engine_factory: Callable | None = None, parent=None):
         super().__init__(parent)
@@ -202,6 +205,10 @@ class Backend(QObject):
         # Voice: microphone (push to talk), spoken replies, stop.
         from aurora.interface.voice_control import VoiceController
         self.voice = VoiceController(self)
+        self.ai_state = "processing"            # starting up
+        self._activity: str | None = None       # thinking / responding / listening / speaking
+        self._error_until = 0.0                 # a failed reply shows "error" briefly
+        self.voice.state_changed.connect(self._voice_state)
         self._vision = None          # VisionAnalyzer for chosen pictures, when there's no Camera tool
         self.missed_reminders: list[dict] = []     # reminders due while AURORA was closed (shown once)
 
@@ -271,6 +278,41 @@ class Backend(QObject):
             self.state = state
             logger.info("AURORA %s", state)
             self.state_changed.emit(state)
+        self._refresh_ai_state()
+
+    # --- What AURORA is doing (the AI core) ---------------------------------
+
+    def _refresh_ai_state(self) -> None:
+        if self.state == "failed":
+            state = "error"
+        elif self.state in ("paused", "stopped"):
+            state = "offline"
+        elif self.state == "starting":
+            state = "processing"
+        elif self._activity is not None:
+            state = self._activity
+        elif time.monotonic() < self._error_until:
+            state = "error"
+        else:
+            state = "idle"
+        if state != self.ai_state:
+            self.ai_state = state
+            self.ai_state_changed.emit(state)
+
+    def _set_activity(self, activity: str | None) -> None:
+        self._activity = activity
+        self._refresh_ai_state()
+
+    def _voice_state(self, state: str) -> None:
+        if state in ("listening", "speaking"):
+            self._set_activity(state)
+        elif self._activity in ("listening", "speaking"):
+            self._set_activity(None)
+
+    def _reply_failed(self) -> None:
+        self._error_until = time.monotonic() + 5
+        self._set_activity(None)
+        QTimer.singleShot(5100, self._refresh_ai_state)
 
     @property
     def paused(self) -> bool:
@@ -396,12 +438,27 @@ class Backend(QObject):
         engine = self.engine
         stream = self.preferences.get("chat_streaming", True) and on_token is not None
 
+        def token(piece):
+            if self._activity == "thinking":
+                self._set_activity("responding")
+            on_token(piece)
+
         def work():
-            callback = (lambda piece: self.on_gui(on_token, piece)) if stream else None
+            callback = (lambda piece: self.on_gui(token, piece)) if stream else None
             reply = engine.process_message(text, on_token=callback)
             return reply, engine.pending is not None, caption(getattr(engine, "last_sources", []))
 
-        self.run_engine(work, on_reply, on_error)
+        def replied(result):
+            if self._activity in ("thinking", "responding"):
+                self._set_activity(None)
+            on_reply(result)
+
+        def failed(error):
+            self._reply_failed()
+            on_error(error)
+
+        self._set_activity("thinking")
+        self.run_engine(work, replied, failed)
 
     # --- Sensors ------------------------------------------------------------
 

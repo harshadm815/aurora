@@ -9,7 +9,7 @@ import sys
 from pathlib import Path
 
 APP_NAME = "AURORA"
-VERSION = "0.33.0"
+VERSION = "0.38.0"
 
 USER_NAME = "Harry"
 

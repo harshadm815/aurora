@@ -1,16 +1,14 @@
 """
-Knowledge Centre: questions answered from your documents with citations
-(the Knowledge tool), research projects (from the research log), your
-documents (through the Documents tool, so its folder limit and permission
-apply) and saved notes.
+Knowledge Centre: research projects (from the research log) and saved
+notes.
+
+Your files are on the Documents page (browse, preview, Smart search,
+summaries), and questions about your documents are answered in Chat
+("what do my notes say about dark matter?"), quoted with their sources.
 """
 
-from PySide6.QtWidgets import (
-    QHBoxLayout, QLineEdit, QListWidget, QListWidgetItem, QPushButton, QSplitter, QTabWidget, QTextBrowser,
-    QVBoxLayout, QWidget,
-)
+from PySide6.QtWidgets import QLineEdit, QListWidget, QSplitter, QTabWidget, QTextBrowser, QVBoxLayout, QWidget
 
-from aurora.config import settings
 from aurora.interface.components.base_view import BaseView
 from aurora.interface.components.widgets import label, safe_markdown
 
@@ -24,68 +22,17 @@ def _browser() -> QTextBrowser:
 
 class KnowledgeView(BaseView):
     title = "Knowledge Centre"
-    subtitle = "Ask your documents (answers quote their sources), and see your research, documents and notes."
+    subtitle = ("Your research projects and notes. Files are on the Documents page; ask about your documents "
+                "in Chat.")
     nav_icon = "📚"
     scrollable = False
 
     def __init__(self, backend, parent=None):
         super().__init__(backend, parent)
         self.tabs = QTabWidget()
-        self.tabs.addTab(self._ask_tab(), "Ask your documents")
         self.tabs.addTab(self._research_tab(), "Research projects")
-        self.tabs.addTab(self._documents_tab(), "Documents")
         self.tabs.addTab(self._notes_tab(), "Notes")
         self.body.addWidget(self.tabs, 1)
-
-    # --- Ask your documents ------------------------------------------------------------
-
-    def _ask_tab(self) -> QWidget:
-        tab = QWidget()
-        layout = QVBoxLayout(tab)
-        layout.addWidget(label(
-            "Ask a question and AURORA answers with sentences quoted from your documents, each with its "
-            "source (file and page). If your documents don't answer it, it says so instead of guessing.",
-            "Faint", wrap=True))
-        row = QHBoxLayout()
-        self.question = QLineEdit()
-        self.question.setPlaceholderText("e.g. how much of the universe is dark matter?")
-        self.question.returnPressed.connect(self._ask)
-        ask = QPushButton("Ask")
-        ask.clicked.connect(self._ask)
-        summarize = QPushButton("Summarize topic")
-        summarize.clicked.connect(lambda: self._ask(action="summarize"))
-        reindex = QPushButton("Re-index")
-        reindex.clicked.connect(lambda: self._knowledge(self._index_loaded, action="reindex"))
-        for widget in (ask, summarize, reindex):
-            row.addWidget(widget)
-        row.insertWidget(0, self.question, 1)
-        layout.addLayout(row)
-        self.answer = _browser()
-        layout.addWidget(self.answer, 1)
-        self.index_status = label("", "Faint", wrap=True)
-        layout.addWidget(self.index_status)
-        return tab
-
-    def _knowledge(self, on_result, **arguments):
-        """Runs the Knowledge tool through the ToolManager (permissions apply)."""
-        engine = self.backend.engine
-        if engine is None or engine.tool_manager.get("Knowledge") is None:
-            self.answer.setPlainText("The Knowledge tool isn't available.")
-            return
-        self.backend.run_io(lambda: engine.tool_manager.execute("Knowledge", **arguments), on_result,
-                            lambda e: self.answer.setPlainText(f"That didn't work: {e}"))
-
-    def _ask(self, action: str = "ask"):
-        question = self.question.text().strip()
-        if not question:
-            return
-        self.answer.setPlainText("Looking through your documents…")
-        arguments = {"action": action, "question": question} if action == "ask" else {"action": action,
-                                                                                         "topic": question}
-        self._knowledge(lambda result: self.answer.setPlainText(result.message), **arguments)
-
-    def _index_loaded(self, result):
-        self.index_status.setText(result.message.replace("\n", "   "))
 
     # --- Research projects ----------------------------------------------------------
 
@@ -136,69 +83,6 @@ class KnowledgeView(BaseView):
             lines.append("")
         self.project_detail.setMarkdown("\n".join(lines))
 
-    # --- Documents ----------------------------------------------------------------
-
-    def _documents_tab(self) -> QWidget:
-        tab = QWidget()
-        layout = QVBoxLayout(tab)
-        layout.addWidget(label(f"Files in {settings.DOCUMENTS_DIR} (.txt, .md, .pdf, images). "
-                               "AURORA can't read anything outside this folder.", "Faint", wrap=True))
-        row = QHBoxLayout()
-        self.doc_search = QLineEdit()
-        self.doc_search.setPlaceholderText("Search your documents…")
-        self.doc_search.returnPressed.connect(self._search_documents)
-        search = QPushButton("Search")
-        search.clicked.connect(self._search_documents)
-        refresh = QPushButton("Refresh")
-        refresh.clicked.connect(self._load_documents)
-        row.addWidget(self.doc_search, 1)
-        row.addWidget(search)
-        row.addWidget(refresh)
-        layout.addLayout(row)
-        split = QSplitter()
-        self.documents = QListWidget()
-        self.documents.itemDoubleClicked.connect(self._open_document)
-        self.doc_view = _browser()
-        split.addWidget(self.documents)
-        split.addWidget(self.doc_view)
-        split.setSizes([260, 600])
-        layout.addWidget(split, 1)
-        layout.addWidget(label("Double-click a document to read it.", "Faint"))
-        return tab
-
-    def _execute(self, **arguments):
-        """Runs the Documents tool through the ToolManager (permissions apply)."""
-        engine = self.backend.engine
-        return engine.tool_manager.execute("Documents", **arguments)
-
-    def _load_documents(self):
-        if self.backend.engine is None:
-            return
-        self.backend.run_io(lambda: self._execute(action="list"), self._documents_loaded,
-                            lambda e: self.doc_view.setPlainText(str(e)))
-
-    def _documents_loaded(self, result):
-        self.documents.clear()
-        if result.success and isinstance(result.data, list):
-            for name in result.data:
-                self.documents.addItem(QListWidgetItem(name))
-        self.doc_view.setPlainText(result.message)
-
-    def _search_documents(self):
-        query = self.doc_search.text().strip()
-        if not query or self.backend.engine is None:
-            return
-        self.doc_view.setPlainText("Searching…")
-        self.backend.run_io(lambda: self._execute(action="search", query=query),
-                            lambda result: self.doc_view.setPlainText(result.message),
-                            lambda e: self.doc_view.setPlainText(str(e)))
-
-    def _open_document(self, item: QListWidgetItem):
-        self.doc_view.setPlainText("Reading…")
-        self.backend.run_io(lambda: self._execute(action="read", name=item.text()),
-                            lambda result: self.doc_view.setPlainText(result.message),
-                            lambda e: self.doc_view.setPlainText(str(e)))
-
     # --- Notes --------------------------------------------------------------------
 
     def _notes_tab(self) -> QWidget:
@@ -245,6 +129,4 @@ class KnowledgeView(BaseView):
         if self.backend.engine is None:
             return
         self._load_projects()
-        self._load_documents()
         self._load_notes()
-        self._knowledge(self._index_loaded, action="status")

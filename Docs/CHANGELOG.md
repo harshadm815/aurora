@@ -33,6 +33,10 @@ Docs/COMMAND_CENTRE.md.
 ### Changed
 - The browser's side panel became a left sidebar and a right AURORA
   panel; the sites list moved behind the padlock.
+- Knowledge Centre keeps Research projects and Notes; its "Ask your
+  documents" and "Documents" tabs are gone (the Documents page has the
+  files, Smart search and summaries; Chat answers questions about your
+  documents with quoted sources).
 - Ctrl+1 … Ctrl+9 now include Documents (Training moved out of the nine).
 
 ### Fixed

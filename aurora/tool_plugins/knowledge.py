@@ -8,6 +8,8 @@ documents, with citations.
     compare    "compare astronomy_notes.md and lecture.txt on dark matter"
                "compare what my documents and Wikipedia say about dark matter"
     status     "what's in my knowledge base?"
+    find       which documents mention something (Smart search on the Documents page):
+               data is [(document, page, matching passage)], best first
     reindex    "re-index my documents"
 
 The index is brought up to date (changed files only) before each request.
@@ -67,6 +69,8 @@ class KnowledgeTool(BaseTool):
             return self._status(f"Re-indexed your documents: {len(report.added)} document(s).", report)
         if action == "status":
             return self._status("", report)
+        if action == "find":
+            return self._find(question or topic)
 
         name, problem = self._document(document)
         if problem:
@@ -95,6 +99,17 @@ class KnowledgeTool(BaseTool):
         if len(found) > 1:
             return None, f"Several documents match \"{wanted}\": {', '.join(found[:5])}. Which one?"
         return found[0], None
+
+    def _find(self, text: str) -> ToolResult:
+        hits = self.index.search(text, limit=40)
+        found: dict[str, tuple] = {}
+        for hit in hits:                                   # best passage per document, best documents first
+            found.setdefault(hit.document, (hit.document, hit.page, " ".join(hit.text.split())[:240]))
+        results = list(found.values())
+        if not results:
+            return ToolResult(True, f"No document in your Documents folder mentions “{text}”.", [])
+        names = ", ".join(r[0] for r in results[:5])
+        return ToolResult(True, f"{len(results)} document(s) mention “{text}”: {names}", results)
 
     def _status(self, heading: str, report) -> ToolResult:
         documents = self.index.documents_indexed()

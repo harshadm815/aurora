@@ -356,8 +356,17 @@ def _fakes():
         def page(self):
             return self._page
 
-        def findText(self, text):
+        def findText(self, text, *flags):
             self.found.append(text)
+
+        def zoomFactor(self):
+            return getattr(self, "_zoom", 1.0)
+
+        def setZoomFactor(self, factor):
+            self._zoom = factor
+
+        def selectedText(self):
+            return getattr(self, "selection", "")
 
         def back(self): pass
         def forward(self): pass
@@ -487,9 +496,9 @@ def test_browser_page_lists_sites_contacted(browser_page, gate, monkeypatch):
     browser_page.on_shown()
     browser_page.navigate("https://space.example/bh")
     browser_page.network.decide("https://cdn.tracker.example/p.gif", "https://space.example/bh")
-    browser_page.side.setCurrentIndex(2)                          # Sites
-    items = [browser_page.sites.item(i).text() for i in range(browser_page.sites.count())]
+    items = browser_page.load_sites()
     assert items[0] == "space.example" and "cdn.tracker.example  · other site" in items
+    assert browser_page.lock.text() == "🔒"
 
 
 def test_browser_engine_failure_is_reported(qapp_browser):
@@ -498,3 +507,112 @@ def test_browser_engine_failure_is_reported(qapp_browser):
     view = browser_view.BrowserView(Backend())          # conftest blocks the real engine
     view.on_shown()
     assert "couldn't start" in view.status.text() and view.tabs.count() == 0
+
+
+# --- Redesign: tabs, zoom, panel, sidebar lists -------------------------------------------
+
+def test_security_indicator_and_zoom_steps():
+    from aurora.interface.browser_view import security, zoom_step
+    assert security("https://a.org")[0] == "🔒"
+    assert security("http://a.org")[0] == "⚠" and "Not secure" in security("http://a.org")[1]
+    assert security("http://192.168.1.40/")[0] == "🏠"
+    assert security("about:blank") == ("", "")
+    assert zoom_step(1.0, 1) == 1.1 and zoom_step(1.0, -1) == 0.9 and zoom_step(1.7, 0) == 1.0
+    assert zoom_step(3.0, 1) == 3.0 and zoom_step(0.5, -1) == 0.5
+
+
+def test_tabs_pin_duplicate_close_others_and_restore(browser_page, monkeypatch):
+    monkeypatch.setattr(settings, "INTERNET_ACCESS", "on")
+    browser_page.on_shown()
+    browser_page.navigate("https://space.example/bh")
+    browser_page.set_pinned(0, True)
+    assert browser_page.tabs.tabText(0).startswith("📌")
+    browser_page.close_tab(0)
+    assert browser_page.tabs.count() == 1 and "Unpin" in browser_page.status.text()      # pinned tabs stay
+    browser_page.duplicate_tab(0)
+    browser_page.new_tab("https://other.example/")
+    assert browser_page.tabs.count() == 3
+    browser_page.close_other_tabs(0)
+    assert browser_page.tabs.count() == 1                                                    # the pinned one
+    # Closed right to left, so the most recently closed is the duplicate; it comes back first.
+    assert browser_page.closed == ["https://other.example/", "https://space.example/bh"]
+    browser_page.restore_tab()
+    assert browser_page.current().url().toString() == "https://space.example/bh" and browser_page.closed == [
+        "https://other.example/"]
+
+
+def test_zoom_reader_toggle_and_panel_hidden_by_default(browser_page, monkeypatch):
+    monkeypatch.setattr(settings, "INTERNET_ACCESS", "on")
+    browser_page.show()
+    browser_page.on_shown()
+    assert not browser_page.panel.isVisible() and browser_page.sidebar.isVisible()
+    browser_page.navigate("https://space.example/bh")
+    browser_page.zoom(1)
+    browser_page.zoom(1)
+    assert browser_page.current().zoomFactor() == 1.25 and browser_page.zoom_label.text() == "125%"
+    browser_page.zoom(0)
+    assert browser_page.zoom_label.text() == "100%"
+    browser_page.reader_button.setChecked(True)
+    assert browser_page.center.currentWidget() is browser_page.reader_view
+    assert "min read" in browser_page.reader_view.toPlainText()
+    browser_page.reader_button.setChecked(False)
+    assert browser_page.center.currentWidget() is browser_page.tabs
+    browser_page.panel_button.setChecked(True)
+    assert browser_page.panel.isVisible()
+    browser_page.sidebar_button.setChecked(False)
+    assert not browser_page.sidebar.isVisible()
+
+
+def test_panel_summary_extract_compare_and_explain(browser_page, monkeypatch):
+    monkeypatch.setattr(settings, "INTERNET_ACCESS", "on")
+    browser_page.on_shown()
+    browser_page.navigate("https://space.example/bh")
+    browser_page.summarise()
+    assert "Key sentences" in browser_page.answer_view.toPlainText() and browser_page.panel_button.isChecked()
+    browser_page.extract_info()
+    text = browser_page.answer_view.toPlainText()
+    assert "Sections: How black holes form · Sizes" in text and "2019" in text
+    browser_page.compare_tabs()
+    assert "at least two" in browser_page.answer_view.toPlainText()
+    browser_page.new_tab("https://other.example/")
+    browser_page.compare_tabs()
+    assert "Comparing 2 open pages" in browser_page.answer_view.toPlainText()
+    asked = []
+    browser_page.ask_chat.connect(asked.append)
+    browser_page.explain_selection()
+    assert asked == [] and "Select some text" in browser_page.answer_view.toPlainText()
+    browser_page.current().selection = "gravitational collapse"
+    browser_page.explain_selection()
+    assert asked and "gravitational collapse" in asked[0]
+
+
+def test_reading_list_and_downloads(browser_page, monkeypatch):
+    monkeypatch.setattr(settings, "INTERNET_ACCESS", "on")
+    browser_page.on_shown()
+    browser_page.navigate("https://space.example/bh")
+    browser_page.add_to_reading_list()
+    browser_page.add_to_reading_list()
+    assert "Already" in browser_page.status.text() and browser_page.reading_list.count() == 1
+    store = browser_page.store
+    entry = store.reading_list()[0]
+    store.mark_read(entry.id)
+    assert store.reading_list(include_read=False) == []
+    record = store.record_download("paper.pdf", "C:/Users/x/Downloads/paper.pdf", "arxiv.org")
+    store.update_download(record, "completed")
+    browser_page.load_downloads()
+    assert browser_page.download_list.count() == 1 and "completed" in browser_page.download_list.item(0).text()
+    assert store.clear_downloads() == 1 and store.downloads() == []
+
+
+def test_extract_details_from_html():
+    from aurora.browser import extract
+    markup = ARTICLE.replace("<main>", '<main><meta property="article:published_time" content="2026-11-01">'
+                             '<table><tr><th>Type</th><th>Mass</th></tr><tr><td>Stellar</td><td>5-100</td></tr></table>'
+                             '<a href="https://nasa.gov/bh">NASA on black holes</a>')
+    page = reader.extract(markup, "https://space.example/bh")
+    info = extract.details(page, markup)
+    assert info.published == "2026-11-01" and info.tables[0][0] == ["Type", "Mass"]
+    assert ("NASA on black holes", "https://nasa.gov/bh") in info.links
+    assert info.dates == ["2019"] and info.figures == ["100 solar"]          # no "2019 with" 
+    summary = extract.summary(page)
+    assert summary.sentences and all(s in page.text for s in summary.sentences)

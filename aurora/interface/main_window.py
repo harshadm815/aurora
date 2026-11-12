@@ -17,6 +17,7 @@ from aurora.interface.chat import ChatView
 from aurora.interface.components.top_bar import TopBar
 from aurora.interface.components.widgets import Emblem, fade_in, label
 from aurora.interface.dashboard import DashboardView
+from aurora.interface.documents_view import DocumentsView
 from aurora.interface.knowledge_view import KnowledgeView
 from aurora.interface.news_view import NewsView
 from aurora.interface.memory_view import MemoryView
@@ -39,6 +40,7 @@ PAGES = [
     ("Chat", ChatView),
     ("Memory", MemoryView),
     ("Knowledge", KnowledgeView),
+    ("Documents", DocumentsView),
     ("News", NewsView),
     ("Browser", BrowserView),
     ("Tools", ToolsView),
@@ -134,6 +136,7 @@ class MainWindow(QMainWindow):
         dashboard.ask.connect(self.ask_in_chat)
         dashboard.listen_requested.connect(lambda: self._in_chat(lambda chat: chat.listen()))
         dashboard.picture_requested.connect(lambda: self._in_chat(lambda chat: chat.ask_image()))
+        self.pages["Browser"].ask_chat.connect(self.ask_in_chat)
         # Ctrl+1 … Ctrl+9 open the first nine pages.
         for number, (name, _) in enumerate(PAGES[:9], start=1):
             QShortcut(QKeySequence(f"Ctrl+{number}"), self, activated=lambda n=name: self.open_page(n))

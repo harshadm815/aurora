@@ -41,6 +41,9 @@ def isolated_database(tmp_path, monkeypatch):
     # And browser history, bookmarks and the browser profile.
     monkeypatch.setattr(settings, "BROWSER_DATABASE_PATH", tmp_path / "browser_test.db")
     monkeypatch.setattr(settings, "BROWSER_PROFILE_DIR", tmp_path / "Data" / "browser")
+    # The Documents page shows only the test's Documents folder (never your real folders).
+    monkeypatch.setattr(settings, "EXPLORER_PLACES", [])
+    monkeypatch.setattr(settings, "EXPLORER_DATABASE_PATH", tmp_path / "explorer_test.db")
 
 
 @pytest.fixture(autouse=True)

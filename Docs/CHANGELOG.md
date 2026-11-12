@@ -1,5 +1,48 @@
 # Changelog
 
+## 0.39.0 — Browser and Documents redesign (2026-11-12)
+
+The Dashboard is unchanged. See the Browser and Documents rows in
+Docs/COMMAND_CENTRE.md.
+
+### Added
+- **Documents page**, laid out like Windows File Explorer: Home (favourites,
+  recent, places), Recent, Favourites and the places (AURORA Documents,
+  your Windows Documents, Pictures, Videos, Music, Downloads, Desktop,
+  OneDrive); toolbar (new folder, new document, cut, copy, paste, rename,
+  delete, sort, view); breadcrumbs; Details, Large icons and List views;
+  preview panel (pictures, start of text and PDFs, details, Open, Open
+  with…, Show in Explorer, Favourite, Summarise with AURORA); context
+  menus and keyboard shortcuts.
+- **Smart search**: find documents by what they say (new Knowledge action
+  `find`, so the Knowledge permission applies).
+- File operations only inside the places, never overwriting (" (2)"),
+  refusing names Windows can't use, deleting to the Recycle Bin
+  (`aurora/explorer/`). AURORA still reads contents only in its own
+  Documents folder.
+- **Browser**: home, padlock (HTTPS / not secure / local, click for the
+  sites contacted), zoom, downloads list, reading list, saved pages, full
+  screen, pinned and duplicated tabs, close other tabs, restore closed
+  tabs, search open tabs, reader mode in the page area.
+- **AURORA panel** in the browser (hidden until opened): key sentences,
+  important information (published date, author, dates, figures,
+  sections, tables, links), compare open tabs, explain the selection in
+  Chat.
+- 28 new tests (Tests/test_documents.py, Tests/test_browser.py).
+
+### Changed
+- The browser's side panel became a left sidebar and a right AURORA
+  panel; the sites list moved behind the padlock.
+- Ctrl+1 … Ctrl+9 now include Documents (Training moved out of the nine).
+
+### Fixed
+- Renaming a file to the same name in different letter case did nothing
+  (Windows paths compare equal ignoring case).
+
+### Not done
+- Tab previews and tab groups; drag and drop in Documents; page
+  translation; cloud storage beyond the OneDrive folder.
+
 ## 0.38.0 — Command Centre design: AI core, top bar, new dashboard (2026-11-12)
 
 See "Layout" in Docs/COMMAND_CENTRE.md.

@@ -56,7 +56,7 @@ QToolTip {{ background: {p.surface_raised}; color: {p.text}; border: 1px solid {
 /* Sidebar */
 QFrame#Sidebar {{ background: {p.surface}; border-right: 1px solid {p.border}; }}
 QPushButton#NavButton {{
-    text-align: left; padding: 9px 14px; margin: 2px 10px; border: none; border-radius: 8px;
+    text-align: left; padding: 6px 14px; margin: 1px 10px; border: none; border-radius: 8px;
     color: {p.text_dim}; font-size: 10.5pt;
 }}
 QPushButton#NavButton:hover {{ background: {p.surface_raised}; color: {p.text}; }}
@@ -102,6 +102,41 @@ QPushButton#Chip {{
 }}
 QPushButton#Chip:hover {{ border-color: {p.accent_dim}; }}
 QLabel#ChipText {{ color: {p.text_dim}; font-size: 9pt; }}
+
+/* Browser */
+QToolButton#NavTool {{ color: {p.text_dim}; font-size: 12pt; padding: 3px 7px; border-radius: 8px; border: none; }}
+QToolButton#NavTool:hover {{ background: {p.surface_raised}; color: {p.text}; }}
+QToolButton#NavTool:checked {{ background: {p.surface_raised}; color: {p.accent}; }}
+QToolButton#PanelToggle {{ font-size: 9.5pt; font-weight: 600; padding: 5px 10px; color: {p.accent};
+                          border: 1px solid {p.accent_dim}; border-radius: 14px; }}
+QToolButton#PanelToggle:checked {{ background: {p.accent_dim}; color: white; }}
+QFrame#AddressBar {{ background: {p.background}; border: 1px solid {p.border}; border-radius: 17px; min-height: 34px; }}
+QLineEdit#Address {{ background: transparent; border: none; padding: 4px 2px; font-size: 10.5pt; }}
+QPushButton#Lock, QPushButton#ZoomLabel {{ background: transparent; border: none; padding: 2px 4px; color: {p.text_dim}; }}
+QPushButton#ZoomLabel {{ font-size: 8.5pt; min-width: 38px; }}
+QTabWidget#BrowserTabs QTabBar::tab {{
+    background: {p.surface}; color: {p.text_dim}; padding: 7px 14px; margin-right: 2px; min-width: 90px; max-width: 220px;
+    border: 1px solid {p.border}; border-bottom: none; border-top-left-radius: 9px; border-top-right-radius: 9px;
+}}
+QTabWidget#BrowserTabs QTabBar::tab:selected {{ background: {p.surface_raised}; color: {p.text}; border-top: 2px solid {p.accent}; }}
+QTabWidget#BrowserSidebar QTabBar::tab {{ padding: 6px 10px; font-size: 11pt; }}
+QFrame#AuroraPanel {{
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 {p.surface_raised}, stop:1 {p.surface});
+    border: 1px solid {p.border}; border-left: 2px solid {p.accent_dim}; border-radius: 12px;
+}}
+QLabel#PanelTitle {{ color: {p.accent}; font-weight: 600; letter-spacing: 2px; }}
+QTextBrowser#ReaderView {{ background: {p.surface}; border: none; padding: 24px; }}
+
+/* Documents */
+QPushButton#Crumb {{ background: transparent; border: none; padding: 4px 6px; color: {p.text}; border-radius: 6px; }}
+QPushButton#Crumb:hover {{ background: {p.surface_raised}; color: {p.accent}; }}
+QListWidget#ExplorerNav {{ background: {p.surface}; border: 1px solid {p.border}; border-radius: 10px; padding: 4px; }}
+QListWidget#ExplorerNav::item {{ padding: 7px 8px; border-radius: 6px; }}
+QListWidget#ExplorerResults::item {{ padding: 6px; }}
+QTreeView {{ background: {p.surface}; border: 1px solid {p.border}; border-radius: 10px; alternate-background-color: #0b1220; }}
+QTreeView::item {{ padding: 4px; }}
+QTreeView::item:selected, QListView::item:selected {{ background: {p.accent_dim}; color: white; }}
+QListView {{ background: {p.surface}; border: 1px solid {p.border}; border-radius: 10px; }}
 QFrame#Divider {{ background: {p.border}; max-height: 1px; min-height: 1px; }}
 
 /* Buttons */

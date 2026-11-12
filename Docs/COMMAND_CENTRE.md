@@ -99,8 +99,13 @@ which is expensive), round gauges that turn amber above 75 % and red above
 90 % (tools: amber when any is unavailable).
 
 **Keyboard**: Ctrl+1 … Ctrl+9 open the first nine pages (Dashboard, Chat,
-Memory, Knowledge, News, Browser, Tools, Models, Training). In the
-Browser: Ctrl+T, Ctrl+W, Ctrl+L, Ctrl+F.
+Memory, Knowledge, Documents, News, Browser, Tools, Models).
+Browser: Ctrl+T new tab, Ctrl+W close, Ctrl+Shift+T restore, Ctrl+Shift+A
+search tabs, Ctrl+L address, Ctrl+D bookmark, Ctrl+F find, Ctrl+B sidebar,
+Ctrl+J AURORA panel, Ctrl+= / Ctrl+- / Ctrl+0 zoom, F5 reload, F11 full
+screen, Alt+Left / Alt+Right back and forward.
+Documents: Enter open, F2 rename, Del delete, Ctrl+C / X / V, Ctrl+Shift+N
+new folder, Backspace or Alt+Up up, Ctrl+F search, F5 refresh.
 
 ## Pages
 
@@ -110,7 +115,8 @@ Browser: Ctrl+T, Ctrl+W, Ctrl+L, Ctrl+F.
 | Chat | Conversation with timestamps, Markdown, streaming replies, a thinking indicator, Yes/No buttons when AURORA asks for confirmation, Clear. **🖼 Image…** (describe a picture you choose, with its evidence), **🎙 Ask by voice** (one request; a level meter shows the microphone is on), **■ Stop** (stops listening or speaking), **Speak replies** | `engine.process_message()` (the same engine as the terminal); `VoiceController` |
 | Memory Centre | All memories with category, priority, confidence, dates and use; search, category filter, add note, edit value, delete with confirmation | `MemoryManager` |
 | Knowledge Centre | Ask your documents (answers quoted with citations, topic summaries, re-index, index status); research projects and sessions; documents (list, search, read); notes | Research log; Documents tool (through the ToolManager, so its folder limit and permission apply); MemoryManager |
-| Browser | The AURORA Browser: tabs (up to 6), address bar with searches and suggestions from history and bookmarks, back/forward/reload, bookmark star, find in page, PDF viewer, confirmed downloads. Side panel: **Ask** (questions answered by quoting the page; Save to Knowledge), **Reader**, **Sites** (every site the page contacted, other sites marked, blocked ones shown; clear cookies and cache), **History** (search, delete, clear, Keep history on/off), **Bookmarks** | Qt WebEngine (started on first opening); `aurora/browser/`; network gate |
+| Browser | Laid out like a desktop browser. **Navigation bar**: sidebar, back, forward, reload, home, padlock (HTTPS or not secure; click for every site the page contacted), address and search, bookmark, reader mode, zoom, downloads, ✦ AURORA panel, ⋯ menu (history on/off, clear history, cookies and cache, full screen). **Tabs** (up to 6): pin, duplicate, close others, restore closed (Ctrl+Shift+T), search tabs (Ctrl+Shift+A). **Sidebar**: bookmarks, history, downloads, reading list, saved pages. **AURORA panel** (hidden until opened, Ctrl+J): ask about the page, key sentences, important information, compare open tabs, explain the selection (in Chat), save to Knowledge, read later | Qt WebEngine (started on first opening); `aurora/browser/`; network gate |
+| Documents | Laid out like File Explorer. **Left**: Home, Recent, Favourites, then the places (AURORA Documents, your Windows Documents, Pictures, Videos, Music, Downloads, Desktop, OneDrive). **Toolbar**: new folder, new document, cut, copy, paste, rename, delete (Recycle Bin), sort, view (Details, Large icons, List). **Breadcrumbs** and Up; filter by name, search names, or **Smart search** by content (AURORA's Documents folder). **Preview**: pictures, the start of text and PDFs, type, size, dates, location; Open, Open with…, Show in Explorer, Favourite, Summarise with AURORA | Qt's file system model; `aurora/explorer/`; Knowledge tool (find, summarize) |
 | Tools & capabilities | Every tool as Available, Disabled (with the missing permission) or Error; calculator trial | `engine.tool_status()`, `tool.failed` events |
 | Model manager | Conversation model: Ollama's installed models (parameters, quantization, size, in memory), use for chat, unload. AURORA's own models: every checkpoint in `Models/` (parameters, precision, size, steps, test loss); load into the AURORA Core Runtime, try it (streamed, stoppable, tokens/s), unload | Ollama (`model_overview`), checkpoint headers (no weights loaded until you load one), `aurora_core.runtime` |
 | Training monitor | Every training run: loss curves (training and validation) against the unigram and bigram baselines, test loss, perplexity; start a new AURORA-T0 run on a text in `Data/` with live progress, time left and Stop | `metrics.jsonl` / `summary.json` in `Models/`; training runs as a separate process (`command_centre.py --train …`) |

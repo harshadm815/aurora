@@ -9,7 +9,7 @@ import sys
 from pathlib import Path
 
 APP_NAME = "AURORA"
-VERSION = "0.38.0"
+VERSION = "0.39.0"
 
 USER_NAME = "Harry"
 
@@ -276,6 +276,17 @@ BROWSER_DATABASE_PATH = PROJECT_ROOT / "aurora_browser.db"
 BROWSER_PROFILE_DIR = DATA_DIR / "browser"
 # Pages saved with "Save to Knowledge" go here, inside the Documents folder.
 BROWSER_SAVED_FOLDER = "Web pages"
+
+# AURORA Documents (aurora/explorer/, the Documents page)
+#
+# The folders the Documents page shows and can change: AURORA's Documents
+# folder, then these. None = your Windows Documents, Pictures, Videos,
+# Music, Downloads and Desktop, and OneDrive if set up. Or a list of
+# (name, path) pairs. Whole drives and system folders aren't offered.
+# AURORA itself still reads, indexes and summarises only DOCUMENTS_DIR.
+EXPLORER_PLACES: list[tuple[str, str]] | None = None
+# Favourites and recent files, on this PC only.
+EXPLORER_DATABASE_PATH = PROJECT_ROOT / "aurora_explorer.db"
 
 # Weather
 #

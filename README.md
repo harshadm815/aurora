@@ -28,6 +28,9 @@ nothing leaves it unless you ask.
 - **Its own web browser.** Tabs, history, bookmarks, reader mode, and
   questions about the open page answered by quoting it. Every site a page
   contacts is listed and checked by the network gate.
+- **Documents like File Explorer.** Browse your folders, preview files,
+  and find documents by what they say (Smart search); deletes go to the
+  Recycle Bin and nothing is ever overwritten.
 - **News intelligence on request.** Searches GDELT, Google News, publisher
   feeds and web search in parallel. It cross-checks publishers, flags
   allegations and corrections, tracks the legal stages of crime reports,

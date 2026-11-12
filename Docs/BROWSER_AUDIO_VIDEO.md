@@ -50,15 +50,15 @@ A browser page inside the Command Centre.
 |---|---|---|
 | Tabs, address bar, search, back/forward/reload | Qt WebEngine (Chromium 140) in PySide6; up to `BROWSER_MAX_TABS` (6) tabs; searches go to `BROWSER_SEARCH_URL` (DuckDuckGo by default) | **Done** |
 | Bookmarks and history | `aurora_browser.db` on this PC (not in git); history search, delete, clear, switch off; older than 90 days deleted | **Done** |
-| Download manager | Asked first (file name, site, size), then saved where you choose | **Done** (basic: no list of past downloads) |
+| Download manager | Asked first (file name, site, size), then saved where you choose; a downloads list in the sidebar (on this PC; clearing it keeps the files) | **Done** |
 | Reader mode | Article text without menus, adverts, cookie banners, share buttons and hidden text (`aurora/browser/reader.py`) | **Done** (a heuristic, like every reader mode) |
 | PDF viewing | Qt WebEngine's built-in PDF viewer | **Done** (reader mode and Ask don't work on PDFs yet) |
 | Find in page | Qt WebEngine | **Done** |
-| Extract information | Tables, links, headings, dates and numbers from the page text, rule-based like News | Headings (outline) only; the rest planned |
+| Extract information | Published date, author, site, dates and figures mentioned, sections, tables, links (`aurora/browser/extract.py`) | **Done** |
 | Save pages to the knowledge base | Reader-mode text saved as Markdown in `Documents/Web pages/`, with the address and date; Knowledge indexes it with your documents and cites it | **Done** |
 | Questions about the page you're viewing | Sentences quoted from the open page, with the page as the source; "doesn't answer that" when no sentence does (`aurora/browser/answers.py`) | **Done** (in the Browser page; not yet from the chat) |
-| Compare sources ("compare these three papers") | Side by side: titles, authors, dates, methods and results sections, figures quoted with links; a written comparison needs a capable model | Planned (extraction first) |
-| Website summaries | Needs a capable local model; until then, the page's own description and its headings | Waits for a model |
+| Compare sources ("compare these three papers") | Compare open tabs: site, title, published date, length, sections, key sentences, and figures that differ between pages | **Done** (side by side and quoted; a written comparison needs a capable model) |
+| Website summaries | Key sentences quoted from the page in its own order (the Knowledge summary method); a written summary needs a capable local model | **Done** (quoted) |
 | Translation | Needs a translation model (several hundred MB per language pair) or an external service through the gate | Later |
 | Voice-controlled browsing | Voice commands routed to the browser ("open …", "next tab", "read this page") | Planned (after the basics) |
 
@@ -139,7 +139,15 @@ recorded through the interceptor; reader mode; Save to Knowledge;
 questions answered by quoting the open page. Tested with a fake web
 engine (`Tests/test_browser.py`, no Chromium, no network).
 
-**2. Next:** questions about the open page from the chat ("what does this
+**2. Browser redesign: done (0.39.0).** Desktop-browser layout: navigation
+bar with padlock, home, zoom, downloads and menu; tabs that can be pinned,
+duplicated, restored and searched; sidebar (bookmarks, history, downloads,
+reading list, saved pages); reader mode in the page area; full screen;
+the AURORA panel hidden until opened (summary, information, compare
+tabs, explain the selection in Chat). Not done: tab previews (tooltips
+show title and address instead) and tab groups.
+
+**3. Next:** questions about the open page from the chat ("what does this
 page say about …"); comparing several open pages side by side (titles,
 dates, headings, quoted sentences); tables, links and dates extracted;
 reader mode and Ask for PDFs; a downloads list; voice commands for the

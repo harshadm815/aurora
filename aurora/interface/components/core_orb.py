@@ -15,7 +15,9 @@ Everything is drawn with QPainter (no images, blur or OpenGL), at 15
 frames a second while busy and 10 while idle, and only while the orb is
 visible. The glow and still rings are drawn once and reused (measured on
 the i3-8130U: anti-aliased arcs were most of a frame's cost). With
-animations off (Settings), each state is a still picture.
+animations off (Settings), each state is a still picture. In performance
+mode (aurora/interface/performance.py) the core is still while idle and
+busy states run at 5 frames a second.
 """
 
 import math
@@ -35,12 +37,15 @@ OFFLINE_COLOUR = "#475569"
 STILL = {"error", "offline"}
 FRAME_MS = {"idle": 100}           # 10 frames a second: breathing is slow
 BUSY_FRAME_MS = 66                 # 15: busy states are when the model needs the CPU most
+REDUCED_FRAME_MS = 200             # 5, in performance mode
 
 
-def frame_interval(state: str) -> int | None:
+def frame_interval(state: str, reduced: bool = False) -> int | None:
     """Milliseconds between frames, or None for a still picture."""
-    if state in STILL:
+    if state in STILL or (reduced and state == "idle"):
         return None
+    if reduced:
+        return REDUCED_FRAME_MS
     return FRAME_MS.get(state, BUSY_FRAME_MS)
 
 
@@ -54,6 +59,7 @@ class CoreOrb(QWidget):
         self.state = "processing"
         self.level = 0.0                     # microphone loudness 0..1 while listening
         self.animated = True
+        self.reduced = False                 # performance mode
         self._clock = QElapsedTimer()
         self._clock.start()
         self._frozen = 0.0                   # the time drawn when animations are off
@@ -85,12 +91,18 @@ class CoreOrb(QWidget):
         self._schedule()
         self.update()
 
+    def set_reduced(self, on: bool) -> None:
+        if on != self.reduced:
+            self.reduced = on
+            self._schedule()
+            self.update()
+
     @property
     def running(self) -> bool:
         return self._timer.isActive()
 
     def _schedule(self) -> None:
-        interval = frame_interval(self.state)
+        interval = frame_interval(self.state, self.reduced)
         if self.animated and interval is not None and self.isVisible():
             self._timer.start(interval)
         else:
@@ -117,7 +129,9 @@ class CoreOrb(QWidget):
     # ---------------------------------------------------------------- drawing
 
     def _time(self) -> float:
-        return self._clock.elapsed() / 1000.0 if self.animated else self._frozen
+        if not self.animated or (self.reduced and self.state == "idle"):
+            return self._frozen
+        return self._clock.elapsed() / 1000.0
 
     def colour(self) -> QColor:
         if self.state == "error":

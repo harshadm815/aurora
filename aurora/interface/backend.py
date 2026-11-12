@@ -25,7 +25,7 @@ from PySide6.QtCore import QObject, QRunnable, QThreadPool, QTimer, Signal, Slot
 from aurora.config import preferences, settings
 from aurora.events import topics
 from aurora.events.bus import ALL_EVENTS
-from aurora.interface import system_info
+from aurora.interface import performance, system_info
 from aurora.knowledge.sources import caption
 from aurora.sensors.reading import QUANTITIES
 
@@ -171,6 +171,7 @@ class Backend(QObject):
     # What AURORA is doing right now, for the AI core and the top bar:
     # idle | thinking | responding | listening | speaking | processing | error | offline
     ai_state_changed = Signal(str)
+    performance_changed = Signal(bool, str)   # graphics reduced?, one line for the Dashboard
 
     def __init__(self, engine_factory: Callable | None = None, parent=None):
         super().__init__(parent)
@@ -218,6 +219,10 @@ class Backend(QObject):
         self._sample_timer = QTimer(self)
         self._sample_timer.timeout.connect(self._sample)
         self._sample_timer.start(2000)
+        self.pressure = performance.Pressure()
+        self.performance_reduced = False
+        self.performance_text = ""
+        self._update_performance()
 
     # --- Threads ------------------------------------------------------------
 
@@ -243,6 +248,18 @@ class Backend(QObject):
             "cores": system_info.cpu_count(),
         }
         self.system_sampled.emit(self.last_sample)
+        self.pressure.update(self.last_sample["cpu"], memory.percent if memory is not None else None)
+        self._update_performance()
+
+    def _update_performance(self) -> None:
+        mode = self.preferences.get("performance_mode", "auto")
+        reduced = performance.reduced(mode, self.pressure)
+        text = performance.describe(mode, self.pressure)
+        if (reduced, text) != (self.performance_reduced, self.performance_text):
+            self.performance_reduced, self.performance_text = reduced, text
+            if reduced:
+                logger.info("Performance mode on (%s)", mode)
+            self.performance_changed.emit(reduced, text)
 
     # --- Start / stop -------------------------------------------------------
 
@@ -571,6 +588,7 @@ class Backend(QObject):
         if "sensor_monitoring" in values:
             self.set_sensor_monitoring(bool(values["sensor_monitoring"]), save=False)
         self.preferences_changed.emit(dict(self.preferences))
+        self._update_performance()
         logger.info("Preferences saved")
 
     # --- Helpers for views --------------------------------------------------

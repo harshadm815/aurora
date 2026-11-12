@@ -93,6 +93,21 @@ i3-8130U (420 px orb): Ready about 1-3 % of one core, Listening about
 14 %, Thinking and Responding about 25-30 % of one core (6-8 % of the
 whole processor) for as long as the reply takes.
 
+**Voice waveform** (under the core): while listening, bars follow the
+microphone's real loudness; while speaking, a moving pattern shows *that*
+AURORA is speaking (Windows' speech engine doesn't report loudness, so it
+isn't a measurement). Otherwise it's a flat line and isn't redrawn.
+
+**Performance mode** (Settings → Interface, `aurora/interface/performance.py`)
+keeps the layout and makes the graphics cheaper: the core is still while
+Ready and runs at 5 frames a second while busy, the waveform redraws at
+most 5 times a second, and pages don't fade in. *Automatic* (the default)
+turns it on after 6 seconds of CPU above 85 % or RAM above 92 %, and off
+after 6 seconds below 65 % and 88 %, so it doesn't flicker; *Always on*
+and *Off* are the other choices. The Dashboard says when it's on and why.
+The browser engine (Qt WebEngine) starts only when the Browser page is
+first opened, so it uses no memory until then.
+
 **Look**: deep navy, one accent (cyan, electric blue or violet), panels
 with a faint top-lit gradient and a hairline edge (glass without blur,
 which is expensive), round gauges that turn amber above 75 % and red above
@@ -111,7 +126,7 @@ new folder, Backspace or Alt+Up up, Ctrl+F search, F5 refresh.
 
 | Page | What it shows | Where the data comes from |
 |---|---|---|
-| Dashboard | Greeting and date; **the AI core** (what AURORA is doing now, in motion and in words); round gauges for CPU, RAM, AURORA's own memory and tools ready; AI status (with the services), model, memory count and the room; **Coming up** (next reminders and scheduled tasks); recent activity; Pause / Start; an **ask bar** (question, microphone, picture) that answers in Chat | `Backend.ai_state`, engine status, system sampler, Reminders and Schedule tools, activity feed |
+| Dashboard | Greeting and date; **the AI core** (what AURORA is doing now, in motion and in words); round gauges for CPU, RAM, AURORA's own memory and tools ready; the voice waveform; performance mode when it's on; AI status (with the services), model, memory count and the room; **Connections** (internet access and the services allowed this session, the Browser's open tabs, research projects and the latest session; each opens its page); **Coming up** (next reminders and scheduled tasks) and recent activity, as two tabs of one panel; Pause / Start; an **ask bar** (question, microphone, picture) that answers in Chat | `Backend.ai_state`, engine status, system sampler, voice level, network gate, Browser tabs, research log, Reminders and Schedule tools, activity feed |
 | Chat | Conversation with timestamps, Markdown, streaming replies, a thinking indicator, Yes/No buttons when AURORA asks for confirmation, Clear. **🖼 Image…** (describe a picture you choose, with its evidence), **🎙 Ask by voice** (one request; a level meter shows the microphone is on), **■ Stop** (stops listening or speaking), **Speak replies** | `engine.process_message()` (the same engine as the terminal); `VoiceController` |
 | Memory Centre | All memories with category, priority, confidence, dates and use; search, category filter, add note, edit value, delete with confirmation | `MemoryManager` |
 | Knowledge Centre | Research projects and sessions; notes ("remember that …"). Files are on the Documents page; questions about your documents are answered in Chat | Research log; MemoryManager |
@@ -124,7 +139,7 @@ new folder, Backspace or Alt+Up up, Ctrl+F search, F5 refresh.
 | Sensor Centre | Temperature, humidity, pressure, ambient light, motion, CO₂, VOCs, fine dust (and extra quantities), each LIVE / SIMULATED / LAST KNOWN / NO SENSOR with its measuring time and what it means; 24-hour history chart with lowest, highest, average and trend; **Watch my room in the background** switch; alerts; connections; health on request | Sensor Hub, Sensor Service, `sensor.readings` / `sensor.alert` events |
 | System monitor | CPU, system RAM, AURORA's own memory, uptime, Ollama, active and installed models, services, plugins, tools, logs | Windows APIs, Ollama, engine, AURORA's log |
 | Automation | Undo (the last reversible action and what undoing it does); scheduled tasks (pause, resume, delete) and reminders (cancel), missed reminders; tidy a folder (preview, organise with confirmation, stop, undo); the audit trail with filters; "What AURORA may do": every action, its permission and whether it is granted, whether it asks first, how it is undone | The same checked and audited path as Chat (`engine.execute_action`), audit trail, Schedule / Reminders / Files tools |
-| Settings | Model, personality, streaming, memory announcements, memories given to the model, accent, start page, maximised start, animations, voice name, speed and volume, microphone, barge-in, Test the voice, Test the microphone | `aurora_preferences.json` |
+| Settings | Model, personality, streaming, memory announcements, memories given to the model, accent, start page, maximised start, animations, performance mode, voice name, speed and volume, microphone, barge-in, Test the voice, Test the microphone | `aurora_preferences.json` |
 
 ## Honest by design
 

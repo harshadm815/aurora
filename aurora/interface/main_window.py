@@ -133,6 +133,7 @@ class MainWindow(QMainWindow):
 
         dashboard = self.pages["Dashboard"]
         dashboard.navigate.connect(self.open_page)
+        dashboard.browser_tabs = self.pages["Browser"].open_tabs
         dashboard.ask.connect(self.ask_in_chat)
         dashboard.listen_requested.connect(lambda: self._in_chat(lambda chat: chat.listen()))
         dashboard.picture_requested.connect(lambda: self._in_chat(lambda chat: chat.ask_image()))
@@ -177,7 +178,7 @@ class MainWindow(QMainWindow):
         self.stack.setCurrentWidget(view)
         self.buttons[name].setChecked(True)
         self.top_bar.set_page(view.title)
-        if self.backend.preferences.get("animations", True):
+        if self.backend.preferences.get("animations", True) and not self.backend.performance_reduced:
             fade_in(view)
         try:
             view.on_shown()

@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.40.0 — Performance mode, voice waveform, Connections (2026-11-12)
+
+### Added
+- **Performance mode** (Settings → Interface): lighter graphics while the
+  PC is busy. The AI core is still while Ready and runs at 5 frames a
+  second while busy; the waveform redraws at most 5 times a second; pages
+  don't fade. Automatic (default) after 6 seconds of CPU above 85 % or
+  RAM above 92 %, off again after 6 seconds below 65 % / 88 %; or Always
+  on / Off. The Dashboard says when it's on and why.
+- **Voice waveform** under the AI core: real microphone loudness while
+  listening, a moving pattern while speaking, still otherwise.
+- **Connections** on the Dashboard: internet access and the services
+  allowed this session, the Browser's open tabs, research projects and
+  the latest session.
+
+### Changed
+- The Dashboard's Coming up and Recent activity are two tabs of one
+  panel, so everything fits a 1366 × 768 screen.
+
 ## 0.39.0 — Browser and Documents redesign (2026-11-12)
 
 The Dashboard is unchanged. See the Browser and Documents rows in

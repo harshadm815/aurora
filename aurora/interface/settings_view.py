@@ -74,6 +74,15 @@ class SettingsView(BaseView):
         self.animations = QCheckBox("Subtle animations")
         self.animations.setChecked(values["animations"])
         form.addRow("", self.animations)
+        self.performance = QComboBox()
+        for text, value in (("Automatic: lighter while the PC is busy", "auto"), ("Always on", "on"),
+                            ("Off", "off")):
+            self.performance.addItem(text, value)
+        self.performance.setCurrentIndex(max(0, self.performance.findData(values["performance_mode"])))
+        self.performance.setToolTip("Lighter graphics (a still AI core while idle, 5 frames a second while busy, "
+                                    "no page fades) keep more of the CPU for the model.\nAutomatic turns on "
+                                    "after 6 seconds of CPU above 85% or RAM above 92%.")
+        form.addRow("Performance mode", self.performance)
         interface.add_layout(form)
         self.body.addWidget(interface)
 
@@ -201,6 +210,7 @@ class SettingsView(BaseView):
             "start_page": self.start_page.currentText(),
             "start_maximized": self.maximized.isChecked(),
             "animations": self.animations.isChecked(),
+            "performance_mode": self.performance.currentData(),
             "voice_name": self.voice_name.currentText(),
             "voice_rate": self.voice_rate.value(),
             "voice_volume": self.voice_volume.value() / 100,

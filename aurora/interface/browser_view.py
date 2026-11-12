@@ -463,6 +463,17 @@ class BrowserView(BaseView):
             self.address.setFocus()
         return view
 
+    def open_tabs(self) -> list[tuple[str, str]] | None:
+        """(title, host) of each open tab, for the Dashboard; None until the Browser is first opened."""
+        if self.factory is None:
+            return None
+        tabs = []
+        for i in range(self.tabs.count()):
+            view = self.tabs.widget(i)
+            url = view.url().toString()
+            tabs.append((view.title() or "New tab", addresses.host_of(url) if addresses.is_web(url) else ""))
+        return tabs
+
     def pinned_count(self) -> int:
         return sum(1 for i in range(self.tabs.count()) if self.tabs.widget(i).property(PINNED))
 

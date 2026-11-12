@@ -4,10 +4,13 @@ system, what's coming up, and a box to ask AURORA something.
 
     greeting row     greeting, date, Pause / Start
     centre           the AI core (what AURORA is doing now), its state in
-                     words, and round gauges: CPU, RAM, AURORA's own memory,
+                     words, the voice waveform, performance mode when it's
+                     on, and round gauges: CPU, RAM, AURORA's own memory,
                      tools ready
     right column     AI status (with the services), model, memory, room;
-                     upcoming reminders and scheduled tasks; recent activity
+                     connections (internet access, browser tabs, research
+                     projects); a panel with two tabs: Coming up (reminders
+                     and scheduled tasks) and Recent activity
     bottom bar       ask AURORA (opens Chat with the question), microphone,
                      picture
 
@@ -18,14 +21,17 @@ internet access, CPU/RAM and the time.) Everything shown is real state.
 from datetime import datetime
 
 from PySide6.QtCore import Qt, QTimer, Signal
-from PySide6.QtWidgets import QGridLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QVBoxLayout, QWidget
+from PySide6.QtWidgets import (QGridLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QTabWidget, QVBoxLayout,
+                               QWidget)
 
 from aurora.config import settings
 from aurora.interface import system_info
 from aurora.interface.components.base_view import BaseView
 from aurora.interface.components.core_orb import LABELS, CoreOrb
 from aurora.interface.components.gauges import RingGauge
+from aurora.interface.components.waveform import Waveform
 from aurora.interface.components.widgets import Panel, StatCard, StatusDot, clear_layout, label
+from aurora.network import gate as network_gate
 from aurora.providers.core_provider import is_core_model
 
 
@@ -63,6 +69,40 @@ def upcoming(reminders, tasks, now: datetime, limit: int = 5) -> list[tuple[date
         if when is not None:
             items.append((when, task.name, "Scheduled"))
     return sorted(items, key=lambda item: item[0])[:limit]
+
+
+def internet_line(mode: str, approved: list[str], services: dict) -> str:
+    """Internet access and which services may go online, in words."""
+    names = [services.get(c, {}).get("name", c) for c in approved]
+    if mode == "off":
+        return "Off: nothing goes to the internet"
+    if mode == "on":
+        return "On: services may go online without asking"
+    return "Asks first · " + ("allowed this session: " + ", ".join(names) if names else "nothing allowed yet")
+
+
+def browser_line(tabs: list[tuple[str, str]] | None) -> str:
+    """The Browser's open tabs, in words (tabs is None until the Browser is first opened)."""
+    if not tabs:
+        return "Not open" if tabs is None else "No tabs open"
+    hosts = list(dict.fromkeys(host for _, host in tabs if host))
+    text = f"{len(tabs)} tab{'s' if len(tabs) != 1 else ''} open"
+    if hosts:
+        text += " · " + ", ".join(hosts[:3]) + (f" +{len(hosts) - 3}" if len(hosts) > 3 else "")
+    return text
+
+
+def research_line(projects) -> str:
+    """Research projects and the latest session, in words."""
+    if not projects:
+        return "No projects yet · try “continue my research on …” in Chat"
+    sessions = sum(len(p.sessions) for p in projects)
+    latest = max(((s.time, p.name) for p in projects for s in p.sessions), default=None)
+    text = (f"{len(projects)} project{'s' if len(projects) != 1 else ''} · "
+            f"{sessions} session{'s' if sessions != 1 else ''}")
+    if latest is not None:
+        text += f" · last: {latest[1]}, {latest[0]:%d %b}"
+    return text
 
 
 def when_text(moment: datetime, now: datetime) -> str:
@@ -118,6 +158,13 @@ class DashboardView(BaseView):
         self.state_detail.setAlignment(Qt.AlignCenter)
         centre.add(self.state_label)
         centre.add(self.state_detail)
+        self.waveform = Waveform()
+        centre.add(self.waveform)
+        self.performance_label = label("", "Faint", wrap=True)
+        self.performance_label.setAlignment(Qt.AlignCenter)
+        self.performance_label.setToolTip("Settings → Interface → Performance mode")
+        self.performance_label.hide()
+        centre.add(self.performance_label)
         gauges = QHBoxLayout()
         gauges.setSpacing(4)
         self.cpu_gauge = RingGauge("CPU")
@@ -130,30 +177,39 @@ class DashboardView(BaseView):
         main.addWidget(centre, 5)
 
         right = QVBoxLayout()
-        right.setSpacing(14)
+        right.setSpacing(10)
         cards = QGridLayout()
         cards.setSpacing(10)
         self.ai_card = StatCard("AI status")
         self.model_card = StatCard("Language model")
         self.memory_card = StatCard("Memory")
         self.room_card = StatCard("Room")
-        self.room_card.set("—", "Turn on background watching in the Sensor Centre to see your room here.")
+        self.room_card.set("—", "Background watching is off (Sensor Centre).")
         for index, card in enumerate((self.ai_card, self.model_card, self.memory_card, self.room_card)):
+            card.setMinimumHeight(100)           # value and detail stay readable on a short screen
             cards.addWidget(card, index // 2, index % 2)
         right.addLayout(cards)
 
-        self.upcoming_panel = Panel("Coming up")
-        self.upcoming_rows = QVBoxLayout()
-        self.upcoming_rows.setSpacing(4)
-        self.upcoming_panel.add_layout(self.upcoming_rows)
-        right.addWidget(self.upcoming_panel)
+        self.connections = Panel("Connections")
+        rows = QGridLayout()
+        rows.setHorizontalSpacing(8)
+        rows.setVerticalSpacing(2)
+        self.internet_row = self._connection(rows, 0, "🌐", "Internet", "Settings")
+        self.browser_row = self._connection(rows, 1, "🧭", "Browser", "Browser")
+        self.research_row = self._connection(rows, 2, "🔬", "Research", "Knowledge")
+        rows.setColumnStretch(1, 1)
+        self.connections.add_layout(rows)
+        right.addWidget(self.connections)
+        self.browser_tabs = lambda: None        # set by the main window: BrowserView.open_tabs
 
-        self.activity = Panel("Recent activity")
-        self.activity_rows = QVBoxLayout()
-        self.activity_rows.setSpacing(4)
-        self.activity.add_layout(self.activity_rows)
-        self.activity.layout_.addStretch(1)
-        right.addWidget(self.activity, 1)
+        # Coming up and Recent activity share one panel (two tabs), so everything fits a 768-pixel screen.
+        self.timeline = Panel()
+        self.timeline_tabs = QTabWidget()
+        self.timeline_tabs.setDocumentMode(True)
+        self.upcoming_rows = self._tab_rows("Coming up")
+        self.activity_rows = self._tab_rows("Recent activity")
+        self.timeline.add(self.timeline_tabs, 1)
+        right.addWidget(self.timeline, 1)
         main.addLayout(right, 4)
         self.body.addLayout(main, 1)
 
@@ -195,7 +251,8 @@ class DashboardView(BaseView):
         backend.preferences_changed.connect(self._preferences)
         backend.state_changed.connect(lambda _: self._refresh_status())
         backend.ai_state_changed.connect(self._show_ai_state)
-        backend.voice.level.connect(lambda rms, _speaking: self.orb.set_level(rms / 3000))
+        backend.voice.level.connect(self._voice_level)
+        backend.performance_changed.connect(self._performance)
         backend.sensor_readings.connect(self.show_room)
         backend.sensor_monitoring.connect(
             lambda on: None if on else self.room_card.set("—", "Background sensor watching is off."))
@@ -204,8 +261,51 @@ class DashboardView(BaseView):
         self._show_system(backend.last_sample)
         self._refresh_activity()
         self._show_upcoming([])
+        self._performance(getattr(backend, "performance_reduced", False), getattr(backend, "performance_text", ""))
+        self._refresh_connections()
+
+    def _tab_rows(self, title: str) -> QVBoxLayout:
+        page = QWidget()
+        rows = QVBoxLayout()
+        rows.setSpacing(4)
+        outer = QVBoxLayout(page)
+        outer.setContentsMargins(2, 6, 2, 0)
+        outer.addLayout(rows)
+        outer.addStretch(1)
+        self.timeline_tabs.addTab(page, title)
+        return rows
+
+    def _connection(self, grid: QGridLayout, row: int, icon: str, name: str, page: str) -> QLabel:
+        go = QPushButton(f"{icon}  {name}")
+        go.setObjectName("Crumb")
+        go.setCursor(Qt.PointingHandCursor)
+        go.setToolTip(f"Open {page}")
+        go.clicked.connect(lambda: self.navigate.emit(page))
+        grid.addWidget(go, row, 0)
+        text = label("", "Dim", wrap=True)
+        grid.addWidget(text, row, 1)
+        return text
 
     # --- Slots -------------------------------------------------------------------
+
+    def _voice_level(self, rms: float, _speaking: bool):
+        self.orb.set_level(rms / 3000)
+        self.waveform.push(rms / 3000)
+
+    def _performance(self, reduced: bool, text: str):
+        self.orb.set_reduced(reduced)
+        self.waveform.set_reduced(reduced)
+        self.performance_label.setText(text)
+        self.performance_label.setVisible(bool(text))
+
+    def _refresh_connections(self, projects=None):
+        self.internet_row.setText(internet_line(network_gate.mode, network_gate.approved(),
+                                                settings.NETWORK_SERVICES))
+        self.browser_row.setText(browser_line(self.browser_tabs()))
+        if projects is not None:
+            self.research_row.setText(research_line(projects))
+        elif not self.research_row.text():
+            self.research_row.setText("Loading…" if self.backend.engine is not None else "Starts with AURORA")
 
     def _ask(self):
         text = self.ask_box.text().strip()
@@ -221,6 +321,7 @@ class DashboardView(BaseView):
 
     def _preferences(self, values: dict):
         self.orb.set_animated(bool(values.get("animations", True)))
+        self.waveform.set_animated(bool(values.get("animations", True)))
 
     def _tick(self):
         now = datetime.now()
@@ -235,6 +336,7 @@ class DashboardView(BaseView):
     def on_shown(self):
         self._refresh_status()
         self._refresh_slow()
+        self._refresh_connections()
 
     def _failed(self, message: str):
         self.ai_card.set("Offline", message)
@@ -242,6 +344,7 @@ class DashboardView(BaseView):
 
     def _show_ai_state(self, state: str):
         self.orb.set_state(state)
+        self.waveform.set_state(state)
         self.state_label.setText(LABELS.get(state, state))
         model = self.backend.status().get("model", settings.DEFAULT_MODEL) if self.backend.engine else \
             settings.DEFAULT_MODEL
@@ -323,18 +426,22 @@ class DashboardView(BaseView):
             return
         schedule = engine.tool_manager.get("Schedule")
         reminders = engine.tool_manager.get("Reminders")
+        research = engine.tool_manager.get("Research")
 
         def work():
             count = len(engine.memory.memories())
             tasks = schedule.tasks.all() if schedule else []
             pending = reminders.scheduler.pending() if reminders else []
-            return count, upcoming(pending, tasks, datetime.now())
+            log = getattr(research, "log", None)
+            projects = log.projects() if log is not None else []
+            return count, upcoming(pending, tasks, datetime.now()), projects
 
         def show(result):
-            count, items = result
+            count, items, projects = result
             learning = "on" if self.backend.status().get("auto_memory") else "off"
             self.memory_card.set(str(count), f"memories stored · learning {learning}")
             self._show_upcoming(items)
+            self._refresh_connections(projects)
 
         self.backend.run_io(work, show, lambda error: self.memory_card.set("Error", str(error)))
 
@@ -376,7 +483,7 @@ class DashboardView(BaseView):
 
     def _refresh_activity(self):
         clear_layout(self.activity_rows)
-        recent = list(self.backend.activities)[:4]
+        recent = list(self.backend.activities)[:3]
         if not recent:
             self.activity_rows.addWidget(label("Nothing yet. Activity appears here as AURORA works.", "Faint"))
         for activity in recent:
@@ -392,5 +499,6 @@ class DashboardView(BaseView):
 
     def set_accent(self, colour: str):
         self.orb.set_accent(colour)
+        self.waveform.set_accent(colour)
         for gauge in (self.cpu_gauge, self.ram_gauge, self.process_gauge, self.tools_gauge):
             gauge.set_accent(colour)

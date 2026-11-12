@@ -45,6 +45,8 @@ INTERFACE = {
     "start_page": (str, "Dashboard", lambda v: 0 < len(v) <= 40),
     "start_maximized": (bool, False, lambda v: True),
     "animations": (bool, True, lambda v: True),
+    # Lighter graphics while the PC is busy (aurora/interface/performance.py).
+    "performance_mode": (str, "auto", lambda v: v in ("auto", "on", "off")),
     "chat_streaming": (bool, True, lambda v: True),
     "minimize_to_tray": (bool, True, lambda v: True),
     "close_to_tray": (bool, False, lambda v: True),

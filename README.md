@@ -166,7 +166,7 @@ packaging\build_windows.py   →   dist\AURORA Command Centre\AURORA Command Cen
 ```
 
 Wake Engine (hold Right Ctrl, say "Wake up"): switch it on in Settings →
-Wake Engine. A small helper (28 MB, no CPU while idle) watches for the
+Wake Engine. A small helper (about 35 MB, no CPU while idle) watches for the
 key; the microphone opens only while you hold it.
 
 Terminal interface:

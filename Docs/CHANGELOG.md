@@ -6,7 +6,7 @@
 - **Wake Engine** (`aurora/wake/`, Settings → Wake Engine, off until you
   switch it on): hold Right Ctrl (or Space) and say "Wake up"; AURORA
   starts or comes forward, says "I'm awake. How can I help you?" and
-  listens. A small helper watches for the key (measured: 28 MB, 0 % CPU
+  listens. A small helper watches for the key (measured: ~35 MB, 0 % CPU
   while idle); the microphone opens only while the key is held, with a
   beep and an on-screen panel, and closes when the phrase is heard, the
   key is released or another key is pressed.

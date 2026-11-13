@@ -143,7 +143,7 @@ What was decided and measured on this laptop:
   holding Space no longer repeats, and Space with Ctrl/Alt/Shift/Win is
   never intercepted; keys typed while Space is down keep their order.
 - **Helper**: `AURORA Command Centre.exe --wake-helper` (the same program,
-  no second build). Idle: **28 MB of memory, 0.00 % CPU** (20 s sample),
+  no second build). Idle: **0.00 % CPU**; memory 34 MB private (62 MB working set with shared Qt libraries) in the packaged .exe, 25 MB from source,
   no microphone, no speech model. Only one runs per user; the Command
   Centre starts, reloads and stops it, and can add it to Windows' startup.
 - **Microphone**: opens after the key has been held 0.45 s, with a beep

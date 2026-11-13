@@ -3,6 +3,8 @@ Starts the AURORA Command Centre.
 
     command_centre.py              open the window
     command_centre.py --minimized  start in the notification area (used by "start with Windows")
+    command_centre.py --wake       start (or wake the running one), greet and listen (the Wake Engine)
+    command_centre.py --wake-helper   the Wake Engine's small background helper (no main window)
     command_centre.py --train …    run a training job (used by the Training monitor; no window)
     command_centre.py --voice-check / --vision-check   self-tests (no window)
 
@@ -22,6 +24,7 @@ logger = logging.getLogger("aurora.interface")
 def parse(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(prog="AURORA Command Centre", add_help=False)
     parser.add_argument("--minimized", action="store_true")
+    parser.add_argument("--wake", action="store_true")
     known, _ = parser.parse_known_args(argv[1:])
     return known
 
@@ -85,6 +88,10 @@ def run(argv: list[str] | None = None) -> int:
         return voice_check(argv[2:])
     if argv[1:2] == ["--vision-check"]:
         return vision_check(argv[2:])
+    if argv[1:2] == ["--wake-helper"]:
+        setup_logging()
+        from aurora.wake.helper import main as wake_helper
+        return wake_helper(argv[2:])
     options = parse(argv)
     setup_logging()
 
@@ -112,9 +119,10 @@ def run(argv: list[str] | None = None) -> int:
     app.setStyle("Fusion")
     app.setWindowIcon(QIcon(str(integration.icon_path())))
 
+    from aurora.interface.windows.single_instance import SHOW, WAKE
     guard = SingleInstance()
-    if not guard.acquire():
-        return 0   # Already running: it has been asked to show its window.
+    if not guard.acquire(message=WAKE if options.wake else SHOW):
+        return 0   # Already running: it has been asked to show its window (or to wake up).
 
     from aurora.interface.backend import Backend
     from aurora.interface.main_window import MainWindow
@@ -122,6 +130,7 @@ def run(argv: list[str] | None = None) -> int:
     backend = Backend()
     window = MainWindow(backend)
     guard.activated.connect(window.show_from_tray)
+    guard.woken.connect(window.wake)
 
     # With a tray icon, closing or hiding the window must not end the program;
     # only Exit (or closing with "close to tray" off) does.
@@ -142,5 +151,8 @@ def run(argv: list[str] | None = None) -> int:
         window.show()
 
     backend.start()   # The engine starts in the background; the window appears at once.
+    if options.wake:
+        window.wake()
+    window.start_wake_helper()   # if the Wake Engine is switched on and its helper isn't running
     logger.info("Command Centre started")
     return app.exec()

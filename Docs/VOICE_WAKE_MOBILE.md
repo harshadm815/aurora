@@ -9,7 +9,7 @@ work. Nothing here is marked done until it has been tested on this PC.
 | Capability | Package | Builds on | Status |
 |---|---|---|---|
 | Voice Engine | `aurora/voice/` (exists) | Vosk, VAD, Windows SAPI, Piper, `VoiceSession` | **Built**: provider interface, words while you speak, pitch (0.41.0), natural Piper voice (0.42.0); multilingual and Whisper optional, later |
-| Wake Engine | `aurora/wake/` (planned) | `aurora/voice/` (Vosk grammar recogniser), the packaged .exe | Not started |
+| Wake Engine | `aurora/wake/` | `aurora/voice/` (Vosk grammar recogniser), the packaged .exe | **Built (0.43.0)**: hold Right Ctrl (or Space), say "Wake up"; measured below |
 | Voice conversation | `aurora/voice/session.py` (exists) | Engine, Chat, barge-in, Stop | **Mostly built**; a continuous "call-like" session is missing |
 | Mobile Companion | `aurora/mobile/` (planned) | Engine, memory, conversation, network gate | Not started |
 | Calling Agent | `aurora/calling/` (planned) | Voice Engine, Mobile Companion transport | Not started |
@@ -134,6 +134,37 @@ sounds better than Zira is for you to decide by listening: the samples are
 in `Models/tts/samples/`.
 
 ## 2. Wake Engine
+
+**Built in 0.43.0** (`aurora/wake/`; switched on in Settings → Wake Engine).
+What was decided and measured on this laptop:
+
+- **Key**: Right Ctrl by default (it never affects typing); Space is an
+  option. With Space, a space is typed on release instead of on press,
+  holding Space no longer repeats, and Space with Ctrl/Alt/Shift/Win is
+  never intercepted; keys typed while Space is down keep their order.
+- **Helper**: `AURORA Command Centre.exe --wake-helper` (the same program,
+  no second build). Idle: **28 MB of memory, 0.00 % CPU** (20 s sample),
+  no microphone, no speech model. Only one runs per user; the Command
+  Centre starts, reloads and stops it, and can add it to Windows' startup.
+- **Microphone**: opens after the key has been held 0.45 s, with a beep
+  (optional) and a panel above the taskbar showing the level; closes the
+  moment the phrase is heard, on release, on another key (cancel), or
+  after 8 s. Needs the Voice component's 'microphone' permission.
+- **Speech model**: loaded only when first needed (7 s cold from the USB
+  drive, 1.5 s cached, +135 MB) while the audio is kept in memory, so
+  nothing said meanwhile is lost; kept 10 minutes, then freed.
+- **Wake phrase**: "wake up" (changeable; words the model doesn't know are
+  reported). The recogniser's grammar also lists sound-alikes ("what's up",
+  "wait up", "make up"…), which took false activations on 10 other
+  sentences from 1/10 to **0/10** for each of Zira, David and Piper; the
+  phrase itself is recognised in all three voices. Real voices in real
+  rooms still need testing by you.
+- **Waking**: the helper sends "wake" to the running Command Centre (its
+  single-instance socket) or starts it with `--wake`; it comes forward,
+  opens Chat, says "I'm awake. How can I help you?" (once AURORA has
+  finished starting) and listens for one request.
+
+The original design notes follow.
 
 The requested sequence: AURORA closed, a small helper running, you hold a
 key, the microphone opens (with a visible indicator), you say "Wake up",

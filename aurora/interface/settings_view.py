@@ -5,7 +5,7 @@ editable here: they stay in settings.py / local_settings.py.
 """
 
 from PySide6.QtWidgets import (
-    QCheckBox, QComboBox, QFormLayout, QHBoxLayout, QMessageBox, QPlainTextEdit, QPushButton, QSpinBox,
+    QCheckBox, QComboBox, QFormLayout, QHBoxLayout, QLineEdit, QMessageBox, QPlainTextEdit, QPushButton, QSpinBox,
 )
 
 from aurora.config import preferences, settings
@@ -140,6 +140,36 @@ class SettingsView(BaseView):
             "Speech is recognised on this laptop (Vosk) and never saved.", "Faint", wrap=True))
         self.body.addWidget(voice)
 
+        wake = Panel("Wake Engine (hold a key, say the phrase, and AURORA starts and listens)")
+        form = QFormLayout()
+        self.wake_enabled = QCheckBox("Run the Wake Engine in the background")
+        self.wake_enabled.setChecked(values["wake_enabled"])
+        self.wake_enabled.setToolTip("A small helper (about 45 MB) watches for the key. The microphone opens only "
+                                     "while you hold it.")
+        form.addRow("", self.wake_enabled)
+        self.wake_key = QComboBox()
+        self.wake_key.addItem("Hold Right Ctrl (doesn't affect typing)", "right_ctrl")
+        self.wake_key.addItem("Hold Space (a space is typed on release; held Space no longer repeats)", "space")
+        self.wake_key.setCurrentIndex(max(0, self.wake_key.findData(values["wake_key"])))
+        form.addRow("Activation key", self.wake_key)
+        self.wake_phrase = QLineEdit(values["wake_phrase"])
+        self.wake_phrase.setMaxLength(40)
+        self.wake_phrase.setToolTip("Up to four ordinary English words, letters only.")
+        form.addRow("Wake phrase", self.wake_phrase)
+        self.wake_sound = QCheckBox("Beep when the microphone opens")
+        self.wake_sound.setChecked(values["wake_sound"])
+        form.addRow("", self.wake_sound)
+        self.wake_startup = QCheckBox("Start the Wake Engine when I sign in to Windows")
+        from aurora.wake import launcher as wake_launcher
+        self.wake_startup.setChecked(wake_launcher.helper_startup_enabled())
+        self.wake_startup.setEnabled(integration.IS_WINDOWS)
+        form.addRow("", self.wake_startup)
+        wake.add_layout(form)
+        wake.add(label("Hold the key for half a second: a small panel shows the microphone is on. Say the phrase "
+                       "while holding it. Releasing the key closes the microphone; pressing another key cancels. "
+                       "Nothing is recorded or saved.", "Faint", wrap=True))
+        self.body.addWidget(wake)
+
         network = Panel("Internet and network")
         form = QFormLayout()
         self.internet = QComboBox()
@@ -231,6 +261,10 @@ class SettingsView(BaseView):
             "voice_pitch": self.voice_pitch.value(),
             "voice_input_device": self.voice_device.currentData() or "",
             "voice_barge_in": self.barge_in.isChecked(),
+            "wake_enabled": self.wake_enabled.isChecked(),
+            "wake_key": self.wake_key.currentData(),
+            "wake_phrase": " ".join(self.wake_phrase.text().lower().split()),
+            "wake_sound": self.wake_sound.isChecked(),
             "minimize_to_tray": self.minimize_to_tray.isChecked(),
             "close_to_tray": self.close_to_tray.isChecked(),
             "internet_access": self.internet.currentData(),
@@ -274,10 +308,32 @@ class SettingsView(BaseView):
             self.startup.setChecked(integration.startup_enabled())
             return False
 
+    def _apply_wake(self) -> bool:
+        """Starts, reloads or stops the Wake Engine's helper, and its start with Windows."""
+        from aurora.wake import launcher
+
+        try:
+            if self.wake_enabled.isChecked():
+                if not launcher.reload_helper():
+                    launcher.start_helper()
+            else:
+                launcher.stop_helper()
+            wanted = self.wake_startup.isChecked() and self.wake_enabled.isChecked()
+            if integration.IS_WINDOWS and wanted != launcher.helper_startup_enabled():
+                launcher.set_helper_startup(wanted)
+            self.wake_startup.setChecked(launcher.helper_startup_enabled())
+            return True
+        except Exception as error:
+            QMessageBox.warning(self, "Wake Engine", f"Couldn't change the Wake Engine: {error}")
+            return False
+
     def save(self):
         values = self.values()
         if not values["model"] or not values["personality"]:
             QMessageBox.warning(self, "Settings", "The model and personality can't be empty.")
+            return
+        if not preferences._valid("wake_phrase", values["wake_phrase"]):
+            QMessageBox.warning(self, "Settings", "The wake phrase must be one to four words, letters only.")
             return
         installed = self.backend.ollama.get("models") or []
         if installed and f"{values['model']}:latest" not in installed and values["model"] not in installed:
@@ -289,7 +345,7 @@ class SettingsView(BaseView):
             if answer != QMessageBox.Yes:
                 return
         self.backend.save_preferences(values)
-        if self._apply_startup():
+        if self._apply_startup() and self._apply_wake():
             QMessageBox.information(self, "Settings", "Saved. New settings are in use.")
 
     def on_shown(self):

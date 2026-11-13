@@ -343,6 +343,25 @@ pyttsx3 was dropped: with version 2.99 on this machine only its first
 reply was spoken, saving to a file hung on the second call and its
 callbacks never fired.
 
+## Wake Engine
+
+`aurora/wake/`: hold a key, say "Wake up", and AURORA starts (or comes
+forward), greets you and listens. Details, decisions and measurements are
+in Docs/VOICE_WAKE_MOBILE.md.
+
+| Module | Role |
+|---|---|
+| `keys.py` | `HoldKey`: pure state machine for "is the key being held?" (Right Ctrl never blocks a key; Space is held back and re-typed when it was just a space) |
+| `hook.py` | Windows low-level keyboard hook (ctypes) feeding it; re-types held-back keys with SendInput; never stores keys |
+| `detector.py` | `WakeSession`: Vosk limited to the phrase, sound-alikes and `[unk]`; audio buffered while the model loads; `ModelCache` frees the model after 10 minutes unused |
+| `launcher.py` | Wakes the running Command Centre ("wake" over its single-instance socket) or starts it with `--wake`; starts/stops the helper; startup entry |
+| `helper.py` | The background helper (`--wake-helper`): overlay, microphone while held, permission check, one per user (own local socket: quit / reload / ping) |
+
+Settings: `WAKE_KEY`, `WAKE_PHRASE`, `WAKE_HOLD_SECONDS`,
+`WAKE_MAX_HOLD_SECONDS`, `WAKE_SOUND`, `WAKE_MODEL_KEEP_MINUTES`,
+`WAKE_GREETING`; on the Settings page: on/off, key, phrase, beep, start with
+Windows.
+
 ## Vision
 
 `aurora/vision/` lets AURORA look at pictures you choose and, when you ask,

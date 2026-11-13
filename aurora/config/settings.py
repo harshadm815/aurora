@@ -9,7 +9,7 @@ import sys
 from pathlib import Path
 
 APP_NAME = "AURORA"
-VERSION = "0.42.0"
+VERSION = "0.43.0"
 
 USER_NAME = "Harry"
 
@@ -316,6 +316,17 @@ PIPER_VOICE = "en_US-ljspeech-medium"   # file name (without .onnx) of the Piper
 # A provider that processes speech outside this PC is refused unless this is on
 # (and it then goes through the network gate). No such provider is built in yet.
 VOICE_ALLOW_EXTERNAL = False
+
+# --- Wake Engine (aurora/wake/) ---------------------------------------------------------
+# Hold the key, say the phrase, and AURORA starts (or comes forward), greets you and listens.
+# The microphone is open only while the key is held. Switched on in Settings.
+WAKE_KEY = "right_ctrl"            # "right_ctrl" (default; never affects typing) or "space" (see aurora/wake/keys.py)
+WAKE_PHRASE = "wake up"
+WAKE_HOLD_SECONDS = 0.45           # How long the key must be held before the microphone opens.
+WAKE_MAX_HOLD_SECONDS = 8          # The microphone closes after this even if the key is still held.
+WAKE_SOUND = True                  # A short beep when the microphone opens.
+WAKE_MODEL_KEEP_MINUTES = 10       # Keep the speech model loaded this long after a wake (faster next time).
+WAKE_GREETING = "I'm awake. How can I help you?"
 # Voice activity detection (aurora/voice/vad.py): when you start and stop talking.
 VOICE_NO_SPEECH_SECONDS = 5        # Stop listening if nobody starts speaking.
 VOICE_VAD_RATIO = 3.0              # Speech must be this many times louder than the room.

@@ -28,6 +28,11 @@ BACKEND = {
     "voice_volume": ("VOICE_VOLUME", float, lambda v: 0.0 <= v <= 1.0),
     "voice_pitch": ("VOICE_PITCH", int, lambda v: -10 <= v <= 10),
     "voice_synthesiser": ("VOICE_SYNTHESISER", str, lambda v: v in ("piper", "sapi")),
+    # Wake Engine (aurora/wake/).
+    "wake_key": ("WAKE_KEY", str, lambda v: v in ("right_ctrl", "space")),
+    "wake_phrase": ("WAKE_PHRASE", str, lambda v: 0 < len(v.split()) <= 4 and len(v) <= 40
+                    and all(c.isalpha() or c in " '" for c in v)),
+    "wake_sound": ("WAKE_SOUND", bool, lambda v: True),
     "voice_barge_in": ("VOICE_BARGE_IN", bool, lambda v: True),
     # "" = the Windows default microphone (settings.VOICE_INPUT_DEVICE = None)
     "voice_input_device": ("VOICE_INPUT_DEVICE", str, lambda v: len(v) <= 200),
@@ -53,6 +58,7 @@ INTERFACE = {
     "minimize_to_tray": (bool, True, lambda v: True),
     "close_to_tray": (bool, False, lambda v: True),
     "speak_replies": (bool, False, lambda v: True),
+    "wake_enabled": (bool, False, lambda v: True),        # run the Wake Engine's helper
 }
 
 

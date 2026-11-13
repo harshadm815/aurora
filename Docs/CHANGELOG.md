@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.43.0 — Wake Engine (2026-11-13)
+
+### Added
+- **Wake Engine** (`aurora/wake/`, Settings → Wake Engine, off until you
+  switch it on): hold Right Ctrl (or Space) and say "Wake up"; AURORA
+  starts or comes forward, says "I'm awake. How can I help you?" and
+  listens. A small helper watches for the key (measured: 28 MB, 0 % CPU
+  while idle); the microphone opens only while the key is held, with a
+  beep and an on-screen panel, and closes when the phrase is heard, the
+  key is released or another key is pressed.
+- The wake phrase can be changed; sound-alikes are recognised separately,
+  which removed the false activations measured with synthetic voices.
+- The Command Centre accepts `--wake` and a "wake" message from another
+  launch; the helper can start with Windows (your choice).
+
+### Changed
+- Kokoro and the voice comparison samples were removed; Piper stays.
+
 ## 0.42.0 — Natural voice: Piper (2026-11-13)
 
 ### Added

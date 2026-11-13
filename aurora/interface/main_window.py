@@ -235,6 +235,43 @@ class MainWindow(QMainWindow):
         self.raise_()
         self.activateWindow()
 
+    # --- Wake Engine ------------------------------------------------------------------
+
+    def wake(self):
+        """The Wake Engine heard you: show the window, greet you by voice and listen for a request.
+        If AURORA is still starting, the greeting waits until it's ready."""
+        self.show_from_tray()
+        self.open_page("Chat")
+        chat = self.pages["Chat"]
+        logger.info("Woken by the Wake Engine")
+
+        def greet(*_):
+            if self.backend.engine is None:
+                return
+            if waiting:
+                self.backend.engine_ready.disconnect(greet)
+                waiting.clear()
+            greeting = settings.WAKE_GREETING
+            chat._add_bubble("AURORA", greeting)
+            self.backend.voice.speak(greeting, on_done=lambda finished: chat.listen() if finished else None)
+
+        waiting = []
+        if self.backend.engine is None:
+            waiting.append(True)
+            self.backend.engine_ready.connect(greet)
+        else:
+            greet()
+
+    def start_wake_helper(self):
+        """Starts the Wake Engine's helper if it's switched on (Settings) and not already running."""
+        if not self.backend.preferences.get("wake_enabled", False):
+            return
+        try:
+            from aurora.wake import launcher
+            launcher.start_helper()
+        except Exception:
+            logger.exception("Couldn't start the Wake Engine helper")
+
     def open_settings(self):
         self.show_from_tray()
         self.open_page("Settings")

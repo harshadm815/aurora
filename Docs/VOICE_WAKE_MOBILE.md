@@ -107,6 +107,32 @@ CPU; then listen to the same sentences in each voice (and Windows' Zira
 for comparison). The winner becomes the `neural` provider in
 `providers.py`, with SAPI kept as the fallback when the model is missing.
 
+### Measured on this laptop (2026-11-13)
+
+i3-8130U, models on the USB drive, onnxruntime 1.32, five sentences
+(1.7 to 11.7 s of speech each), after one warm-up sentence. "Speed" is
+time to make the audio ÷ length of the audio: below 1 is faster than
+real time.
+
+| | Piper LJSpeech (medium) | Kokoro Heart (int8) | Kokoro Michael (int8) | Windows Zira |
+|---|---|---|---|---|
+| Speed | **0.16-0.21** (5× faster than real time) | 1.87-2.26 (2× slower) | 1.68-2.46 | (instant) |
+| "I'm awake. How can I help you?" ready after | **0.37 s** | 3.8 s | 4.1 s | instant |
+| A 10-second answer ready after | 2.1 s | 21 s | 20 s | instant |
+| Load (from the USB drive) | 9.8 s | 9.4 s | 7.3 s | instant |
+| RAM: model loaded / peak while speaking | 118 MB / 255 MB | 189 MB / 399 MB | 190 MB / 451 MB | small |
+| CPU while making speech | ~2 cores, briefly | ~1.7 cores, for twice the speech's length | same | small |
+| Word error rate (Vosk transcribing the samples) | 8.9 % | 5.1 % | 5.1 % | 6.3 % |
+
+All four are clear enough to understand (the error rates are within
+Vosk's own error). **Kokoro is too slow on this CPU**: every sentence
+would wait about twice its own length before playing, so it can't be the
+conversational voice here (it could make speech ahead of time, e.g. a
+briefing saved to a file). **Piper is fast enough for conversation**, with
+sentence-by-sentence speaking hiding all but the first ~0.4 s. Which
+sounds better than Zira is for you to decide by listening: the samples are
+in `Models/tts/samples/`.
+
 ## 2. Wake Engine
 
 The requested sequence: AURORA closed, a small helper running, you hold a

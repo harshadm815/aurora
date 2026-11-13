@@ -71,6 +71,42 @@ first working feature, not as empty folders.
 | More languages | Vosk small models exist for many languages (about 40-50 MB each); one loaded at a time | Yes, one at a time |
 | More accurate recognition | Optional Whisper (tiny/base, int8) for one-shot requests where accuracy matters more than speed; Vosk stays the default because it streams | Tiny/base only; slower than real time on this CPU is possible, to be measured |
 
+### A natural local voice: research (2026-11-13)
+
+Three small neural voices can run on a CPU. None has been measured on this
+laptop yet; published speed figures come from other machines.
+
+| | Kokoro-82M (int8 ONNX) | Piper (medium voice) | Kitten TTS 0.8 (nano/mini) |
+|---|---|---|---|
+| Quality | The most natural of the three (best-rated small model) | Clear, a little flatter | Good for its size |
+| Download | ~92 MB model + voices file | ~60 MB per voice | ~25-80 MB |
+| Speed (reported elsewhere) | About real time on a mid-range laptop CPU (RTF ~1.1 in one browser test); may be slower here | Faster than real time even on a Raspberry Pi | Fast on CPU |
+| Engine licence | kokoro-onnx: Apache-2.0 | piper-tts (OHF-Voice/piper1-gpl): **GPL-3.0** since the project moved in 2025 (the old rhasspy/piper, MIT, is archived) | Apache-2.0 (the newer 1.7B "KittenTTS 2" weights have a different, restrictive licence) |
+| Voice/weights licence | Apache-2.0 | **Per voice**, in each MODEL_CARD: e.g. Ryan is CC BY-NC-SA 4.0 (non-commercial); LJSpeech-based voices use public-domain data | Apache-2.0 (0.8 models) |
+| Pronunciation (phonemiser) | misaki (English dictionary; ~85 % of words without help) + **espeak-ng** fallback | **espeak-ng** built in | **espeak-ng** |
+
+**Licences in practice.** espeak-ng, used by all three for pronunciation,
+is GPL-3.0. For AURORA as it is (used on this PC, source code on GitHub
+under MIT, the .exe not given to anyone), that restricts nothing: the GPL
+only sets conditions on *distributing* the software. It would matter if
+the packaged .exe were ever shared publicly (the GPL parts' source would
+then have to be offered). So: the neural voice is an **optional
+provider**, installed separately into `Models/` and not committed, and
+Windows SAPI stays the built-in default. Kokoro can also run without
+espeak-ng (misaki only), at the cost of some unusual words.
+
+**Speed matters more than the table.** A voice that is slower than real
+time makes AURORA pause between sentences. The plan copes with that by
+speaking sentence by sentence (sentence 1 plays while sentence 2 is made),
+but the first sentence's delay can't be hidden.
+
+**Next step: measure, then choose.** Download Kokoro (int8) and one Piper
+voice with permissive data into `Models/`, and on this laptop measure:
+real-time factor, delay before the first word, RAM while speaking, and
+CPU; then listen to the same sentences in each voice (and Windows' Zira
+for comparison). The winner becomes the `neural` provider in
+`providers.py`, with SAPI kept as the fallback when the model is missing.
+
 ## 2. Wake Engine
 
 The requested sequence: AURORA closed, a small helper running, you hold a

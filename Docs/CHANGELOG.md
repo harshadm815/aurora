@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- Blueprint for the Voice Engine, Wake Engine, Mobile Companion and
+  Calling Agent (Docs/VOICE_WAKE_MOBILE.md): what exists, what's missing,
+  what this laptop can run, open decisions and the order of work.
+
 ## 0.40.0 — Performance mode, voice waveform, Connections (2026-11-12)
 
 ### Added

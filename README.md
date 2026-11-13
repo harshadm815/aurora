@@ -184,6 +184,7 @@ Logs are written to `Logs/aurora.log` (metadata only; never your messages).
 - [Memory design](Docs/MEMORY_DESIGN.md)
 - [Changelog](Docs/CHANGELOG.md)
 - [Planned: Browser, Audio Lab, Video Studio](Docs/BROWSER_AUDIO_VIDEO.md)
+- [Planned: Voice Engine, Wake Engine, Mobile Companion, Calling Agent](Docs/VOICE_WAKE_MOBILE.md)
 
 ## License
 

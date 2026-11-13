@@ -3,7 +3,8 @@ Voice loop-back test: speech synthesis -> file -> speech recognition.
 
     .venv\\Scripts\\python.exe -m aurora.voice.selftest
 
-For each test sentence and each installed Windows voice, AURORA speaks
+For each test sentence and each installed Windows voice (and the Piper
+voice, when it's installed), AURORA speaks
 the sentence into a WAV file (nothing is played, no microphone is used),
 then recognises it with Vosk, and measures:
 
@@ -74,6 +75,21 @@ class Trial:
     seconds: float
 
 
+PIPER_PREFIX = "Piper "
+
+
+def piper_voices() -> list[str]:
+    """The Piper voice in use, if piper-tts and its voice file are installed (else nothing)."""
+    try:
+        import piper  # noqa: F401
+    except ImportError:
+        return []
+    from aurora.config import settings
+    if not (settings.PIPER_VOICE_DIR / f"{settings.PIPER_VOICE}.onnx").is_file():
+        return []
+    return [PIPER_PREFIX + settings.PIPER_VOICE]
+
+
 def run(sentences=SENTENCES, voices: list[str] | None = None, listener=None, speaker_factory=None,
         on_trial=None) -> list[Trial]:
     from aurora.routing.router import IntentRouter
@@ -81,9 +97,14 @@ def run(sentences=SENTENCES, voices: list[str] | None = None, listener=None, spe
     from aurora.voice.speaker import SapiSpeaker
 
     listener = listener or Listener()
-    speaker_factory = speaker_factory or (lambda voice: SapiSpeaker(voice=voice))
+    if speaker_factory is None:
+        def speaker_factory(voice):
+            if voice.startswith(PIPER_PREFIX):
+                from aurora.voice.piper_voice import PiperSpeaker
+                return PiperSpeaker(voice=voice[len(PIPER_PREFIX):])
+            return SapiSpeaker(voice=voice)
     router = IntentRouter()
-    voices = voices or SapiSpeaker().voices()
+    voices = voices or SapiSpeaker().voices() + piper_voices()
     trials = []
     with tempfile.TemporaryDirectory() as folder:
         for voice in voices:

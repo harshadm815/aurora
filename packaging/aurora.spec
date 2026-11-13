@@ -23,6 +23,7 @@ hidden += collect_submodules("aurora_core")
 # Windows text-to-speech (SAPI through comtypes). The speech model itself
 # stays in Models/ in the data folder.
 hidden += collect_submodules("vosk") + ["sounddevice", "comtypes.client", "comtypes.stream"]
+hidden += ["piper", "piper.voice", "piper.config", "piper.phonemize_espeak", "piper.phoneme_ids", "piper.espeakbridge"]
 
 # OCR (RapidOCR) adds its own folder to sys.path and imports its parts by
 # name as top-level modules ("ch_ppocr_v3_det"), which PyInstaller can't see.
@@ -42,6 +43,7 @@ hidden += ["PySide6.QtWebEngineCore", "PySide6.QtWebEngineWidgets"]
 datas = [(ICON, os.path.join("aurora", "interface", "assets"))]
 datas += collect_data_files("rapidocr_onnxruntime")      # OCR models and config
 datas += collect_data_files("vosk")
+datas += collect_data_files("piper")                     # espeak-ng pronunciation data (Piper voice)
 binaries = collect_dynamic_libs("vosk")                  # libvosk.dll and its runtime
 
 a = Analysis(

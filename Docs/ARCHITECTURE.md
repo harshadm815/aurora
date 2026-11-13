@@ -314,6 +314,20 @@ says whether it runs on this PC; one that doesn't is refused unless
 words recognised so far; Chat and the Dashboard show them in quotes while
 listening (never logged).
 
+**Natural voice (Piper)** (`aurora/voice/piper_voice.py`, the default
+`VOICE_SYNTHESISER = "piper"`): a neural voice run with onnxruntime,
+`Models/tts/piper/<PIPER_VOICE>.onnx` (LJSpeech, public-domain data). On
+the development laptop it makes speech about 5 times faster than real
+time (first sentence ready in ~0.4 s) and uses about 120 MB loaded, 255 MB
+while speaking. Sentences are made on a background thread while the
+previous one plays; playback is written in 0.1 s blocks so Stop, barge-in
+or a new request cut it off within about a block. If the package or the
+voice file is missing, AURORA says why and uses the Windows voice
+(`make_synthesiser_or_fallback`). The Command Centre loads it in the
+background at start-up when spoken replies are on. Piper and espeak-ng
+are GPL-3.0 (see Docs/VOICE_WAKE_MOBILE.md). Kokoro-82M was measured too
+and was about 2 times slower than real time here, too slow to converse.
+
 **Pitch**: SAPI's XML pitch tag (-10 to 10) wraps each sentence, with the
 sentence's `&`, `<` and `>` escaped so nothing in a reply can act as markup.
 

@@ -18,6 +18,7 @@ gate like every other connection. All built-in providers are local.
                   wait_for_wake_word(source, should_stop) -> str | None
                   transcribe(audio, rate) -> str
     Synthesiser   speak(text, should_stop) -> bool (False if interrupted)
+                  (Windows SAPI, or Piper: a natural neural voice, see piper_voice.py)
                   stop(); voices(); set_voice(); set_rate(); set_volume(); set_pitch()
 """
 
@@ -73,11 +74,17 @@ def _sapi(**options):
     return SapiSpeaker(**options)
 
 
+def _piper(**options):
+    from aurora.voice.piper_voice import PiperSpeaker
+    return PiperSpeaker(**options)
+
+
 RECOGNISERS: dict[str, Provider] = {
     "vosk": Provider("vosk", "Vosk (offline, streaming)", True, _vosk),
 }
 SYNTHESISERS: dict[str, Provider] = {
     "sapi": Provider("sapi", "Windows voices (offline)", True, _sapi),
+    "piper": Provider("piper", "Natural voice: Piper (offline)", True, _piper),
 }
 
 
@@ -101,3 +108,17 @@ def make_synthesiser(name: str | None = None, **options):
     """The voice named in settings (or ``name``)."""
     provider = _choose("voice", SYNTHESISERS, name or settings.VOICE_SYNTHESISER)
     return provider.factory(**options)
+
+
+def make_synthesiser_or_fallback(name: str | None = None, fallback: str = "sapi"):
+    """(voice, problem): the chosen voice, or Windows' voice with the reason the chosen one couldn't
+    be used (its model missing, the package not installed…). problem is "" when nothing went wrong."""
+    wanted = name or settings.VOICE_SYNTHESISER
+    try:
+        return make_synthesiser(wanted), ""
+    except Exception as error:
+        if wanted == fallback:
+            raise
+        problem = f"{SYNTHESISERS[wanted].label if wanted in SYNTHESISERS else wanted} isn't available " \
+                  f"({error}); using Windows' voice instead."
+        return make_synthesiser(fallback), problem

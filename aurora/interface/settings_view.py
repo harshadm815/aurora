@@ -88,10 +88,18 @@ class SettingsView(BaseView):
 
         voice = Panel("Voice (Chat's microphone button and spoken replies, and the terminal's listen / voice on)")
         form = QFormLayout()
+        self.voice_engine = QComboBox()
+        self.voice_engine.addItem("Natural voice (Piper, offline)", "piper")
+        self.voice_engine.addItem("Windows voices (offline)", "sapi")
+        self.voice_engine.setCurrentIndex(max(0, self.voice_engine.findData(values["voice_synthesiser"])))
+        self.voice_engine.setToolTip("Piper sounds more natural and uses about 250 MB of memory while speaking.\n"
+                                     "If its voice file is missing, AURORA uses the Windows voice instead.")
+        form.addRow("Voice engine", self.voice_engine)
         self.voice_name = QComboBox()
         self.voice_name.addItems(["Zira", "David", ""])
         self.voice_name.setCurrentText(values["voice_name"])
-        form.addRow("Voice", self.voice_name)
+        self.voice_name.setToolTip("Which Windows voice (with the Windows voices engine).")
+        form.addRow("Windows voice", self.voice_name)
         self.voice_rate = QSpinBox()
         self.voice_rate.setRange(80, 300)
         self.voice_rate.setValue(values["voice_rate"])
@@ -104,7 +112,7 @@ class SettingsView(BaseView):
         self.voice_pitch = QSpinBox()
         self.voice_pitch.setRange(-10, 10)
         self.voice_pitch.setValue(values["voice_pitch"])
-        self.voice_pitch.setToolTip("Lower (-10) or higher (10) than the voice's own pitch (0).")
+        self.voice_pitch.setToolTip("Lower (-10) or higher (10) than the voice's own pitch (0). Windows voices only.")
         form.addRow("Pitch", self.voice_pitch)
         self.voice_device = QComboBox()
         self.voice_device.addItem("Windows default microphone", "")
@@ -217,6 +225,7 @@ class SettingsView(BaseView):
             "animations": self.animations.isChecked(),
             "performance_mode": self.performance.currentData(),
             "voice_name": self.voice_name.currentText(),
+            "voice_synthesiser": self.voice_engine.currentData(),
             "voice_rate": self.voice_rate.value(),
             "voice_volume": self.voice_volume.value() / 100,
             "voice_pitch": self.voice_pitch.value(),

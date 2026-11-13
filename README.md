@@ -91,6 +91,14 @@ its "Known gaps" table for what's not done yet.
    https://alphacephei.com/vosk/models and unzip it into `Models/`, so
    that `Models/vosk-model-small-en-us-0.15/am` exists.
 
+   For the natural voice (Piper, the default; without it AURORA uses
+   Windows' voice), download `en_US-ljspeech-medium.onnx` and
+   `en_US-ljspeech-medium.onnx.json` from
+   https://huggingface.co/rhasspy/piper-voices/tree/main/en/en_US/ljspeech/medium
+   into `Models/tts/piper/`. Piper (piper-tts) is GPL-3.0: fine for use on
+   your own PC; see Docs/VOICE_WAKE_MOBILE.md before giving the packaged
+   program to anyone.
+
 5. Optional, for vision (`describe photo.jpg`, `what do you see?`, `read this`, `watch`, and the Vision Centre):
    download `object_detection_nanodet_2022nov.onnx` from OpenCV's
    opencv_zoo repository (models/object_detection_nanodet) into `Models/`.

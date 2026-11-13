@@ -280,6 +280,8 @@ class Backend(QObject):
             self.engine = engine
             self._set_state("running")
             self.engine_ready.emit()
+            if self.preferences.get("speak_replies") and settings.VOICE_SYNTHESISER != "sapi":
+                self.voice.preload_speaker()         # so the first spoken reply doesn't wait for loading
             self.check_ollama()
             self._ollama_timer.start(30_000)
 

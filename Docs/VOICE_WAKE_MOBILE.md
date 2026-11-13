@@ -8,7 +8,7 @@ work. Nothing here is marked done until it has been tested on this PC.
 
 | Capability | Package | Builds on | Status |
 |---|---|---|---|
-| Voice Engine | `aurora/voice/` (exists) | Vosk, VAD, Windows SAPI, `VoiceSession` | **Mostly built**: provider interface, words while you speak and pitch done (0.41.0); a more natural voice missing |
+| Voice Engine | `aurora/voice/` (exists) | Vosk, VAD, Windows SAPI, Piper, `VoiceSession` | **Built**: provider interface, words while you speak, pitch (0.41.0), natural Piper voice (0.42.0); multilingual and Whisper optional, later |
 | Wake Engine | `aurora/wake/` (planned) | `aurora/voice/` (Vosk grammar recogniser), the packaged .exe | Not started |
 | Voice conversation | `aurora/voice/session.py` (exists) | Engine, Chat, barge-in, Stop | **Mostly built**; a continuous "call-like" session is missing |
 | Mobile Companion | `aurora/mobile/` (planned) | Engine, memory, conversation, network gate | Not started |
@@ -64,7 +64,7 @@ first working feature, not as empty folders.
 | Requirement | Plan | Fits this laptop? |
 |---|---|---|
 | Common interface for local and external providers | **Done (0.41.0)**: `aurora/voice/providers.py`; Vosk and SAPI are the first providers; external ones refused unless `VOICE_ALLOW_EXTERNAL` | Yes (no new cost) |
-| Natural, human-like speech | Add a local neural voice as a second synthesiser. Candidates: Piper voices (ONNX, onnxruntime is already installed for OCR) and Kokoro-82M. **Licences must be checked first**: recent Piper releases are GPL-3.0 and both rely on a phonemiser (espeak-ng, GPL) for pronunciation; AURORA is MIT. Speed and RAM to be measured here before choosing | Probably, for a small voice (tens of MB); to be measured |
+| Natural, human-like speech | **Done (0.42.0): Piper**, chosen after measuring (below). Plan was: add a local neural voice as a second synthesiser. Candidates: Piper voices (ONNX, onnxruntime is already installed for OCR) and Kokoro-82M. **Licences must be checked first**: recent Piper releases are GPL-3.0 and both rely on a phonemiser (espeak-ng, GPL) for pronunciation; AURORA is MIT. Speed and RAM to be measured here before choosing | Probably, for a small voice (tens of MB); to be measured |
 | Pitch, tone, style, accent | **Pitch done (0.41.0)** (SAPI XML, -10 to 10, in Settings); neural voices choose accent by voice model; "response length" is the existing `VOICE_MAX_SPOKEN_CHARS` | Yes |
 | Streaming transcription | **Done (0.41.0)**: the words recognised so far are shown in Chat and on the Dashboard while you speak | Yes |
 | Noisy rooms | Better VAD thresholds per microphone (the Test the microphone button), optionally a noise gate in `aurora/voice/` | Yes |

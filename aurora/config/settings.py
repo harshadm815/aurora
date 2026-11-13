@@ -9,7 +9,7 @@ import sys
 from pathlib import Path
 
 APP_NAME = "AURORA"
-VERSION = "0.41.0"
+VERSION = "0.42.0"
 
 USER_NAME = "Harry"
 
@@ -310,7 +310,9 @@ VOICE_VOLUME = 1.0                 # Spoken replies: 0.0 (silent) to 1.0 (full).
 VOICE_PITCH = 0                    # -10 (lower) to 10 (higher); 0 = the voice's own pitch.
 # Speech providers (aurora/voice/providers.py). Both run on this PC.
 VOICE_RECOGNISER = "vosk"
-VOICE_SYNTHESISER = "sapi"
+VOICE_SYNTHESISER = "piper"         # "piper" (natural, needs a voice in PIPER_VOICE_DIR) or "sapi" (Windows)
+PIPER_VOICE_DIR = PROJECT_ROOT / "Models" / "tts" / "piper"
+PIPER_VOICE = "en_US-ljspeech-medium"   # file name (without .onnx) of the Piper voice to use
 # A provider that processes speech outside this PC is refused unless this is on
 # (and it then goes through the network gate). No such provider is built in yet.
 VOICE_ALLOW_EXTERNAL = False

@@ -48,7 +48,7 @@ def test_external_provider_needs_permission(monkeypatch):
 
 def test_external_speech_is_off_by_default():
     assert settings.VOICE_ALLOW_EXTERNAL is False
-    assert settings.VOICE_RECOGNISER == "vosk" and settings.VOICE_SYNTHESISER == "sapi"
+    assert settings.VOICE_RECOGNISER == "vosk" and settings.VOICE_SYNTHESISER == "piper"
 
 
 def test_pitch_markup():

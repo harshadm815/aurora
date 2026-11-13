@@ -32,8 +32,9 @@ def _default_listener():
 
 
 def _default_speaker():
-    from aurora.voice.providers import make_synthesiser
-    return make_synthesiser()
+    """(voice, problem): the chosen voice, or Windows' voice if it can't be loaded."""
+    from aurora.voice.providers import make_synthesiser_or_fallback
+    return make_synthesiser_or_fallback()
 
 
 def _default_microphone():
@@ -55,6 +56,7 @@ class VoiceController(QObject):
         self.microphone = microphone or _default_microphone
         self.state = OFF
         self.problem = ""                 # why voice is unavailable, for the user
+        self.voice_problem = ""           # why the chosen voice couldn't be used (Windows' voice is used)
         self.listener = None
         self.speaker = None
         self._jobs: queue.Queue = queue.Queue()
@@ -93,8 +95,15 @@ class VoiceController(QObject):
 
     def _ensure_speaker(self):
         if self.speaker is None:
-            self.speaker = self.speaker_factory()
+            made = self.speaker_factory()
+            self.speaker, self.voice_problem = made if isinstance(made, tuple) else (made, "")
+            if self.voice_problem:
+                logger.warning("Chosen voice unavailable; using the Windows voice")
         return self.speaker
+
+    def preload_speaker(self) -> None:
+        """Load the voice in the background (Piper takes a few seconds from a USB drive)."""
+        self._submit(self._ensure_speaker, None, lambda error: None)
 
     def _ensure_listener(self):
         if self.listener is None:
@@ -172,6 +181,10 @@ class VoiceController(QObject):
     def apply_settings(self) -> None:
         """Voice, speed, volume and pitch from settings (after the Settings page saved them)."""
         def work():
+            engine = getattr(self.speaker, "name", None)       # None: a voice that doesn't say which engine it is
+            if self.speaker is not None and engine is not None and engine != settings.VOICE_SYNTHESISER:
+                self.speaker = None              # another voice engine was chosen: loaded when next needed
+                self.voice_problem = ""
             if self.speaker is not None:
                 self.speaker.set_voice(settings.VOICE_NAME)
                 self.speaker.set_rate(settings.VOICE_RATE)

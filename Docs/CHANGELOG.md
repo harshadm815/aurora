@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.42.0 — Natural voice: Piper (2026-11-13)
+
+### Added
+- **Piper**, a natural-sounding neural voice that runs on this PC, is now
+  AURORA's default voice (Settings → Voice → Voice engine). Measured here:
+  about 5 times faster than real time, the first sentence ready in about
+  0.4 s, ~255 MB of memory while speaking. The next sentence is made while
+  one plays; Stop and barge-in cut it off within about 0.1 s.
+- If Piper or its voice file is missing, AURORA says so and uses the
+  Windows voice instead.
+- The voice is loaded in the background at start-up when spoken replies
+  are on, so the first spoken reply doesn't wait.
+
+### Notes
+- Piper (piper-tts 1.8.0) and its pronunciation library espeak-ng are
+  GPL-3.0; the voice (LJSpeech) is public-domain data. Kokoro-82M was
+  also measured and was too slow on this laptop (about 2 times slower
+  than real time).
+
 ## 0.41.0 — Voice Engine: providers, words while you speak, pitch (2026-11-13)
 
 ### Added

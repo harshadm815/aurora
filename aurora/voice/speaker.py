@@ -48,6 +48,8 @@ _SENTENCE = re.compile(r"(?<=[.!?])\s+")
 # SAPI flags
 SVSF_ASYNC = 1
 SVSF_PURGE = 2
+SVSF_IS_XML = 8
+SVSF_PARSE_SAPI = 128
 SSFM_CREATE_FOR_WRITE = 3
 POLL_MS = 50
 
@@ -83,6 +85,15 @@ def sapi_rate(words_per_minute: int) -> int:
     return max(-10, min(10, round((words_per_minute - 180) / 18)))
 
 
+def with_pitch(sentence: str, pitch: int, flags: int) -> tuple[str, int]:
+    """(text, flags) for SAPI: plain text at pitch 0, otherwise the sentence (escaped) in an SAPI
+    XML pitch tag, so nothing in it can be read as a markup command."""
+    if not pitch:
+        return sentence, flags
+    escaped = sentence.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+    return f'<pitch absmiddle="{int(pitch)}">{escaped}</pitch>', flags | SVSF_IS_XML | SVSF_PARSE_SAPI
+
+
 class Speaker:
     """Interface: anything that can say text out loud."""
 
@@ -95,8 +106,13 @@ class Speaker:
 
 
 class SapiSpeaker(Speaker):
+    """Windows' own voices (a provider: see providers.py)."""
 
-    def __init__(self, rate: int | None = None, voice: str | None = None, volume: float | None = None):
+    name = "sapi"
+    local = True
+
+    def __init__(self, rate: int | None = None, voice: str | None = None, volume: float | None = None,
+                 pitch: int | None = None):
         try:
             import comtypes
             import comtypes.client
@@ -108,6 +124,8 @@ class SapiSpeaker(Speaker):
         self.set_rate(rate or settings.VOICE_RATE)
         self.set_volume(settings.VOICE_VOLUME if volume is None else volume)
         self.set_voice(voice if voice is not None else settings.VOICE_NAME)
+        self.pitch = 0
+        self.set_pitch(getattr(settings, "VOICE_PITCH", 0) if pitch is None else pitch)
         self._stop = threading.Event()
 
     # ------------------------------------------------------------- settings
@@ -134,6 +152,13 @@ class SapiSpeaker(Speaker):
     def set_volume(self, volume: float) -> None:
         self.voice.Volume = round(max(0.0, min(1.0, volume)) * 100)
 
+    def set_pitch(self, pitch: int) -> None:
+        """-10 (lower) to 10 (higher); 0 is the voice's own pitch."""
+        self.pitch = max(-10, min(10, int(pitch)))
+
+    def _say(self, sentence: str, flags: int) -> None:
+        self.voice.Speak(*with_pitch(sentence, self.pitch, flags))
+
     # --------------------------------------------------------------- speech
 
     def speak(self, text: str, should_stop=lambda: False) -> bool:
@@ -142,7 +167,7 @@ class SapiSpeaker(Speaker):
             return True
         self._stop.clear()
         for sentence in sentences(spoken):
-            self.voice.Speak(sentence, SVSF_ASYNC)
+            self._say(sentence, SVSF_ASYNC)
             while not self.voice.WaitUntilDone(POLL_MS):
                 if self._stop.is_set() or should_stop():
                     self.voice.Speak("", SVSF_ASYNC | SVSF_PURGE)    # stops the current utterance at once
@@ -164,7 +189,7 @@ class SapiSpeaker(Speaker):
         previous = self.voice.AudioOutputStream
         self.voice.AudioOutputStream = stream
         try:
-            self.voice.Speak(speech_text(text), 0)
+            self._say(speech_text(text), 0)
         finally:
             stream.Close()
             self.voice.AudioOutputStream = previous

@@ -252,6 +252,7 @@ class DashboardView(BaseView):
         backend.state_changed.connect(lambda _: self._refresh_status())
         backend.ai_state_changed.connect(self._show_ai_state)
         backend.voice.level.connect(self._voice_level)
+        backend.voice.partial.connect(self._voice_partial)
         backend.performance_changed.connect(self._performance)
         backend.sensor_readings.connect(self.show_room)
         backend.sensor_monitoring.connect(
@@ -291,6 +292,10 @@ class DashboardView(BaseView):
     def _voice_level(self, rms: float, _speaking: bool):
         self.orb.set_level(rms / 3000)
         self.waveform.push(rms / 3000)
+
+    def _voice_partial(self, text: str):
+        if self.orb.state == "listening":
+            self.state_detail.setText(f"“{text}…”" if text else state_detail("listening", ""))
 
     def _performance(self, reduced: bool, text: str):
         self.orb.set_reduced(reduced)

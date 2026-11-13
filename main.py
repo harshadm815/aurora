@@ -96,14 +96,13 @@ class VoiceControls:
 
     def get(self):
         if self.session is None:
-            from aurora.voice.listener import Listener
+            from aurora.voice.providers import make_recogniser, make_synthesiser
             from aurora.voice.session import VoiceSession
-            from aurora.voice.speaker import SapiSpeaker
 
             print("Loading the speech model...")
-            listener = Listener()
+            listener = make_recogniser()
             try:
-                speaker = SapiSpeaker()
+                speaker = make_synthesiser()
             except Exception as error:
                 print(f"(Text-to-speech isn't available: {error}. Replies will be text only.)")
                 speaker = None

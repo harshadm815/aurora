@@ -298,9 +298,24 @@ How it works:
 Settings: `VOICE_MODEL_DIR`, `VOICE_INPUT_DEVICE`, `VOICE_LISTEN_SECONDS`,
 `VOICE_END_SILENCE`, `VOICE_NO_SPEECH_SECONDS`, `VOICE_VAD_RATIO`,
 `VOICE_VAD_MIN_RMS`, `VOICE_RATE`, `VOICE_NAME` ("Zira" or "David"),
-`VOICE_VOLUME`, `VOICE_BARGE_IN`, `VOICE_MAX_SPOKEN_CHARS`,
-`VOICE_CORRECTIONS`. Name, speed, volume, microphone and barge-in can be
-changed on the Command Centre's Settings page.
+`VOICE_VOLUME`, `VOICE_PITCH`, `VOICE_BARGE_IN`, `VOICE_MAX_SPOKEN_CHARS`,
+`VOICE_CORRECTIONS`, `VOICE_RECOGNISER`, `VOICE_SYNTHESISER`,
+`VOICE_ALLOW_EXTERNAL`. Name, speed, volume, pitch, microphone and barge-in
+can be changed on the Command Centre's Settings page.
+
+**Providers** (`aurora/voice/providers.py`): the rest of AURORA asks for
+"the recogniser" (`make_recogniser()`) and "the voice" (`make_synthesiser()`)
+and never names Vosk or SAPI, so providers can be added or swapped without
+changing the Command Centre, the terminal or voice sessions. Each provider
+says whether it runs on this PC; one that doesn't is refused unless
+`VOICE_ALLOW_EXTERNAL` is on (off by default; none is built in).
+
+**Words while you speak**: `listen_once(..., on_partial=...)` reports the
+words recognised so far; Chat and the Dashboard show them in quotes while
+listening (never logged).
+
+**Pitch**: SAPI's XML pitch tag (-10 to 10) wraps each sentence, with the
+sentence's `&`, `<` and `>` escaped so nothing in a reply can act as markup.
 
 **Loop-back self-test** (`python -m aurora.voice.selftest`, or
 `"AURORA Command Centre.exe" --voice-check`): Windows' voices speak ten

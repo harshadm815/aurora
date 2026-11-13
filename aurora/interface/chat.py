@@ -138,6 +138,8 @@ class ChatView(BaseView):
         self.body.addLayout(voice_row)
         backend.voice.state_changed.connect(self._voice_state)
         backend.voice.level.connect(self._voice_level)
+        backend.voice.partial.connect(self._voice_partial)
+        self._partial = ""
 
         # Input
         row = QHBoxLayout()
@@ -233,7 +235,12 @@ class ChatView(BaseView):
 
     def _voice_level(self, rms: float, speaking: bool):
         bars = min(10, int(rms / 300))
-        self.voice_status.setText(("🎙  Hearing you  " if speaking else "🎙  Listening… speak now  ") + "▮" * bars)
+        words = f"   “{self._partial}…”" if self._partial else ""
+        self.voice_status.setText(("🎙  Hearing you  " if speaking else "🎙  Listening… speak now  ") + "▮" * bars
+                                  + words)
+
+    def _voice_partial(self, text: str):
+        self._partial = text
 
     def send(self, text: str | None = None, by_voice: bool = False):
         if self.busy:

@@ -26,6 +26,7 @@ BACKEND = {
     "voice_name": ("VOICE_NAME", str, lambda v: len(v) <= 100),
     "voice_rate": ("VOICE_RATE", int, lambda v: 80 <= v <= 300),
     "voice_volume": ("VOICE_VOLUME", float, lambda v: 0.0 <= v <= 1.0),
+    "voice_pitch": ("VOICE_PITCH", int, lambda v: -10 <= v <= 10),
     "voice_barge_in": ("VOICE_BARGE_IN", bool, lambda v: True),
     # "" = the Windows default microphone (settings.VOICE_INPUT_DEVICE = None)
     "voice_input_device": ("VOICE_INPUT_DEVICE", str, lambda v: len(v) <= 200),

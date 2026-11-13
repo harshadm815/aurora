@@ -238,6 +238,10 @@ def numbers_to_digits(text: str) -> str:
 # --- Listener -----------------------------------------------------------------
 
 class Listener:
+    """The Vosk recogniser (a provider: see providers.py)."""
+
+    name = "vosk"
+    local = True
 
     def __init__(self, model_path: str | Path | None = None):
         try:
@@ -272,7 +276,7 @@ class Listener:
         return apply_corrections(self._text(recognizer.FinalResult()))
 
     def listen_once(self, source: AudioSource, max_seconds: float | None = None, on_level=None,
-                    should_stop=lambda: False) -> str:
+                    should_stop=lambda: False, on_partial=None) -> str:
         """
         One utterance. Ends when the voice activity detector hears the
         speaker stop, when the recogniser finishes a sentence, after
@@ -281,6 +285,8 @@ class Listener:
         instead of waiting the full time).
 
         ``on_level(rms, speaking)`` gets each chunk's loudness, for a level meter.
+        ``on_partial(text)`` gets the words recognised so far whenever they
+        change, so they can be shown while you speak (never logged).
         """
         max_seconds = settings.VOICE_LISTEN_SECONDS if max_seconds is None else max_seconds
         recognizer = self._recognizer(source.rate)
@@ -288,6 +294,7 @@ class Listener:
         live = isinstance(source, MicrophoneSource)
         deadline = time.monotonic() + max_seconds
         heard = 0.0
+        shown = ""
 
         for chunk in source.chunks():
             if should_stop():
@@ -299,6 +306,11 @@ class Listener:
                 text = self._text(recognizer.Result())
                 if text:
                     return apply_corrections(text)
+            elif chunk and on_partial is not None:
+                partial = json.loads(recognizer.PartialResult()).get("partial", "").strip()
+                if partial != shown:
+                    shown = partial
+                    on_partial(partial)
             if detector.ended or detector.gave_up:
                 break
             heard += len(chunk) / 2 / source.rate

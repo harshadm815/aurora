@@ -101,6 +101,11 @@ class SettingsView(BaseView):
         self.voice_volume.setSuffix(" %")
         self.voice_volume.setValue(round(values["voice_volume"] * 100))
         form.addRow("Volume", self.voice_volume)
+        self.voice_pitch = QSpinBox()
+        self.voice_pitch.setRange(-10, 10)
+        self.voice_pitch.setValue(values["voice_pitch"])
+        self.voice_pitch.setToolTip("Lower (-10) or higher (10) than the voice's own pitch (0).")
+        form.addRow("Pitch", self.voice_pitch)
         self.voice_device = QComboBox()
         self.voice_device.addItem("Windows default microphone", "")
         for name in input_devices():
@@ -214,6 +219,7 @@ class SettingsView(BaseView):
             "voice_name": self.voice_name.currentText(),
             "voice_rate": self.voice_rate.value(),
             "voice_volume": self.voice_volume.value() / 100,
+            "voice_pitch": self.voice_pitch.value(),
             "voice_input_device": self.voice_device.currentData() or "",
             "voice_barge_in": self.barge_in.isChecked(),
             "minimize_to_tray": self.minimize_to_tray.isChecked(),

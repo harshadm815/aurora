@@ -9,7 +9,7 @@ import sys
 from pathlib import Path
 
 APP_NAME = "AURORA"
-VERSION = "0.40.0"
+VERSION = "0.41.0"
 
 USER_NAME = "Harry"
 
@@ -307,6 +307,13 @@ VOICE_RATE = 185                   # Speaking speed (words per minute).
 VOICE_NAME = "Zira"                # Part of a Windows voice name ("David", "Zira"); "" = default.
 VOICE_MAX_SPOKEN_CHARS = 500       # Longer replies end with "the rest is on screen".
 VOICE_VOLUME = 1.0                 # Spoken replies: 0.0 (silent) to 1.0 (full).
+VOICE_PITCH = 0                    # -10 (lower) to 10 (higher); 0 = the voice's own pitch.
+# Speech providers (aurora/voice/providers.py). Both run on this PC.
+VOICE_RECOGNISER = "vosk"
+VOICE_SYNTHESISER = "sapi"
+# A provider that processes speech outside this PC is refused unless this is on
+# (and it then goes through the network gate). No such provider is built in yet.
+VOICE_ALLOW_EXTERNAL = False
 # Voice activity detection (aurora/voice/vad.py): when you start and stop talking.
 VOICE_NO_SPEECH_SECONDS = 5        # Stop listening if nobody starts speaking.
 VOICE_VAD_RATIO = 3.0              # Speech must be this many times louder than the room.

@@ -427,10 +427,12 @@ class FakeListener:
         self.text = text
         self.sources = []
 
-    def listen_once(self, source, on_level=None, should_stop=lambda: False):
+    def listen_once(self, source, on_level=None, should_stop=lambda: False, on_partial=None):
         self.sources.append(source)
         if on_level:
             on_level(1200.0, True)
+        if on_partial and self.text:
+            on_partial(self.text.split()[0])
         return self.text
 
 
@@ -544,8 +546,12 @@ def test_chat_asks_by_voice_and_speaks_the_reply(backend):
     window.show()
     chat = window.pages["Chat"]
     chat.speak_replies.setChecked(True)
+    partials = []
+    backend.voice.partial.connect(partials.append)
     chat.listen()
     assert wait_for(lambda: backend.voice.speaker is not None and backend.voice.speaker.said, 15)
+    assert partials[:2] == ["", "what"]                 # cleared when listening starts, then the words so far
+    assert chat._partial == "what"
     assert backend.voice.speaker.said == ["12 * 7 = 84"]
     bubbles = [w.meta.text() for w in chat.findChildren(type(chat._add_bubble("x", "y")))]
     assert any(text.startswith("You (voice)") for text in bubbles)

@@ -27,13 +27,13 @@ OFF, LOADING, READY, LISTENING, SPEAKING, UNAVAILABLE = "off", "loading", "ready
 
 
 def _default_listener():
-    from aurora.voice.listener import Listener
-    return Listener()
+    from aurora.voice.providers import make_recogniser
+    return make_recogniser()
 
 
 def _default_speaker():
-    from aurora.voice.speaker import SapiSpeaker
-    return SapiSpeaker()
+    from aurora.voice.providers import make_synthesiser
+    return make_synthesiser()
 
 
 def _default_microphone():
@@ -45,6 +45,7 @@ class VoiceController(QObject):
 
     state_changed = Signal(str)
     level = Signal(float, bool)          # loudness, speech detected
+    partial = Signal(str)                # the words heard so far while listening ("" when it starts)
 
     def __init__(self, backend, listener_factory=None, speaker_factory=None, microphone=None):
         super().__init__(backend)
@@ -131,12 +132,14 @@ class VoiceController(QObject):
         def work():
             listener = self._ensure_listener()
             self._set_state(LISTENING)
+            self.backend.on_gui(self.partial.emit, "")
             try:
                 with self.microphone() as source:
                     return listener.listen_once(
                         source, on_level=lambda rms, speaking: self.backend.on_gui(
                             lambda _: self.level.emit(rms, speaking)),
-                        should_stop=self._stop_listening.is_set)
+                        should_stop=self._stop_listening.is_set,
+                        on_partial=lambda text: self.backend.on_gui(self.partial.emit, text))
             finally:
                 self._set_state(READY)
 
@@ -167,12 +170,14 @@ class VoiceController(QObject):
             self.speaker.stop()
 
     def apply_settings(self) -> None:
-        """Voice, speed and volume from settings (after the Settings page saved them)."""
+        """Voice, speed, volume and pitch from settings (after the Settings page saved them)."""
         def work():
             if self.speaker is not None:
                 self.speaker.set_voice(settings.VOICE_NAME)
                 self.speaker.set_rate(settings.VOICE_RATE)
                 self.speaker.set_volume(settings.VOICE_VOLUME)
+                if hasattr(self.speaker, "set_pitch"):
+                    self.speaker.set_pitch(settings.VOICE_PITCH)
         self._submit(work)
 
     def voices(self, on_result) -> None:

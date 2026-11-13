@@ -8,7 +8,7 @@ work. Nothing here is marked done until it has been tested on this PC.
 
 | Capability | Package | Builds on | Status |
 |---|---|---|---|
-| Voice Engine | `aurora/voice/` (exists) | Vosk, VAD, Windows SAPI, `VoiceSession` | **Mostly built**; provider interface and a more natural voice missing |
+| Voice Engine | `aurora/voice/` (exists) | Vosk, VAD, Windows SAPI, `VoiceSession` | **Mostly built**: provider interface, words while you speak and pitch done (0.41.0); a more natural voice missing |
 | Wake Engine | `aurora/wake/` (planned) | `aurora/voice/` (Vosk grammar recogniser), the packaged .exe | Not started |
 | Voice conversation | `aurora/voice/session.py` (exists) | Engine, Chat, barge-in, Stop | **Mostly built**; a continuous "call-like" session is missing |
 | Mobile Companion | `aurora/mobile/` (planned) | Engine, memory, conversation, network gate | Not started |
@@ -63,10 +63,10 @@ first working feature, not as empty folders.
 
 | Requirement | Plan | Fits this laptop? |
 |---|---|---|
-| Common interface for local and external providers | `Recogniser` and `Synthesiser` protocols in `aurora/voice/`; Vosk and SAPI become the first providers; the rest of AURORA uses only the protocols | Yes (no new cost) |
+| Common interface for local and external providers | **Done (0.41.0)**: `aurora/voice/providers.py`; Vosk and SAPI are the first providers; external ones refused unless `VOICE_ALLOW_EXTERNAL` | Yes (no new cost) |
 | Natural, human-like speech | Add a local neural voice as a second synthesiser. Candidates: Piper voices (ONNX, onnxruntime is already installed for OCR) and Kokoro-82M. **Licences must be checked first**: recent Piper releases are GPL-3.0 and both rely on a phonemiser (espeak-ng, GPL) for pronunciation; AURORA is MIT. Speed and RAM to be measured here before choosing | Probably, for a small voice (tens of MB); to be measured |
-| Pitch, tone, style, accent | SAPI supports pitch and rate through SSML; neural voices choose accent by voice model; "response length" is the existing `VOICE_MAX_SPOKEN_CHARS` | Yes |
-| Streaming transcription | Vosk already decodes as audio arrives; show partial words in the interface while you speak | Yes |
+| Pitch, tone, style, accent | **Pitch done (0.41.0)** (SAPI XML, -10 to 10, in Settings); neural voices choose accent by voice model; "response length" is the existing `VOICE_MAX_SPOKEN_CHARS` | Yes |
+| Streaming transcription | **Done (0.41.0)**: the words recognised so far are shown in Chat and on the Dashboard while you speak | Yes |
 | Noisy rooms | Better VAD thresholds per microphone (the Test the microphone button), optionally a noise gate in `aurora/voice/` | Yes |
 | More languages | Vosk small models exist for many languages (about 40-50 MB each); one loaded at a time | Yes, one at a time |
 | More accurate recognition | Optional Whisper (tiny/base, int8) for one-shot requests where accuracy matters more than speed; Vosk stays the default because it streams | Tiny/base only; slower than real time on this CPU is possible, to be measured |

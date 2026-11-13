@@ -1,8 +1,17 @@
 # Changelog
 
-## Unreleased
+## 0.41.0 — Voice Engine: providers, words while you speak, pitch (2026-11-13)
 
 ### Added
+- **Speech providers** (`aurora/voice/providers.py`): one interface for
+  speech recognisers and voices. Vosk and Windows SAPI are the first two;
+  the Command Centre and the terminal ask for "the recogniser" and "the
+  voice" from settings (`VOICE_RECOGNISER`, `VOICE_SYNTHESISER`). A
+  provider that works outside this PC is refused unless
+  `VOICE_ALLOW_EXTERNAL` is on (off; none is built in).
+- **Words while you speak**: Chat and the Dashboard show what AURORA has
+  heard so far while you're talking.
+- **Pitch** for the Windows voices (Settings → Voice, -10 to 10).
 - Blueprint for the Voice Engine, Wake Engine, Mobile Companion and
   Calling Agent (Docs/VOICE_WAKE_MOBILE.md): what exists, what's missing,
   what this laptop can run, open decisions and the order of work.

@@ -260,6 +260,29 @@ def test_real_transcription(spoken, listener):
     assert listener.listen_once(WavSource(spoken / "no_wake.wav")) == "remember that my exam is on friday"
 
 
+def test_real_partial_words_grow_while_speaking(spoken, listener):
+    from aurora.voice.listener import WavSource
+
+    partials = []
+    text = listener.listen_once(WavSource(spoken / "no_wake.wav"), on_partial=partials.append)
+    assert text == "remember that my exam is on friday"
+    assert partials and partials[0].split()[0] == "remember"
+    assert all(p for p in partials) and text.startswith(partials[-1].split()[0])
+
+
+def test_real_pitch_changes_the_voice_not_the_words(listener, tmp_path):
+    if not _real_voice_available():
+        pytest.skip("Vosk, its model or Windows text-to-speech not available")
+    from aurora.voice.listener import WavSource
+    from aurora.voice.speaker import SapiSpeaker
+
+    speaker = SapiSpeaker(pitch=6)
+    speaker.save_to_file("Remember that my exam is on Friday & bring <pens>.", tmp_path / "high.wav")
+    heard = listener.listen_once(WavSource(tmp_path / "high.wav"))
+    assert heard.startswith("remember that my exam is on friday")
+    assert "pitch" not in heard and "absmiddle" not in heard          # the markup isn't read out
+
+
 def test_real_wake_word_with_request(spoken, listener):
     from aurora.voice.listener import WavSource
 

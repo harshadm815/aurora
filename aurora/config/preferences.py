@@ -60,6 +60,7 @@ INTERFACE = {
     "speak_replies": (bool, False, lambda v: True),
     "speak_reminders": (bool, False, lambda v: True),     # say reminders aloud when they're due
     "wake_enabled": (bool, False, lambda v: True),        # run the Wake Engine's helper
+    "mobile_enabled": (bool, False, lambda v: True),      # serve the phone app (this PC only; see aurora/mobile)
 }
 
 

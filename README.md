@@ -169,6 +169,11 @@ Voice: Chat's 🎙 asks one question; 🗣 Conversation talks back and forth
 until you say "that's all". "Give me my briefing" lists today's reminders,
 scheduled tasks and recent research.
 
+Phone: Settings → Phone starts a small server on this PC only; with
+Tailscale on the PC and phone, the phone app (chat, today's briefing,
+reminders, PC status) works at home and away. Phones pair with a one-time
+code and can be disconnected at any time.
+
 Wake Engine (hold Right Ctrl, say "Wake up"): switch it on in Settings →
 Wake Engine. A small helper (about 35 MB, no CPU while idle) watches for the
 key; the microphone opens only while you hold it.

@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0b1220">
+  <title>AURORA</title>
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" href="/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/icon.svg">
+  <link rel="stylesheet" href="/app.css">
+</head>
+<body>
+  <header>
+    <img src="/icon.svg" alt="" class="logo">
+    <div class="brand"><strong>AURORA</strong><span id="state">connecting…</span></div>
+    <span id="dot" class="dot off"></span>
+  </header>
+
+  <section id="pair" hidden>
+    <h1>Pair this phone</h1>
+    <p>On the PC: <b>Settings → Phone → Pair a phone</b>. Type the code it shows.</p>
+    <label>Pairing code <input id="code" autocomplete="one-time-code" autocapitalize="characters" maxlength="12" placeholder="ABCD 2345"></label>
+    <label>Name for this phone <input id="name" maxlength="40" placeholder="My phone"></label>
+    <button id="pair-button" class="primary">Pair</button>
+    <p id="pair-error" class="error" role="alert"></p>
+    <p class="faint">AURORA stays on your PC. This phone gets its own key, which you can disconnect on the PC at any time.</p>
+  </section>
+
+  <main id="app" hidden>
+    <nav>
+      <button data-tab="chat" class="active">Chat</button>
+      <button data-tab="today">Today</button>
+      <button data-tab="memories">Memories</button>
+      <button data-tab="status">PC</button>
+    </nav>
+
+    <section id="tab-chat" class="tab">
+      <div id="messages" aria-live="polite"></div>
+      <div id="confirm" hidden>
+        <span>AURORA is waiting for your answer:</span>
+        <button id="yes" class="primary">Yes</button><button id="no">No</button>
+      </div>
+      <form id="send-form">
+        <input id="text" autocomplete="off" placeholder="Ask AURORA…" maxlength="4000">
+        <button class="primary" id="send">Send</button>
+      </form>
+    </section>
+
+    <section id="tab-today" class="tab" hidden>
+      <h2>Briefing</h2>
+      <pre id="briefing" class="card"></pre>
+      <h2>Reminders</h2>
+      <ul id="reminders" class="card list"></ul>
+      <button id="refresh-today">Refresh</button>
+    </section>
+
+    <section id="tab-memories" class="tab" hidden>
+      <h2>What AURORA remembers</h2>
+      <p id="memories-note" class="faint"></p>
+      <ul id="memories" class="card list"></ul>
+    </section>
+
+    <section id="tab-status" class="tab" hidden>
+      <h2>Your PC</h2>
+      <dl id="status" class="card"></dl>
+      <button id="refresh-status">Refresh</button>
+      <h2>This phone</h2>
+      <p class="faint">Disconnecting removes this phone's key. You can pair it again with a new code.</p>
+      <button id="unpair" class="danger">Disconnect this phone</button>
+    </section>
+  </main>
+  <script src="/app.js"></script>
+</body>
+</html>

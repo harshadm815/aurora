@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.45.0 — Mobile Companion, first milestone (2026-11-14)
+
+### Added
+- **AURORA on your phone** (Settings → Phone, off until switched on):
+  chat (the same conversation as the PC), today's briefing, reminders,
+  your memories (if allowed) and the PC's status, in a web app you add to
+  the home screen.
+- The server runs on this PC only (127.0.0.1:8765); Tailscale carries it
+  to your phone with HTTPS. Phones pair with a one-time code, get their
+  own key (only its hash is stored), and can be disconnected from either
+  side. Approving actions and seeing memories are per-phone permissions,
+  off by default. An access log records which phone used what, never
+  what was said.
+- Phone messages appear in Chat on the PC.
+
+### Changed
+- The build script asks the Wake Engine helper to quit and refuses to
+  replace a build that is still running (`--into` builds elsewhere).
+
 ## 0.44.0 — Voice conversations and briefings (2026-11-14)
 
 ### Added

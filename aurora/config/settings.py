@@ -9,7 +9,7 @@ import sys
 from pathlib import Path
 
 APP_NAME = "AURORA"
-VERSION = "0.44.0"
+VERSION = "0.45.0"
 
 USER_NAME = "Harry"
 
@@ -329,6 +329,13 @@ WAKE_MAX_HOLD_SECONDS = 8          # The microphone closes after this even if th
 WAKE_SOUND = True                  # A short beep when the microphone opens.
 WAKE_MODEL_KEEP_MINUTES = 10       # Keep the speech model loaded this long after a wake (faster next time).
 WAKE_GREETING = "I'm awake. How can I help you?"
+
+# --- Mobile Companion (aurora/mobile/) ---------------------------------------------------
+# A small web server for the phone app, on THIS PC ONLY (127.0.0.1). Tailscale forwards it to
+# your phone with HTTPS; nothing listens on your Wi-Fi or the internet. Off until switched on.
+MOBILE_PORT = 8765
+MOBILE_DATABASE_PATH = PROJECT_ROOT / "aurora_mobile.db"     # paired devices (key hashes) and access log
+MOBILE_HOST_SUFFIXES = (".ts.net",)                           # host names accepted besides localhost
 # Voice activity detection (aurora/voice/vad.py): when you start and stop talking.
 VOICE_NO_SPEECH_SECONDS = 5        # Stop listening if nobody starts speaking.
 VOICE_VAD_RATIO = 3.0              # Speech must be this many times louder than the room.

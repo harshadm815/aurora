@@ -15,11 +15,12 @@ from datetime import datetime
 from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import (
     QCheckBox, QComboBox, QFormLayout, QHBoxLayout, QLineEdit, QMessageBox, QPlainTextEdit, QPushButton, QSpinBox,
+    QVBoxLayout,
 )
 
 from aurora.config import preferences, settings
 from aurora.interface.components.base_view import BaseView
-from aurora.interface.components.widgets import Panel, label
+from aurora.interface.components.widgets import Panel, clear_layout, label
 from aurora.interface.voice_control import input_devices
 from aurora.interface.windows import integration
 
@@ -190,6 +191,34 @@ class SettingsView(BaseView):
                        "Nothing is recorded or saved.", "Faint", wrap=True))
         self.body.addWidget(wake)
 
+        phone = Panel("Phone (AURORA on your phone: chat, today's briefing, reminders, your PC's status)")
+        form = QFormLayout()
+        self.mobile_enabled = QCheckBox("Let my paired phones use AURORA")
+        self.mobile_enabled.setChecked(values["mobile_enabled"])
+        self.mobile_enabled.setToolTip("Starts a small web server on this PC only (127.0.0.1). Nothing listens on "
+                                       "your Wi-Fi or the internet; Tailscale carries it to your phone.")
+        form.addRow("", self.mobile_enabled)
+        phone.add_layout(form)
+        self.mobile_status = phone.add(label("", "Faint", wrap=True))
+        pair_row = QHBoxLayout()
+        self.pair_button = QPushButton("Pair a phone…")
+        self.pair_button.clicked.connect(self._pair_phone)
+        pair_row.addWidget(self.pair_button)
+        pair_row.addStretch(1)
+        phone.add_layout(pair_row)
+        self.device_rows = QVBoxLayout()
+        self.device_rows.setSpacing(4)
+        phone.add_layout(self.device_rows)
+        self.phone_activity = phone.add(label("", "Faint", wrap=True))
+        phone.add(label(
+            "To reach AURORA from your phone (at home or away): install Tailscale (tailscale.com) on this PC and "
+            "on your phone and sign in to both with the same account; in Tailscale's admin page turn on MagicDNS "
+            "and HTTPS certificates; then run once on this PC:  tailscale serve --bg 8765.  Open the address it "
+            "prints (https://<this-pc>.<your-tailnet>.ts.net) on the phone, pair it with a code from here, and "
+            "use \"Add to Home screen\". Only your own devices can reach it.", "Faint", wrap=True))
+        self.body.addWidget(phone)
+        backend.mobile_changed.connect(lambda _: self._refresh_phone())
+
         network = Panel("Internet and network")
         form = QFormLayout()
         self.internet = QComboBox()
@@ -313,10 +342,16 @@ class SettingsView(BaseView):
             notes.append("The wake phrase must be one to four words, letters only, so it wasn't changed")
 
         changed = {key: value for key, value in values.items() if self.backend.preferences.get(key) != value}
+        mobile_changed = "mobile_enabled" in changed
         wake_changed = any(key in changed for key in WAKE_KEYS)
         if changed:
             self.backend.save_preferences(values)
         ok = self._apply_startup() and self._apply_wake(changed=wake_changed)
+        if mobile_changed:
+            problem = self.backend.set_mobile(values["mobile_enabled"])
+            if problem:
+                notes.append(problem)
+            self._refresh_phone()
         if notes:
             logger.info("Settings: some changes not saved (%d)", len(notes))
             self._status(". ".join(notes) + ".", problem=True)
@@ -364,6 +399,7 @@ class SettingsView(BaseView):
             "voice_barge_in": self.barge_in.isChecked(),
             "speak_reminders": self.speak_reminders.isChecked(),
             "wake_enabled": self.wake_enabled.isChecked(),
+            "mobile_enabled": self.mobile_enabled.isChecked(),
             "wake_key": self.wake_key.currentData(),
             "wake_phrase": " ".join(self.wake_phrase.text().lower().split()),
             "wake_sound": self.wake_sound.isChecked(),
@@ -433,5 +469,75 @@ class SettingsView(BaseView):
         """The "Save now" button: saves at once (changes also save themselves)."""
         self.auto_save()
 
+    # --- Phone ------------------------------------------------------------------------
+
+    def _device_store(self):
+        if self.backend.mobile is not None:
+            return self.backend.mobile.store
+        from aurora.mobile.devices import DeviceStore
+        return DeviceStore()
+
+    def _refresh_phone(self):
+        from PySide6.QtWidgets import QCheckBox as Check, QWidget
+
+        running = self.backend.mobile is not None
+        self.mobile_status.setText(
+            f"Running on this PC only: {self.backend.mobile.address}  (Tailscale makes it reachable from your "
+            "phone; see below.)" if running else "Off. Phones can't reach AURORA.")
+        self.pair_button.setEnabled(running)
+        clear_layout(self.device_rows)
+        if not running and not settings.MOBILE_DATABASE_PATH.is_file():
+            self.device_rows.addWidget(label("No phones paired yet.", "Faint"))     # nothing to read (or create)
+            self.phone_activity.setText("")
+            return
+        try:
+            store = self._device_store()
+            devices = store.devices()
+            activity = store.recent_log(6)
+        except Exception as error:
+            self.device_rows.addWidget(label(f"Couldn't read the paired phones: {error}", "Faint"))
+            return
+        if not devices:
+            self.device_rows.addWidget(label("No phones paired yet.", "Faint"))
+        for device in devices:
+            row = QWidget()
+            line = QHBoxLayout(row)
+            line.setContentsMargins(0, 0, 0, 0)
+            seen = f"last used {device.last_seen:%d %b %H:%M}" if device.last_seen else "not used yet"
+            line.addWidget(label(f"📱 {device.name}", None), 1)
+            line.addWidget(label(seen, "Faint"))
+            memories = Check("Memories")
+            memories.setChecked(device.allow_memories)
+            memories.setToolTip("Let this phone see what AURORA remembers about you.")
+            memories.toggled.connect(lambda on, d=device.id: store.set_permissions(d, memories=on))
+            actions = Check("Approve actions")
+            actions.setChecked(device.allow_actions)
+            actions.setToolTip("Let this phone answer \"yes\" to actions (switching devices, opening apps, "
+                               "moving files). Otherwise answer those on the PC.")
+            actions.toggled.connect(lambda on, d=device.id: store.set_permissions(d, actions=on))
+            remove = QPushButton("Disconnect")
+            remove.setObjectName("Danger")
+            remove.clicked.connect(lambda _=False, d=device.id: (store.remove(d), self._refresh_phone()))
+            for widget in (memories, actions, remove):
+                line.addWidget(widget)
+            self.device_rows.addWidget(row)
+        self.phone_activity.setText(
+            "Recent phone activity: " + "; ".join(f"{t:%d %b %H:%M} {d} {w} ({o})" for t, d, w, o in activity)
+            if activity else "")
+
+    def _pair_phone(self):
+        if self.backend.mobile is None:
+            return
+        code = self.backend.mobile.store.new_code()
+        shown = f"{code[:4]} {code[4:]}"
+        box = QMessageBox(self)
+        box.setWindowTitle("Pair a phone")
+        box.setText(f"<p>On your phone, open AURORA's address and type this code:</p>"
+                    f"<p style='font-size:22pt; letter-spacing:4px'><b>{shown}</b></p>"
+                    f"<p>It works once, for 10 minutes. Close this when the phone says it's paired.</p>")
+        box.exec()
+        self._refresh_phone()
+
     def on_shown(self):
+        self._refresh_phone()
         self.model.setCurrentText(settings.DEFAULT_MODEL)

@@ -172,6 +172,8 @@ class Backend(QObject):
     # idle | thinking | responding | listening | speaking | processing | error | offline
     ai_state_changed = Signal(str)
     performance_changed = Signal(bool, str)   # graphics reduced?, one line for the Dashboard
+    remote_exchange = Signal(str, str, str)   # a phone's message and AURORA's reply: device, text, reply
+    mobile_changed = Signal(bool)             # the phone server started / stopped
 
     def __init__(self, engine_factory: Callable | None = None, parent=None):
         super().__init__(parent)
@@ -219,6 +221,7 @@ class Backend(QObject):
         self._sample_timer = QTimer(self)
         self._sample_timer.timeout.connect(self._sample)
         self._sample_timer.start(2000)
+        self.mobile = None                      # the Mobile Companion's server, while switched on
         self.pressure = performance.Pressure()
         self.performance_reduced = False
         self.performance_text = ""
@@ -280,6 +283,8 @@ class Backend(QObject):
             self.engine = engine
             self._set_state("running")
             self.engine_ready.emit()
+            if self.preferences.get("mobile_enabled"):
+                self.set_mobile(True)
             if self.preferences.get("speak_replies") and settings.VOICE_SYNTHESISER != "sapi":
                 self.voice.preload_speaker()         # so the first spoken reply doesn't wait for loading
             self.check_ollama()
@@ -391,6 +396,7 @@ class Backend(QObject):
         self._shut_down = True
         self._ollama_timer.stop()
         self._sample_timer.stop()
+        self.set_mobile(False)
         self.core.shutdown()          # stops a training run and unloads AURORA's model
         self.voice.shutdown()         # microphone closed, speech stopped, voice thread ended
 
@@ -592,6 +598,27 @@ class Backend(QObject):
         self.preferences_changed.emit(dict(self.preferences))
         self._update_performance()
         logger.info("Preferences saved")
+
+    # --- Mobile Companion ---------------------------------------------------
+
+    def set_mobile(self, on: bool) -> str:
+        """Starts or stops the phone server (127.0.0.1 only). Returns "" or why it couldn't start."""
+        if on and self.mobile is None:
+            from aurora.interface.mobile_bridge import MobileBridge
+            from aurora.mobile.server import MobileServer
+            server = MobileServer(MobileBridge(self))
+            try:
+                server.start()
+            except OSError as error:
+                logger.warning("Mobile: server couldn't start (%s)", type(error).__name__)
+                return f"The phone server couldn't start on port {server.port}: {error.strerror or error}"
+            self.mobile = server
+            self.mobile_changed.emit(True)
+        elif not on and self.mobile is not None:
+            self.mobile.stop()
+            self.mobile = None
+            self.mobile_changed.emit(False)
+        return ""
 
     # --- Helpers for views --------------------------------------------------
 

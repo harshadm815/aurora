@@ -11,7 +11,7 @@ work. Nothing here is marked done until it has been tested on this PC.
 | Voice Engine | `aurora/voice/` (exists) | Vosk, VAD, Windows SAPI, Piper, `VoiceSession` | **Built**: provider interface, words while you speak, pitch (0.41.0), natural Piper voice (0.42.0); multilingual and Whisper optional, later |
 | Wake Engine | `aurora/wake/` | `aurora/voice/` (Vosk grammar recogniser), the packaged .exe | **Built (0.43.0)**: hold Right Ctrl (or Space), say "Wake up"; measured below |
 | Voice conversation | `aurora/voice/conversation.py`, Chat | Engine, Chat, barge-in, Stop | **Built (0.44.0)**: conversation mode, briefings, spoken reminders |
-| Mobile Companion | `aurora/mobile/` (planned) | Engine, memory, conversation, network gate | Not started |
+| Mobile Companion | `aurora/mobile/` | Engine, memory, conversation | **First milestone built (0.45.0)**: pairing, chat, briefing, reminders, memories, PC status; voice on the phone and file transfer next |
 | Calling Agent | `aurora/calling/` (planned) | Voice Engine, Mobile Companion transport | Not started |
 
 The proposal's top-level folders (`aurora_voice/`, `aurora_wake/`, …) map
@@ -232,6 +232,45 @@ Already there: listen, answer, speak, interrupt. To add:
 - Spoken reminders when they fall due (opt-in).
 
 ## 4. Mobile Companion
+
+**First milestone built in 0.45.0** (`aurora/mobile/`, Settings → Phone).
+
+- **Server**: Python's own HTTP server on **127.0.0.1:8765 only**; it never
+  listens on the Wi-Fi or the internet. Requests must name this PC or a
+  `*.ts.net` (Tailscale) host, which blocks DNS-rebinding tricks from web
+  pages. Bodies are capped at 64 KB; responses carry a strict
+  Content-Security-Policy and no caching.
+- **Reaching it from the phone**: Tailscale on the PC and phone (your
+  account), MagicDNS and HTTPS certificates on in its admin page, then
+  `tailscale serve --bg 8765` once on the PC. The phone opens
+  `https://<pc>.<tailnet>.ts.net` (a real certificate, so the browser
+  allows installing the app and, later, the microphone). Same Wi-Fi or
+  away, only your own devices can reach it.
+- **Pairing**: a one-time 8-character code from Settings → Phone (10
+  minutes, one use, withdrawn after 5 wrong tries) gives the phone its
+  own random key; AURORA stores only its SHA-256 hash. Disconnect any
+  phone from Settings (or from the phone itself).
+- **Permissions per phone**: chat, today's briefing, reminders and PC
+  status always; **memories** and **approving actions** ("yes" to
+  "Shall I turn on the light?") only if you tick them. Without the
+  second, a phone can't send anything while an action is waiting.
+- **One conversation**: the phone's messages go through the same path as
+  Chat (same tools, permissions and confirmations) and appear in Chat on
+  the PC as "You (phone: …)". The PC is the only copy, so there is
+  nothing to merge.
+- **Phone app**: a web app (HTML/CSS/JS in `aurora/mobile/web/`, no
+  outside code), with Chat, Today, Memories and PC tabs; "Add to Home
+  screen" installs it. Checked in a phone-sized browser against a demo
+  server: pairing, chat, the Yes/No refusal, Today, Memories refusal and
+  PC status all worked. Installing and offline start need the phone
+  (the desktop's built-in browser doesn't allow service workers).
+- **Access log**: which phone used which part, and whether it was
+  allowed (30 days), shown in Settings → Phone; never what was said.
+
+Not yet: voice from the phone (needs the HTTPS address above for the
+microphone), notifications while the app is closed, file transfer.
+
+The original design notes follow.
 
 **Recommendation: a web app served by AURORA itself (a PWA), not a native
 app.** Android Studio needs more memory than this laptop has, and a native

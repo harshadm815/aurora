@@ -156,6 +156,7 @@ class ChatView(BaseView):
         voice_row.addWidget(self.voice_status, 1)
         self.body.addLayout(voice_row)
         backend.voice.state_changed.connect(self._voice_state)
+        backend.remote_exchange.connect(self._remote_exchange)
         backend.voice.level.connect(self._voice_level)
         backend.voice.partial.connect(self._voice_partial)
         self._partial = ""
@@ -239,6 +240,11 @@ class ChatView(BaseView):
             return
         self.voice_status.setText("")
         self.send(text, by_voice=True)
+
+    def _remote_exchange(self, device: str, text: str, reply: str):
+        """A message from a paired phone (same conversation): shown here too."""
+        self._add_bubble(f"You (phone: {device})", text, "user")
+        self._add_bubble("AURORA", reply)
 
     # --- Conversation ------------------------------------------------------------
 

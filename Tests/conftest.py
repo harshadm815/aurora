@@ -44,6 +44,9 @@ def isolated_database(tmp_path, monkeypatch):
     # The Documents page shows only the test's Documents folder (never your real folders).
     monkeypatch.setattr(settings, "EXPLORER_PLACES", [])
     monkeypatch.setattr(settings, "EXPLORER_DATABASE_PATH", tmp_path / "explorer_test.db")
+    # Paired phones and their access log (and the phone server on a free port, never 8765).
+    monkeypatch.setattr(settings, "MOBILE_DATABASE_PATH", tmp_path / "mobile_test.db")
+    monkeypatch.setattr(settings, "MOBILE_PORT", 0)
 
 
 @pytest.fixture(autouse=True)

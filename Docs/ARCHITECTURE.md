@@ -343,6 +343,18 @@ pyttsx3 was dropped: with version 2.99 on this machine only its first
 reply was spoken, saving to a file hung on the second call and its
 callbacks never fired.
 
+## Mobile Companion
+
+`aurora/mobile/`: `devices.py` (pairing codes, device key hashes,
+permissions, access log in `aurora_mobile.db`), `server.py` (the phone
+app and JSON API on 127.0.0.1:`MOBILE_PORT` only, Host check, device key
+on every call), `web/` (the phone app). `aurora/interface/mobile_bridge.py`
+connects it to the Backend: chat goes through `send_message` like Chat
+(and appears there), plus status, history, briefing, reminders and
+memories. `Backend.set_mobile()` starts/stops it (`mobile_enabled`, Settings
+→ Phone). Reaching it from a phone is Tailscale's job (`tailscale serve`),
+see Docs/VOICE_WAKE_MOBILE.md.
+
 ## Voice conversations and briefings
 
 Chat has three ways to talk: 🎙 Ask by voice (one request), 🗣

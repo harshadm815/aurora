@@ -106,6 +106,71 @@ class Aurora private constructor(context: Context) {
         null
     }
 
+    /**
+     * Opens a call (GET [path] upgraded to the call stream, see aurora/mobile/call.py) on the first
+     * route that works. Returns the connected socket, positioned after the server's 101 answer.
+     */
+    fun openCall(path: String): java.net.Socket {
+        for (base in Protocol.routes(route, wifiBase)) {
+            try { return connectCall(base, path).also { remember(base) } } catch (error: NotConnected) { }
+        }
+        val found = discover()
+        if (found != null) {
+            try { return connectCall(found, path).also { remember(found) } } catch (error: NotConnected) { }
+        }
+        remember(null)
+        throw NotConnected()
+    }
+
+    private fun connectCall(base: String, path: String): java.net.Socket {
+        val url = URL(base)
+        val socket: java.net.Socket = try {
+            if (base.startsWith("https://")) {
+                (pinnedContext().socketFactory.createSocket() as javax.net.ssl.SSLSocket).apply {
+                    connect(java.net.InetSocketAddress(url.host, url.port), 3000)
+                    soTimeout = 10_000
+                    startHandshake()                       // not our PC's certificate: fails here
+                }
+            } else {
+                java.net.Socket().apply { connect(java.net.InetSocketAddress(url.host, url.port), 3000) }
+            }
+        } catch (error: IOException) {
+            throw NotConnected()
+        }
+        try {
+            socket.soTimeout = 30_000
+            val token = prefs.getString("token", null) ?: throw IOException("This phone isn't paired.")
+            val time = (System.currentTimeMillis() / 1000).toString()
+            val nonce = ByteArray(12).also { random.nextBytes(it) }.joinToString("") { "%02x".format(it) }
+            val signature = PhoneKey.sign(Protocol.canonical("GET", path, time, nonce, ByteArray(0)))
+            val request = "GET $path HTTP/1.1\r\nHost: ${url.host}:${url.port}\r\nAuthorization: Bearer $token\r\n" +
+                "X-Aurora-Time: $time\r\nX-Aurora-Nonce: $nonce\r\nX-Aurora-Signature: $signature\r\n" +
+                "Connection: Upgrade\r\nUpgrade: aurora-call\r\n\r\n"
+            socket.getOutputStream().apply { write(request.toByteArray()); flush() }
+            val input = socket.getInputStream()
+            val head = StringBuilder()
+            while (!head.endsWith("\r\n\r\n")) {
+                val byte = input.read()
+                if (byte < 0) throw NotConnected()
+                head.append(byte.toChar())
+                if (head.length > 8192) throw IOException("Bad answer from the PC.")
+            }
+            val status = head.lineSequence().first().split(" ").getOrNull(1)?.toIntOrNull() ?: 0
+            if (!head.contains("Server: AURORA")) throw NotConnected()
+            if (status != 101) {
+                val length = Regex("Content-Length: (\\d+)", RegexOption.IGNORE_CASE).find(head)?.groupValues?.get(1)?.toInt() ?: 0
+                val body = ByteArray(length).also { var read = 0; while (read < length) { val n = input.read(it, read, length - read); if (n < 0) break; read += n } }
+                val message = try { JSONObject(String(body)).optString("error") } catch (error: Exception) { "" }
+                if (status == 401 && message.contains("isn't paired")) forget()
+                throw IOException(message.ifBlank { "The PC couldn't start the call (HTTP $status)." })
+            }
+            return socket
+        } catch (error: IOException) {
+            socket.close()
+            throw error
+        }
+    }
+
     /** Tries the routes in order (last good, USB, home Wi-Fi, then a discovery broadcast). */
     fun call(method: String, path: String, body: ByteArray = ByteArray(0), timeoutMs: Int = 10_000,
              type: String = "application/json"): Reply {
@@ -228,6 +293,11 @@ class Aurora private constructor(context: Context) {
 
     /** Accepts only the PC's own certificate, pinned at pairing. */
     private fun pin(connection: HttpsURLConnection) {
+        connection.sslSocketFactory = pinnedContext().socketFactory
+        connection.hostnameVerifier = javax.net.ssl.HostnameVerifier { _, _ -> true }   // pinned instead
+    }
+
+    private fun pinnedContext(): SSLContext {
         val pinned = fingerprint
         val trust = object : X509TrustManager {
             override fun checkClientTrusted(chain: Array<X509Certificate>, authType: String) =
@@ -242,7 +312,6 @@ class Aurora private constructor(context: Context) {
         }
         val tls = SSLContext.getInstance("TLS")
         tls.init(null, arrayOf(trust), random)
-        connection.sslSocketFactory = tls.socketFactory
-        connection.hostnameVerifier = javax.net.ssl.HostnameVerifier { _, _ -> true }   // pinned instead
+        return tls
     }
 }

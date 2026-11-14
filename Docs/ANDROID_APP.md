@@ -163,11 +163,26 @@ Each ends with something you can use on the phone, tested.
    full-screen reminder screen over the lock screen (Done / Remind me in
    10 minutes), and AURORA saying the reminder; each can be switched off
    on the app's PC tab.
-4. **Calling Agent**: call AURORA from the phone, and AURORA can call you
-   for a reminder or a briefing you scheduled. The call rings like a real
-   call (Android's self-managed `ConnectionService`), uses the phone's echo
-   cancellation, and you can interrupt AURORA by talking, as on the PC.
-   Measured: delay from you stopping to AURORA starting to speak.
+4. **Calling Agent** (**built, 0.49.0 / app 0.5.0**): call AURORA with
+   📞 in the app, or AURORA calls you ("Call my phone" in Settings → Phone
+   on the PC, or reminders set to "ring as a call" in the app). The call
+   goes through Android's own call system as a self-managed calling app
+   (ConnectionService): a real ringing screen over the lock screen, the
+   earpiece by default, speaker and Bluetooth, the phone's echo
+   cancellation; it never uses the phone network. On the PC
+   (`aurora/mobile/call.py`) the signed `GET /api/call` is upgraded to a
+   two-way stream of small frames on the same connection: microphone up,
+   AURORA's voice down at real-time pace, short JSON events. The voice
+   activity detector ends your turn after 1 s of quiet, Vosk recognises
+   it, it goes through Chat (same tools, permissions; approving actions
+   still needs that permission), and the answer is spoken sentence by
+   sentence; talking over AURORA stops it at once. "Goodbye" or "that's
+   all", 20 s of silence, hanging up or 30 minutes end it; one call at a
+   time. Measured with the real models (the 'phone' speaking Piper audio
+   resampled to 16 kHz): each turn answered about 1 s after you stop
+   talking; the first call after a quiet spell waits about 10 s while
+   the voice and recogniser load (when AURORA calls you they load while
+   it rings).
 5. **Files**: share anything to AURORA from the phone's share menu (saved
    in a "From phone" folder, never overwriting) and send files from the PC.
 6. **Away from home and audit**: Tailscale route, poor-network behaviour,

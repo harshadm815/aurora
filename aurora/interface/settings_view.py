@@ -221,6 +221,10 @@ class SettingsView(BaseView):
         self.pair_button = QPushButton("Pair my phone…")
         self.pair_button.clicked.connect(self._pair_phone)
         pair_row.addWidget(self.pair_button)
+        self.call_button = QPushButton("📞 Call my phone")
+        self.call_button.setToolTip("AURORA rings your phone; answer it to talk (the phone must be connected).")
+        self.call_button.clicked.connect(self._call_phone)
+        pair_row.addWidget(self.call_button)
         pair_row.addStretch(1)
         phone.add_layout(pair_row)
         self.device_rows = QVBoxLayout()
@@ -560,6 +564,7 @@ class SettingsView(BaseView):
         clear_layout(self.device_rows)
         if not running and not settings.MOBILE_DATABASE_PATH.is_file():
             self.pair_button.setEnabled(False)
+            self.call_button.setEnabled(False)
             self.device_rows.addWidget(label("No phone paired yet.", "Faint"))     # nothing to read (or create)
             self.phone_activity.setText("")
             return
@@ -571,6 +576,7 @@ class SettingsView(BaseView):
             self.device_rows.addWidget(label(f"Couldn't read the paired phone: {error}", "Faint"))
             return
         self.pair_button.setEnabled(running and not devices)
+        self.call_button.setEnabled(running and bool(devices))
         self.pair_button.setToolTip("Only one phone can be paired. Disconnect it to pair another." if devices else
                                     "Shows a one-time code to type in the AURORA app (phone plugged in by USB).")
         if not devices:
@@ -600,6 +606,11 @@ class SettingsView(BaseView):
         self.phone_activity.setText(
             "Recent phone activity: " + "; ".join(f"{t:%d %b %H:%M} {d} {w} ({o})" for t, d, w, o in activity)
             if activity else "")
+
+    def _call_phone(self):
+        if self.backend.mobile is not None:
+            self.backend.mobile.call_phone()
+            self._status("Calling your phone… (it rings if the AURORA app is connected)")
 
     def _pair_phone(self):
         from aurora.mobile.devices import PairingError

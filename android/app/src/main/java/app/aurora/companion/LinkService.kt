@@ -29,7 +29,8 @@ class LinkService : Service(), Live.Listener {
         fun enabled(context: Context) = Aurora.get(context).prefs.getBoolean("stay_connected", true)
 
         /** Reminder options (PC tab): speak them in AURORA's voice; show the full-screen reminder. */
-        fun option(context: Context, name: String) = Aurora.get(context).prefs.getBoolean(name, true)
+        fun option(context: Context, name: String, default: Boolean = true) =
+            Aurora.get(context).prefs.getBoolean(name, default)
         fun setOption(context: Context, name: String, on: Boolean) =
             Aurora.get(context).prefs.edit().putBoolean(name, on).apply()
 
@@ -142,7 +143,11 @@ class LinkService : Service(), Live.Listener {
     private fun handle(event: JSONObject) {
         Live.event(event)
         when (event.optString("kind")) {
-            "reminder" -> remind(event.optString("text"))
+            "reminder" -> if (option(this, "reminder_call", false)) {
+                notify(CHANNEL_REPLIES, "Reminder", event.optString("text"))      // kept if you miss the call
+                Calls.ring(this, "reminder", event.optString("text"))
+            } else remind(event.optString("text"))
+            "call" -> Calls.ring(this, event.optString("reason", "pc"), "")
             "message" -> if (event.optString("source") == "phone" && !Live.visible)
                 notify(CHANNEL_REPLIES, "AURORA replied", event.optString("reply"))
         }

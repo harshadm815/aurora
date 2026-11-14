@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.49.0 — The Calling Agent (2026-11-14)
+
+### Added
+- **Call AURORA** from the phone (📞 in the app, app 0.5.0) and talk
+  hands-free: AURORA listens, answers aloud, and stops when you talk over
+  it. "Goodbye" ends the call.
+- **AURORA calls you**: "📞 Call my phone" in Settings → Phone, or
+  reminders that ring as a call (an option in the app). The phone rings
+  like a real call, also over the lock screen; answer to talk.
+- Calls use Android's own call system (earpiece, speaker, Bluetooth, echo
+  cancellation) but never the phone network: they go to AURORA on your PC
+  over the same signed, encrypted link. Nothing is recorded; the access
+  log notes only that a call happened and how it ended.
+- PC side: `aurora/mobile/call.py` (turn-taking, interruption) and
+  `GET /api/call`; the speech models load while AURORA rings you.
+
 ## 0.48.0 — Talk to AURORA from the phone; reminder alarms (2026-11-14)
 
 ### Added

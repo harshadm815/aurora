@@ -29,6 +29,7 @@ API (JSON):
     GET  /api/events?after=N&wait=S        → new messages and due reminders (long polling; events.py)
     POST /api/voice      (16-bit mono WAV) → {"heard"}: what was said (speech.py; up to 60 s)
     POST /api/speak      {"text"}          → audio/wav in AURORA's voice
+    GET  /api/call?reason=R&text=T         → 101, then a spoken call (call.py); one at a time
     GET  /api/history                      → the shared conversation (last 40 messages)
     POST /api/chat       {"text"}          → {"reply", "needs_confirmation", "sources"}
     GET  /api/today                        → {"briefing", "reminders"}
@@ -47,6 +48,7 @@ from aurora.config import settings
 from aurora.mobile.devices import DeviceStore, PairingError
 from aurora.mobile.events import EventHub
 from aurora.mobile.signing import NonceCache, SignatureError, verify
+from aurora.mobile.call import CallSession
 from aurora.mobile.speech import SpeechError
 
 logger = logging.getLogger(__name__)
@@ -206,6 +208,9 @@ class Handler(BaseHTTPRequestHandler):
                     raise ApiError(HTTPStatus.BAD_REQUEST, "Bad request.")
                 self._json(HTTPStatus.OK, server.events.since(after, wait, query.get("session")))
                 return                                   # not logged: the phone asks every half minute
+            if (method, path) == ("GET", "/api/call"):
+                self._call(device, self._query(full))
+                return
             if (method, path) in (("POST", "/api/voice"), ("POST", "/api/speak")):
                 if server.speech is None:
                     raise ApiError(HTTPStatus.SERVICE_UNAVAILABLE, "Speech isn't available on the PC.")
@@ -258,6 +263,31 @@ class Handler(BaseHTTPRequestHandler):
             self._json(HTTPStatus.INTERNAL_SERVER_ERROR, {"error": "Something went wrong on the PC."})
 
 
+    def _call(self, device, query: dict) -> None:
+        server = self.server
+        if server.speech is None:
+            raise ApiError(HTTPStatus.SERVICE_UNAVAILABLE, "Speech isn't available on the PC.")
+        if not server.call_lock.acquire(blocking=False):
+            raise ApiError(HTTPStatus.CONFLICT, "AURORA is already on a call.")
+        try:
+            self.send_response(HTTPStatus.SWITCHING_PROTOCOLS)
+            self.send_header("Upgrade", "aurora-call")
+            self.send_header("Connection", "Upgrade")
+            self.end_headers()
+            self.wfile.flush()
+            self.close_connection = True
+            self.connection.settimeout(30)                # a phone that vanished ends the call
+            server.store.log(device.name, "call", "allowed")
+            session = CallSession(self.rfile, self.wfile, server.speech,
+                                  chat=lambda text: server.bridge.chat(text, device.name),
+                                  pending=server.bridge.pending, may_approve=device.allow_actions,
+                                  reason=str(query.get("reason", ""))[:20], text=str(query.get("text", ""))[:300])
+            ended = session.run()
+            server.store.log(device.name, "call", f"ended: {ended}")
+        finally:
+            server.call_lock.release()
+
+
 class _Http(ThreadingHTTPServer):
     daemon_threads = True
     tls: ssl.SSLContext | None = None
@@ -293,6 +323,7 @@ class MobileServer:
         self.connection = connection or (lambda: {})
         self.events = events or EventHub()
         self.speech = speech
+        self.call_lock = threading.Lock()
         self._http: _Http | None = None
         self._thread: threading.Thread | None = None
 
@@ -315,6 +346,7 @@ class MobileServer:
         http.connection = self.connection
         http.events = self.events
         http.speech = self.speech
+        http.call_lock = self.call_lock
         self.port = http.server_address[1]
         self._http = http
         self._thread = threading.Thread(target=http.serve_forever, name=f"aurora-mobile-{self.kind}", daemon=True)

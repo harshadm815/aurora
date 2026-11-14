@@ -50,15 +50,22 @@ class MainActivity : Activity(), Live.Listener {
         super.onCreate(savedInstanceState)
         aurora = Aurora.get(this)
         LinkService.channels(this)
+        Calls.register(this)
 
         val title = text("AURORA", 22f, R.color.accent, bold = true).apply { letterSpacing = 0.25f }
         routeLabel = text("", 13f, R.color.muted).apply { gravity = Gravity.END }
+        val callButton = text("📞", 22f, R.color.accent).apply {
+            contentDescription = "Call AURORA"
+            setPadding(px(16), 0, 0, 0)
+            setOnClickListener { callAurora() }
+        }
         val header = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             setPadding(px(16), px(14), px(16), px(10))
             addView(title, LinearLayout.LayoutParams(0, -2, 1f))
             addView(routeLabel)
+            addView(callButton)
         }
         content = FrameLayout(this)
         tabs = LinearLayout(this).apply {
@@ -101,6 +108,21 @@ class MainActivity : Activity(), Live.Listener {
     }
 
     override fun onRoute(base: String?) = ui { routeLabel.text = if (aurora.paired) Protocol.routeName(base) else "Not paired" }
+
+    private fun callAurora() {
+        if (!aurora.paired) return
+        if (checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(arrayOf(android.Manifest.permission.RECORD_AUDIO), 4)
+            return
+        }
+        Calls.dial(this)?.let { problem ->
+            AlertDialog.Builder(this).setMessage(problem).setPositiveButton("OK", null).show()
+        }
+    }
+
+    override fun onRequestPermissionsResult(code: Int, permissions: Array<out String>, results: IntArray) {
+        if (code == 4 && results.firstOrNull() == PackageManager.PERMISSION_GRANTED) callAurora()
+    }
 
     private fun askForNotifications() {
         if (Build.VERSION.SDK_INT >= 33 &&
@@ -511,6 +533,14 @@ class MainActivity : Activity(), Live.Listener {
                 isChecked = LinkService.option(this@MainActivity, "reminder_screen")
                 setPadding(0, px(6), 0, px(6))
                 setOnCheckedChangeListener { _, on -> LinkService.setOption(this@MainActivity, "reminder_screen", on) }
+            })
+            body.addView(Switch(this).apply {
+                text = "Reminders ring as a call (answer to talk)"
+                textSize = 15f
+                setTextColor(getColor(R.color.text))
+                isChecked = LinkService.option(this@MainActivity, "reminder_call", false)
+                setPadding(0, px(6), 0, px(6))
+                setOnCheckedChangeListener { _, on -> LinkService.setOption(this@MainActivity, "reminder_call", on) }
             })
             body.addView(Switch(this).apply {
                 text = "AURORA says reminders aloud"

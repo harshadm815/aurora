@@ -12,7 +12,7 @@ work. Nothing here is marked done until it has been tested on this PC.
 | Wake Engine | `aurora/wake/` | `aurora/voice/` (Vosk grammar recogniser), the packaged .exe | **Built (0.43.0)**: hold Right Ctrl (or Space), say "Wake up"; measured below |
 | Voice conversation | `aurora/voice/conversation.py`, Chat | Engine, Chat, barge-in, Stop | **Built (0.44.0)**: conversation mode, briefings, spoken reminders |
 | Mobile Companion | `aurora/mobile/`, `android/` | Engine, memory, conversation | **Android app (0.46.0)**: one phone, paired over USB, signed requests, USB and home Wi-Fi; chat, briefing, reminders, memories, PC status. See ANDROID_APP.md |
-| Calling Agent | `aurora/calling/` (planned) | Voice Engine, Mobile Companion transport | Not started |
+| Calling Agent | `aurora/mobile/call.py`, `android/` | Voice Engine, Mobile Companion transport | **Built (0.49.0)**: calls between you and AURORA over the phone link, both directions; see ANDROID_APP.md |
 
 The proposal's top-level folders (`aurora_voice/`, `aurora_wake/`, …) map
 onto packages inside `aurora/`, like `voice/`, `browser/` and `news/`, so

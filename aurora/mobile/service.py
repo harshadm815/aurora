@@ -116,6 +116,7 @@ class MobileService:
             server = MobileServer(self.bridge, self.store, port=settings.MOBILE_WIFI_PORT, host=address,
                                   kind="wifi", tls=tls.server_context(self.cert, self.key), nonces=self.nonces,
                                   connection=self.connection, events=self.events, speech=self.speech)
+            server.call_lock = self.local.call_lock
             try:
                 server.start()
                 self._discovery = network.DiscoveryResponder(address, settings.MOBILE_DISCOVERY_PORT,
@@ -145,6 +146,11 @@ class MobileService:
         return {"fingerprint": self.fingerprint, "wifi_port": settings.MOBILE_WIFI_PORT,
                 "discovery_port": settings.MOBILE_DISCOVERY_PORT,
                 "wifi_address": wifi.host if wifi is not None else None}
+
+    def call_phone(self) -> None:
+        """Rings the paired phone (it calls back over its own connection)."""
+        self.events.publish("call", reason="pc")
+        self.speech.warm()                          # ready by the time you answer
 
     def describe(self) -> dict:
         wifi = self.wifi

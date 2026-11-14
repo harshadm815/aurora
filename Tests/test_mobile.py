@@ -753,3 +753,228 @@ def test_no_speech_on_a_server_without_it(server, phone):
     token = _paired(server, phone)
     status, data, _ = call(server, "POST", "/api/speak", {"text": "hi"}, token=token, phone=phone)
     assert status == 503
+
+# --- Calls (milestone 4) ---------------------------------------------------------------------
+
+import struct as _struct
+
+from aurora.mobile import call as call_module
+from aurora.mobile.call import CallSession, read_frame, write_frame
+
+
+class FakeRecogniser:
+    def __init__(self, text):
+        self.text = text
+
+    def AcceptWaveform(self, chunk):
+        return False
+
+    def PartialResult(self):
+        return json.dumps({"partial": self.text.split()[0] if self.text else ""})
+
+    def Result(self):
+        return json.dumps({"text": ""})
+
+    def FinalResult(self):
+        return json.dumps({"text": self.text})
+
+
+class CallSpeech:
+    """What a call needs from PhoneSpeech: scripted words for each turn, short sentences of 'voice'."""
+
+    def __init__(self, said, seconds=0.3):
+        self.said = list(said)
+        self.seconds = seconds
+        self.spoken = []
+        self.calls = 0
+
+    def recogniser(self, rate):
+        return FakeRecogniser(self.said.pop(0) if self.said else "")
+
+    def sentences(self, text):
+        self.spoken.append(text)
+        yield 22050, b"\x00\x01" * int(22050 * self.seconds)
+
+    def in_call(self, active):
+        self.calls += 1 if active else -1
+
+    warmed = False
+
+    def warm(self):
+        self.warmed = True
+
+    def prepare(self):
+        pass
+
+
+LOUD = _struct.pack("<h", 6000) * 1600          # 0.1 s of "speech"
+QUIET = b"\x00\x00" * 1600                      # 0.1 s of silence
+
+
+def _socket_pair():
+    """Two connected sockets on this PC (socket.socketpair connects through loopback on Windows)."""
+    listener = socket.socket()
+    listener.bind(("127.0.0.1", 0))
+    listener.listen(1)
+    _ALLOWED_PORTS.add(listener.getsockname()[1])
+    client = socket.create_connection(listener.getsockname(), timeout=10)
+    server_side, _ = listener.accept()
+    listener.close()
+    client.settimeout(None)
+    return server_side, client
+
+
+def _phone(sock, events, script):
+    """Plays the phone: whenever AURORA listens, 'says' something (loud, then quiet)."""
+    reader, writer = sock.makefile("rb"), sock.makefile("wb")
+    try:
+        while True:
+            kind, payload = read_frame(reader)
+            if kind != b"J":
+                continue
+            event = json.loads(payload)
+            events.append(event)
+            if "end" in event:
+                return
+            if event.get("state") == "listening":
+                if script and script[0] == "hangup":
+                    write_frame(writer, b"J", b'{"hangup": true}')
+                    return
+                for chunk in [QUIET] * 4 + [LOUD] * 5 + [QUIET] * 12:
+                    write_frame(writer, b"A", chunk)
+                if script:
+                    script.pop(0)
+    except (EOFError, OSError):
+        pass
+
+
+def _run_call(said, script, chat=None, pending=lambda: False, may_approve=False, reason="", text=""):
+    pc, phone_end = _socket_pair()
+    events = []
+    phone = threading.Thread(target=_phone, args=(phone_end, events, script), daemon=True)
+    phone.start()
+    speech = CallSpeech(said)
+    asked = []
+    session = CallSession(pc.makefile("rb"), pc.makefile("wb"), speech,
+                          chat=chat or (lambda t: asked.append(t) or {"reply": f"You said {t}."}),
+                          pending=pending, may_approve=may_approve, reason=reason, text=text, realtime=False)
+    ended = session.run()
+    pc.close()
+    phone.join(5)
+    phone_end.close()
+    return ended, events, speech, asked
+
+
+def test_a_call_greets_answers_and_says_goodbye():
+    ended, events, speech, asked = _run_call(["what time is it", "goodbye"], ["turn", "turn"])
+    assert ended == "goodbye" and speech.calls == 0                        # models may be freed again
+    assert speech.spoken[0] == call_module.GREETING and speech.spoken[-1] == call_module.GOODBYE
+    assert asked == ["what time is it"] and "You said what time is it." in speech.spoken
+    heard = [e["heard"] for e in events if "heard" in e]
+    assert heard == ["what time is it", "goodbye"] and events[-1] == {"end": "goodbye"}
+    assert {"rate": 22050} in events and {"state": "thinking"} in events
+
+
+def test_reminder_calls_say_the_reminder_first():
+    ended, events, speech, _ = _run_call(["that's all"], ["turn"], reason="reminder", text="drink water")
+    assert speech.spoken[0] == "Hi, it's AURORA with your reminder: drink water. Anything else?"
+
+
+def test_hanging_up_ends_the_call():
+    ended, events, speech, asked = _run_call([], ["hangup"])
+    assert ended == "hangup" and asked == []
+
+
+def test_a_call_cant_approve_actions_without_permission():
+    ended, _, speech, asked = _run_call(["yes", "bye"], ["turn", "turn"], pending=lambda: True)
+    assert asked == [] and any("answer it on the PC" in s for s in speech.spoken)
+
+
+def test_talking_over_aurora_interrupts_it():
+    pc, phone_end = _socket_pair()
+    phone_reader = phone_end.makefile("rb")
+    session = CallSession(pc.makefile("rb"), pc.makefile("wb"), CallSpeech([], seconds=3.0),
+                          chat=lambda t: {}, realtime=False)
+    for _ in range(4):
+        session.audio.put(QUIET)
+    for _ in range(12):
+        session.audio.put(LOUD)                                                   # you start talking
+    assert session.say("A long answer that you interrupt.") is False
+    assert session.carry and LOUD in session.carry                                # kept for listening
+    events = []
+    phone_end.settimeout(2)
+    try:
+        while True:
+            kind, payload = read_frame(phone_reader)
+            if kind == b"J":
+                events.append(json.loads(payload))
+                if events[-1].get("flush"):
+                    break
+    except (OSError, EOFError):
+        pass
+    assert {"flush": True} in events
+    pc.close()
+    phone_end.close()
+
+
+def test_a_call_over_the_server(tmp_path, phone):
+    server = MobileServer(FakeBridge(), DeviceStore(tmp_path / "m.db"), port=0,
+                          speech=CallSpeech(["bye"]))
+    server.start()
+    _ALLOWED_PORTS.add(server.port)
+    try:
+        token = _paired(server, phone)
+        sock = socket.create_connection(("127.0.0.1", server.port), timeout=10)
+        path = "/api/call?reason=pc"
+        headers = {"Host": f"127.0.0.1:{server.port}", "Authorization": f"Bearer {token}", **phone.sign("GET", path)}
+        request = f"GET {path} HTTP/1.1\r\n" + "".join(f"{k}: {v}\r\n" for k, v in headers.items()) + "\r\n"
+        sock.sendall(request.encode())
+        reader, writer = sock.makefile("rb"), sock.makefile("wb")
+        assert reader.readline().startswith(b"HTTP/1.1 101")
+        while reader.readline() not in (b"\r\n", b""):
+            pass
+        events = []
+        _phone_thread = threading.Thread(target=lambda: None)
+        while True:
+            kind, payload = read_frame(reader)
+            if kind != b"J":
+                continue
+            event = json.loads(payload)
+            events.append(event)
+            if event.get("state") == "listening":
+                for chunk in [QUIET] * 4 + [LOUD] * 5 + [QUIET] * 12:
+                    write_frame(writer, b"A", chunk)
+            if "end" in event:
+                break
+        sock.close()
+        assert events[0]["reply"].startswith("Hi, it's AURORA. You asked me to call") and events[-1] == {"end": "goodbye"}
+        deadline = time.time() + 5
+        while time.time() < deadline and not any(o.startswith("ended") for _, _, _, o in server.store.recent_log()):
+            time.sleep(0.05)
+        outcomes = [(w, o) for _, _, w, o in server.store.recent_log()]
+        assert ("call", "allowed") in outcomes and ("call", "ended: goodbye") in outcomes
+    finally:
+        server.stop()
+
+
+def test_a_second_call_is_refused_and_unsigned_calls_too(tmp_path, phone):
+    server = MobileServer(FakeBridge(), DeviceStore(tmp_path / "m.db"), port=0, speech=CallSpeech([]))
+    server.start()
+    _ALLOWED_PORTS.add(server.port)
+    try:
+        token = _paired(server, phone)
+        assert call(server, "GET", "/api/call", token=token)[0] == 401                       # unsigned
+        server.call_lock.acquire()
+        status, data, _ = call(server, "GET", "/api/call", token=token, phone=phone)
+        assert status == 409 and "already on a call" in data["error"]
+        server.call_lock.release()
+    finally:
+        server.stop()
+
+
+def test_call_my_phone_rings_through_the_event_feed(tmp_path):
+    speech = CallSpeech([])
+    service = MobileService(FakeBridge(), DeviceStore(tmp_path / "m.db"), usb=FakeUsb(), check_seconds=0,
+                            speech=speech)
+    service.call_phone()
+    assert service.events.since(0)["events"][-1]["kind"] == "call" and speech.warmed     # models load while it rings

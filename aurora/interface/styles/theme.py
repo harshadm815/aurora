@@ -72,6 +72,8 @@ QLabel#PageSubtitle {{ color: {p.text_dim}; }}
 QLabel#SectionTitle {{ color: {p.text_dim}; font-size: 8.5pt; font-weight: 600; letter-spacing: 1.5px; }}
 QLabel#Dim {{ color: {p.text_dim}; }}
 QLabel#Faint {{ color: {p.text_faint}; font-size: 9pt; }}
+QLabel#Warning {{ color: {p.warning}; font-size: 9.5pt; }}
+QLabel#Saved {{ color: {p.ok}; font-size: 9.5pt; }}
 QLabel#BigValue {{ font-size: 20pt; font-weight: 600; }}
 QLabel#Clock {{ font-size: 26pt; font-weight: 300; color: {p.text}; }}
 QLabel#Accent {{ color: {p.accent}; }}

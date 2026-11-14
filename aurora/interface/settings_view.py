@@ -1,9 +1,18 @@
 """
 Settings. Saved to aurora_preferences.json (ignored by git) and applied
-straight away. Permissions, devices and paths are deliberately NOT
-editable here: they stay in settings.py / local_settings.py.
+straight away: every change saves itself a moment after you make it
+(no button to forget), and the line at the top says so. Permissions,
+devices and paths are deliberately NOT editable here: they stay in
+settings.py / local_settings.py.
+
+A model name Ollama doesn't have is not saved (AURORA couldn't answer
+with it); the rest still is.
 """
 
+import logging
+from datetime import datetime
+
+from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import (
     QCheckBox, QComboBox, QFormLayout, QHBoxLayout, QLineEdit, QMessageBox, QPlainTextEdit, QPushButton, QSpinBox,
 )
@@ -13,6 +22,12 @@ from aurora.interface.components.base_view import BaseView
 from aurora.interface.components.widgets import Panel, label
 from aurora.interface.voice_control import input_devices
 from aurora.interface.windows import integration
+
+logger = logging.getLogger(__name__)
+
+AUTOSAVE_MS = 600            # after a tick box, list or number changes
+TYPING_MS = 1500             # after you stop typing the personality
+WAKE_KEYS = ("wake_enabled", "wake_key", "wake_phrase", "wake_sound")
 
 PAGES = ["Dashboard", "Chat", "Memory", "Knowledge", "Tools", "Vision", "Sensors", "System", "Settings"]
 
@@ -25,6 +40,8 @@ class SettingsView(BaseView):
     def __init__(self, backend, parent=None):
         super().__init__(backend, parent)
         values = backend.preferences
+        self.save_status = label("Changes are saved automatically.", "Faint")
+        self.body.addWidget(self.save_status)
 
         ai = Panel("AI")
         form = QFormLayout()
@@ -218,8 +235,8 @@ class SettingsView(BaseView):
         self.body.addWidget(windows)
 
         buttons = QHBoxLayout()
-        save = QPushButton("Save settings")
-        save.setObjectName("Primary")
+        save = QPushButton("Save now")
+        save.setToolTip("Changes are saved automatically; this saves straight away.")
         save.clicked.connect(self.save)
         buttons.addWidget(save)
         buttons.addStretch(1)
@@ -228,6 +245,87 @@ class SettingsView(BaseView):
         self.body.addStretch(1)
 
         backend.ollama_checked.connect(self._models)
+        self._autosave = QTimer(self, singleShot=True, timeout=self.auto_save)
+        self._watch_changes()
+
+    # --- Saving -------------------------------------------------------------------
+
+    def _watch_changes(self):
+        """Every control saves itself shortly after it changes."""
+        from PySide6.QtWidgets import QCheckBox as Check, QComboBox as Combo, QSpinBox as Spin
+
+        def later(widget, delay=AUTOSAVE_MS):
+            def start(*_):
+                self._changed = widget                  # where to show "Saved" (the top line may be scrolled away)
+                self._autosave.start(delay)
+            return start
+
+        self._changed = None
+        for check in self.findChildren(Check):
+            check.toggled.connect(later(check))
+        for spin in self.findChildren(Spin):
+            spin.valueChanged.connect(later(spin))
+        for combo in self.findChildren(Combo):
+            if combo is not self.model:
+                combo.currentIndexChanged.connect(later(combo))
+        self.model.activated.connect(later(self.model))                        # chosen from the list
+        self.model.lineEdit().editingFinished.connect(later(self.model))       # typed, then Enter or click away
+        self.wake_phrase.editingFinished.connect(later(self.wake_phrase))
+        self.personality.textChanged.connect(later(self.personality, TYPING_MS))
+
+    def _status(self, text: str, problem: bool = False):
+        text = ("⚠  " if problem else "✓  ") + text
+        widget, self._changed = self._changed, None
+        if widget is not None and widget.isVisible():
+            from PySide6.QtCore import QPoint
+            from PySide6.QtWidgets import QToolTip
+            # Next to the control just changed, for a moment.
+            QToolTip.showText(widget.mapToGlobal(QPoint(0, widget.height())),
+                              text if problem else "✓  Saved", widget, widget.rect(), 4000 if problem else 1500)
+        self.save_status.setText(text)
+        self.save_status.setObjectName("Warning" if problem else "Saved")
+        self.save_status.style().unpolish(self.save_status)
+        self.save_status.style().polish(self.save_status)
+
+    def _installed(self, model: str) -> bool:
+        installed = self.backend.ollama.get("models") or []
+        from aurora.providers.core_provider import is_core_model
+        return not installed or is_core_model(model) or model in installed or f"{model}:latest" in installed
+
+    def auto_save(self) -> bool:
+        """Saves what's on the page now. Returns True if everything was saved."""
+        self._autosave.stop()
+        values = self.values()
+        notes = []
+        if not values["model"] or not self._installed(values["model"]):
+            if values["model"]:
+                notes.append(f"Ollama doesn't have '{values['model']}', so the model wasn't changed "
+                             f"(install it with: ollama pull {values['model']})")
+            values["model"] = self.backend.preferences.get("model", settings.DEFAULT_MODEL)
+        if not values["personality"]:
+            values["personality"] = self.backend.preferences.get("personality", "")
+            notes.append("The personality can't be empty, so it wasn't changed")
+        if not preferences._valid("wake_phrase", values["wake_phrase"]):
+            values["wake_phrase"] = self.backend.preferences.get("wake_phrase", settings.WAKE_PHRASE)
+            notes.append("The wake phrase must be one to four words, letters only, so it wasn't changed")
+
+        changed = {key: value for key, value in values.items() if self.backend.preferences.get(key) != value}
+        wake_changed = any(key in changed for key in WAKE_KEYS)
+        if changed:
+            self.backend.save_preferences(values)
+        ok = self._apply_startup() and self._apply_wake(changed=wake_changed)
+        if notes:
+            logger.info("Settings: some changes not saved (%d)", len(notes))
+            self._status(". ".join(notes) + ".", problem=True)
+        elif ok:
+            self._status(f"Saved at {datetime.now():%H:%M:%S}. New settings are in use." if changed or wake_changed
+                         else "Everything is saved.")
+        return ok and not notes
+
+    def on_hidden(self):
+        if self._autosave.isActive():
+            self.auto_save()             # leaving the page: don't lose a change still waiting to be saved
+        super().on_hidden()
 
     def _models(self, state: dict):
         current = self.model.currentText()
@@ -308,15 +406,15 @@ class SettingsView(BaseView):
             self.startup.setChecked(integration.startup_enabled())
             return False
 
-    def _apply_wake(self) -> bool:
+    def _apply_wake(self, changed: bool = True) -> bool:
         """Starts, reloads or stops the Wake Engine's helper, and its start with Windows."""
         from aurora.wake import launcher
 
         try:
-            if self.wake_enabled.isChecked():
+            if changed and self.wake_enabled.isChecked():
                 if not launcher.reload_helper():
                     launcher.start_helper()
-            else:
+            elif changed:
                 launcher.stop_helper()
             wanted = self.wake_startup.isChecked() and self.wake_enabled.isChecked()
             if integration.IS_WINDOWS and wanted != launcher.helper_startup_enabled():
@@ -328,25 +426,8 @@ class SettingsView(BaseView):
             return False
 
     def save(self):
-        values = self.values()
-        if not values["model"] or not values["personality"]:
-            QMessageBox.warning(self, "Settings", "The model and personality can't be empty.")
-            return
-        if not preferences._valid("wake_phrase", values["wake_phrase"]):
-            QMessageBox.warning(self, "Settings", "The wake phrase must be one to four words, letters only.")
-            return
-        installed = self.backend.ollama.get("models") or []
-        if installed and f"{values['model']}:latest" not in installed and values["model"] not in installed:
-            answer = QMessageBox.question(
-                self, "Model not installed",
-                f"Ollama doesn't list '{values['model']}'. Save anyway? (Install it with: ollama pull {values['model']})",
-                QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
-            )
-            if answer != QMessageBox.Yes:
-                return
-        self.backend.save_preferences(values)
-        if self._apply_startup() and self._apply_wake():
-            QMessageBox.information(self, "Settings", "Saved. New settings are in use.")
+        """The "Save now" button: saves at once (changes also save themselves)."""
+        self.auto_save()
 
     def on_shown(self):
         self.model.setCurrentText(settings.DEFAULT_MODEL)

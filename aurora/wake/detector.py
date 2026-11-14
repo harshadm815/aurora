@@ -44,12 +44,13 @@ def unknown_words(phrase: str, model) -> list[str]:
 # Phrases that sound like common wake phrases. Listed in the recogniser's grammar, they give
 # "what's up" somewhere better to go than "wake up" (measured: 1 in 10 → see the tests).
 SOUND_ALIKES = ["what's up", "wait up", "make up", "take up", "shake up", "wake me", "break up", "wake",
-                "up", "hey", "aurora", "hello"]
+                "up", "hey", "aurora", "hello"]          # parts of the phrase itself are left out (decoys())
 
 
 def decoys(phrase: str, model) -> list[str]:
-    """Sound-alikes the model knows, other than the phrase itself."""
-    return [d for d in SOUND_ALIKES if d != phrase and not unknown_words(d, model)]
+    """Sound-alikes the model knows, other than the phrase or a part of it ("wake" or "up" alone
+    would let a short pause inside "wake up" turn it into two other results)."""
+    return [d for d in SOUND_ALIKES if f" {d} " not in f" {phrase} " and not unknown_words(d, model)]
 
 
 def _load_vosk():
@@ -105,6 +106,7 @@ class WakeSession:
         self._done = threading.Event()
         self.result: str | None = None
         self.unknown: list[str] = []
+        self._previous = ""                  # the last recognised result (a phrase split by a pause)
         self._thread = threading.Thread(target=self._run, name="aurora-wake-detect", daemon=True)
         self._thread.start()
 
@@ -122,7 +124,13 @@ class WakeSession:
         self._audio.put(None)
 
     def _matches(self, result_json: str) -> bool:
-        return json.loads(result_json).get("text", "").strip() == self.phrase
+        """The phrase in one result, or split across this result and the previous one by a short pause."""
+        text = json.loads(result_json).get("text", "").strip()
+        if not text:
+            return False
+        joined = f"{self._previous} {text}".strip()
+        self._previous = text
+        return text == self.phrase or joined == self.phrase
 
     def _report(self, result: str) -> None:
         if self.result is None:

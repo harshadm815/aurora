@@ -199,8 +199,26 @@ def _detect(cache, audio: bytes, rate: int, phrase: str = "wake up", release: bo
 
 @pytest.mark.parametrize("voice", _voices())
 def test_wake_phrase_is_heard(cache, tmp_path, voice):
-    audio, rate = _speak("Wake up.", tmp_path / "wake.wav", voice)
-    assert _detect(cache, audio, rate) == HEARD
+    # Piper speaks a little differently every time, so several takes each.
+    results = [_detect(cache, *_speak(text, tmp_path / "wake.wav", voice))
+               for text in ("Wake up.", "Wake up", "wake up!", "Wake up.", "Wake up!")]
+    assert results == [HEARD] * 5
+
+
+def test_phrase_split_by_a_pause_still_counts(cache):
+    import json as _json
+    session = WakeSession.__new__(WakeSession)
+    session.phrase, session._previous = "wake up", ""
+    assert not session._matches(_json.dumps({"text": "wake"}))
+    assert session._matches(_json.dumps({"text": "up"}))
+    session._previous = ""
+    assert not session._matches(_json.dumps({"text": "[unk] up"}))
+
+
+def test_sound_alikes_never_include_part_of_the_phrase(cache):
+    from aurora.wake.detector import decoys
+    words = decoys("wake up", cache.get())
+    assert "wake" not in words and "up" not in words and "what's up" in words
 
 
 @pytest.mark.parametrize("voice", _voices())

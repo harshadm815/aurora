@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.43.1 — Settings save themselves (2026-11-14)
+
+### Fixed
+- **Settings weren't saved unless you scrolled to the bottom and pressed
+  "Save settings"**, although the page said changes apply immediately.
+  Now every change saves itself a moment after you make it (the
+  personality after you stop typing, and anything still waiting when you
+  leave the page); "✓ Saved" appears next to what you changed and at the
+  top of the page. A model name Ollama doesn't have is not saved (the
+  rest is), with a warning saying why.
+- The Wake Engine's "wake" request could arrive as a plain "show" (the
+  window came forward but didn't greet or listen). It now has its own
+  local socket, so the request can't be misread.
+
 ## 0.43.0 — Wake Engine (2026-11-13)
 
 ### Added

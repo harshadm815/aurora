@@ -21,12 +21,17 @@ class LinkService : Service(), Live.Listener {
     companion object {
         private const val LINK_ID = 1
         private const val CHANNEL_LINK = "link"
-        private const val CHANNEL_REMINDERS = "reminders"
+        private const val CHANNEL_REMINDERS = "reminder_alerts"     // sound, vibration, full screen
         private const val CHANNEL_REPLIES = "replies"
         private const val WAIT_SECONDS = 25
         private val BACKOFF = longArrayOf(5_000, 10_000, 20_000, 30_000, 60_000)
 
         fun enabled(context: Context) = Aurora.get(context).prefs.getBoolean("stay_connected", true)
+
+        /** Reminder options (PC tab): speak them in AURORA's voice; show the full-screen reminder. */
+        fun option(context: Context, name: String) = Aurora.get(context).prefs.getBoolean(name, true)
+        fun setOption(context: Context, name: String, on: Boolean) =
+            Aurora.get(context).prefs.edit().putBoolean(name, on).apply()
 
         fun setEnabled(context: Context, on: Boolean) {
             Aurora.get(context).prefs.edit().putBoolean("stay_connected", on).apply()
@@ -47,9 +52,21 @@ class LinkService : Service(), Live.Listener {
             manager.createNotificationChannel(NotificationChannel(
                 CHANNEL_LINK, "Connection to your PC", NotificationManager.IMPORTANCE_MIN
             ).apply { description = "Shown while AURORA stays connected in the background." })
+            manager.deleteNotificationChannel("reminders")          // 0.3.0's quieter channel
             manager.createNotificationChannel(NotificationChannel(
                 CHANNEL_REMINDERS, "Reminders", NotificationManager.IMPORTANCE_HIGH
-            ).apply { description = "Reminders from AURORA when they're due." })
+            ).apply {
+                description = "Reminders from AURORA when they're due: sound, vibration and the reminder screen."
+                setSound(
+                    android.media.RingtoneManager.getDefaultUri(android.media.RingtoneManager.TYPE_NOTIFICATION),
+                    android.media.AudioAttributes.Builder()
+                        .setUsage(android.media.AudioAttributes.USAGE_ALARM)
+                        .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SONIFICATION).build()
+                )
+                enableVibration(true)
+                vibrationPattern = longArrayOf(0, 400, 200, 400)
+                lockscreenVisibility = Notification.VISIBILITY_PRIVATE
+            })
             manager.createNotificationChannel(NotificationChannel(
                 CHANNEL_REPLIES, "Replies", NotificationManager.IMPORTANCE_DEFAULT
             ).apply { description = "AURORA's answers while the app is in the background." })
@@ -125,7 +142,7 @@ class LinkService : Service(), Live.Listener {
     private fun handle(event: JSONObject) {
         Live.event(event)
         when (event.optString("kind")) {
-            "reminder" -> notify(CHANNEL_REMINDERS, "Reminder", event.optString("text"))
+            "reminder" -> remind(event.optString("text"))
             "message" -> if (event.optString("source") == "phone" && !Live.visible)
                 notify(CHANNEL_REPLIES, "AURORA replied", event.optString("reply"))
         }
@@ -135,6 +152,37 @@ class LinkService : Service(), Live.Listener {
         this, 0, Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
         PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
     )
+
+    /** A due reminder: sound and the reminder screen (over the lock screen), then AURORA says it. */
+    private fun remind(text: String) {
+        val id = nextId++
+        val screen = PendingIntent.getActivity(
+            this, id, Intent(this, ReminderActivity::class.java)
+                .putExtra(ReminderActivity.TEXT, text)
+                .putExtra(ReminderActivity.NOTIFICATION, id)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_NO_USER_ACTION),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+        val builder = Notification.Builder(this, CHANNEL_REMINDERS)
+            .setSmallIcon(R.drawable.ic_notify)
+            .setContentTitle("Reminder")
+            .setContentText(text)
+            .setStyle(Notification.BigTextStyle().bigText(text))
+            .setCategory(Notification.CATEGORY_ALARM)
+            .setContentIntent(screen)
+            .setAutoCancel(true)
+            .setVisibility(Notification.VISIBILITY_PRIVATE)
+            .setPublicVersion(Notification.Builder(this, CHANNEL_REMINDERS)
+                .setSmallIcon(R.drawable.ic_notify).setContentTitle("AURORA: reminder").build())
+        if (option(this, "reminder_screen")) builder.setFullScreenIntent(screen, true)
+        getSystemService(NotificationManager::class.java).notify(id, builder.build())
+        if (option(this, "speak_reminders")) {
+            thread(name = "aurora-say-reminder") {
+                Thread.sleep(1500)                              // after the notification sound
+                Speech.say(this, "Reminder: $text", alarm = true)
+            }
+        }
+    }
 
     private fun notify(channel: String, title: String, text: String) {
         val notification = Notification.Builder(this, channel)

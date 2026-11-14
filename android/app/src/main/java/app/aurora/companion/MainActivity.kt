@@ -8,6 +8,8 @@ import android.net.Uri
 import android.os.PowerManager
 import android.provider.Settings
 import android.widget.Switch
+import android.view.MotionEvent
+import kotlin.concurrent.thread
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.os.Build
@@ -42,6 +44,7 @@ class MainActivity : Activity(), Live.Listener {
     private var chatList: LinearLayout? = null
     private var chatScroll: ScrollView? = null
     private var chatLoaded = false
+    private val recorder = Recorder()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -276,6 +279,18 @@ class MainActivity : Activity(), Live.Listener {
                 InputType.TYPE_TEXT_FLAG_MULTI_LINE
         }
         val send = button("Send") {}
+        val talk = button("🎤") {}.apply {
+            contentDescription = "Hold to talk"
+            setOnTouchListener { view, motion ->
+                when (motion.action) {
+                    MotionEvent.ACTION_DOWN -> { startTalking(input); true }
+                    MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                        view.performClick(); stopTalking(input, send); true
+                    }
+                    else -> false
+                }
+            }
+        }
         val sendNow = {
             val message = input.text.toString().trim()
             if (message.isNotEmpty()) {
@@ -291,6 +306,7 @@ class MainActivity : Activity(), Live.Listener {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             setPadding(px(8), px(4), px(8), px(4))
+            addView(talk)
             addView(input, LinearLayout.LayoutParams(0, -2, 1f))
             addView(send)
         }
@@ -340,8 +356,54 @@ class MainActivity : Activity(), Live.Listener {
         }
     }
 
-    private fun sendChat(message: String, send: Button) {
-        bubble("user", message)
+    private fun startTalking(input: EditText) {
+        if (checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(arrayOf(android.Manifest.permission.RECORD_AUDIO), 2)
+            return
+        }
+        try {
+            recorder.start()
+            input.hint = "Listening… let go to send"
+            input.setHintTextColor(getColor(R.color.accent))
+        } catch (error: Exception) {
+            bubble("note", error.message ?: "The microphone isn't available.")
+        }
+    }
+
+    private fun stopTalking(input: EditText, send: Button) {
+        if (!recorder.active) return
+        val wav = recorder.stop()
+        input.hint = "Message AURORA"
+        input.setHintTextColor(getColor(R.color.muted))
+        if (wav.isEmpty()) {
+            bubble("note", "Hold the 🎤 button while you speak.")
+            return
+        }
+        val heard = bubble("user", "🎤 …")
+        send.isEnabled = false
+        background {
+            val (text, problem) = try {
+                val reply = aurora.hear(wav)
+                if (reply.ok) reply.json.optString("heard") to null else null to reply.error
+            } catch (error: IOException) {
+                null to (error.message ?: "Couldn't reach your PC.")
+            }
+            ui {
+                send.isEnabled = true
+                when {
+                    text == null -> { heard.text = "🎤 " + problem; heard.setTextColor(getColor(R.color.warn)) }
+                    text.isBlank() -> heard.text = "🎤 (I didn't catch that. Hold the button and try again.)"
+                    else -> {
+                        (heard.parent as? android.view.ViewGroup)?.removeView(heard)
+                        sendChat(text, send, spoken = true)
+                    }
+                }
+            }
+        }
+    }
+
+    private fun sendChat(message: String, send: Button, spoken: Boolean = false) {
+        bubble("user", if (spoken) "🎤 $message" else message)
         val thinking = bubble("assistant", "…")
         send.isEnabled = false
         background {
@@ -357,6 +419,10 @@ class MainActivity : Activity(), Live.Listener {
                 if (reply != null) {
                     val sources = reply.optString("sources", "")
                     thinking.text = reply.optString("reply") + if (sources.isNotBlank()) "\n\n$sources" else ""
+                    if (spoken) {                                // you spoke, so AURORA answers aloud
+                        val answer = reply.optString("reply")
+                        thread(name = "aurora-say") { Speech.say(this, answer) }
+                    }
                 } else {
                     thinking.setTextColor(getColor(R.color.warn))
                     thinking.text = problem
@@ -437,6 +503,22 @@ class MainActivity : Activity(), Live.Listener {
                 isChecked = LinkService.enabled(this@MainActivity)
                 setPadding(0, px(6), 0, px(6))
                 setOnCheckedChangeListener { _, on -> LinkService.setEnabled(this@MainActivity, on) }
+            })
+            body.addView(Switch(this).apply {
+                text = "Show reminders full screen (also when locked)"
+                textSize = 15f
+                setTextColor(getColor(R.color.text))
+                isChecked = LinkService.option(this@MainActivity, "reminder_screen")
+                setPadding(0, px(6), 0, px(6))
+                setOnCheckedChangeListener { _, on -> LinkService.setOption(this@MainActivity, "reminder_screen", on) }
+            })
+            body.addView(Switch(this).apply {
+                text = "AURORA says reminders aloud"
+                textSize = 15f
+                setTextColor(getColor(R.color.text))
+                isChecked = LinkService.option(this@MainActivity, "speak_reminders")
+                setPadding(0, px(6), 0, px(6))
+                setOnCheckedChangeListener { _, on -> LinkService.setOption(this@MainActivity, "speak_reminders", on) }
             })
             body.addView(text("Reminders and replies arrive as notifications even when the app is closed. Android " +
                 "shows a quiet \"AURORA\" notification while it's connected.", 13f, R.color.muted))

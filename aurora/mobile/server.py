@@ -27,6 +27,8 @@ API (JSON):
     GET  /api/status                       → AI state, model, CPU/RAM, version
     GET  /api/connection                   → the Wi-Fi address while AURORA listens there
     GET  /api/events?after=N&wait=S        → new messages and due reminders (long polling; events.py)
+    POST /api/voice      (16-bit mono WAV) → {"heard"}: what was said (speech.py; up to 60 s)
+    POST /api/speak      {"text"}          → audio/wav in AURORA's voice
     GET  /api/history                      → the shared conversation (last 40 messages)
     POST /api/chat       {"text"}          → {"reply", "needs_confirmation", "sources"}
     GET  /api/today                        → {"briefing", "reminders"}
@@ -45,10 +47,12 @@ from aurora.config import settings
 from aurora.mobile.devices import DeviceStore, PairingError
 from aurora.mobile.events import EventHub
 from aurora.mobile.signing import NonceCache, SignatureError, verify
+from aurora.mobile.speech import SpeechError
 
 logger = logging.getLogger(__name__)
 
 MAX_BODY = 64 * 1024
+MAX_VOICE_BODY = 2 * 1024 * 1024          # a minute of 16 kHz speech
 SECURITY_HEADERS = {
     "X-Content-Type-Options": "nosniff",
     "X-Frame-Options": "DENY",
@@ -103,12 +107,12 @@ class Handler(BaseHTTPRequestHandler):
         self._send(status, json.dumps(data, ensure_ascii=False, default=str).encode("utf-8"),
                    "application/json; charset=utf-8")
 
-    def _raw_body(self) -> bytes:
+    def _raw_body(self, limit: int = MAX_BODY) -> bytes:
         try:
             length = int(self.headers.get("Content-Length") or 0)
         except ValueError:
             raise ApiError(HTTPStatus.BAD_REQUEST, "Bad request.")
-        if length < 0 or length > MAX_BODY:
+        if length < 0 or length > limit:
             raise ApiError(HTTPStatus.REQUEST_ENTITY_TOO_LARGE, "That's too long.")
         return self.rfile.read(length) if length else b""
 
@@ -175,7 +179,8 @@ class Handler(BaseHTTPRequestHandler):
         store, bridge = server.store, server.bridge
         device = None
         try:
-            raw = self._raw_body() if method == "POST" else b""
+            raw = (self._raw_body(MAX_VOICE_BODY if path == "/api/voice" else MAX_BODY)
+                   if method == "POST" else b"")
             if (method, path) == ("POST", "/api/pair"):
                 if not self._may_pair():
                     store.log("(unpaired)", "pair", "refused: not over USB")
@@ -201,7 +206,21 @@ class Handler(BaseHTTPRequestHandler):
                     raise ApiError(HTTPStatus.BAD_REQUEST, "Bad request.")
                 self._json(HTTPStatus.OK, server.events.since(after, wait, query.get("session")))
                 return                                   # not logged: the phone asks every half minute
-            if (method, path) == ("GET", "/api/status"):
+            if (method, path) in (("POST", "/api/voice"), ("POST", "/api/speak")):
+                if server.speech is None:
+                    raise ApiError(HTTPStatus.SERVICE_UNAVAILABLE, "Speech isn't available on the PC.")
+                try:
+                    if path == "/api/voice":
+                        result = {"heard": server.speech.hear(raw)}
+                    else:
+                        text = str(self._parse(raw).get("text", ""))
+                        audio = server.speech.say(text)
+                        store.log(device.name, what, "allowed")
+                        self._send(HTTPStatus.OK, audio, "audio/wav")
+                        return
+                except SpeechError as error:
+                    raise ApiError(HTTPStatus.UNPROCESSABLE_ENTITY, str(error))
+            elif (method, path) == ("GET", "/api/status"):
                 result = bridge.status()
             elif (method, path) == ("GET", "/api/connection"):
                 result = server.connection()
@@ -262,7 +281,8 @@ class MobileServer:
 
     def __init__(self, bridge, store: DeviceStore | None = None, port: int | None = None,
                  host: str = "127.0.0.1", kind: str = "local", tls: ssl.SSLContext | None = None,
-                 nonces: NonceCache | None = None, connection=None, events: EventHub | None = None):
+                 nonces: NonceCache | None = None, connection=None, events: EventHub | None = None,
+                 speech=None):
         self.bridge = bridge
         self.store = store or DeviceStore()
         self.port = settings.MOBILE_PORT if port is None else port
@@ -272,6 +292,7 @@ class MobileServer:
         self.nonces = nonces or NonceCache()
         self.connection = connection or (lambda: {})
         self.events = events or EventHub()
+        self.speech = speech
         self._http: _Http | None = None
         self._thread: threading.Thread | None = None
 
@@ -293,6 +314,7 @@ class MobileServer:
         http.extra_hosts = () if self.host in ("127.0.0.1", "::1") else (self.host,)
         http.connection = self.connection
         http.events = self.events
+        http.speech = self.speech
         self.port = http.server_address[1]
         self._http = http
         self._thread = threading.Thread(target=http.serve_forever, name=f"aurora-mobile-{self.kind}", daemon=True)

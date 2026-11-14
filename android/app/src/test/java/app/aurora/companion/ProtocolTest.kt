@@ -54,6 +54,22 @@ class ProtocolTest {
     }
 
     @Test
+    fun wav_round_trip() {
+        val pcm = ByteArray(3200) { (it % 7).toByte() }
+        val file = Protocol.wav(pcm, 16000)
+        assertEquals(44 + 3200, file.size)
+        val (back, rate) = Protocol.pcm(file)!!
+        assertEquals(16000, rate)
+        assertTrue(back.contentEquals(pcm))
+        assertNull(Protocol.pcm("not a wav file at all, not even close".toByteArray()))
+    }
+
+    @Test
+    fun snooze_sentence() {
+        assertEquals("remind me in 10 minutes to drink water", Protocol.snooze(" drink water. "))
+    }
+
+    @Test
     fun route_names() {
         assertEquals("USB cable", Protocol.routeName(Protocol.USB_BASE))
         assertEquals("Home Wi-Fi", Protocol.routeName("https://192.168.43.10:8766"))

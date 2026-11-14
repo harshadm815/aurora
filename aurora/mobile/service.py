@@ -18,6 +18,7 @@ from aurora.mobile.devices import DeviceStore
 from aurora.mobile.events import EventHub
 from aurora.mobile.server import MobileServer
 from aurora.mobile.signing import NonceCache
+from aurora.mobile.speech import PhoneSpeech
 from aurora.mobile import usb as usb_module
 from aurora.mobile.usb import UsbLink
 
@@ -28,7 +29,7 @@ class MobileService:
 
     def __init__(self, bridge, store: DeviceStore | None = None, wifi: bool = False,
                  home_networks: list[str] | None = None, ssid=None, address=None, usb: UsbLink | None = None,
-                 check_seconds: float | None = None):
+                 check_seconds: float | None = None, speech=None):
         self.bridge = bridge
         self.store = store or DeviceStore()
         self.nonces = NonceCache()
@@ -36,8 +37,9 @@ class MobileService:
         tls.ensure_certificate(self.cert, self.key)
         self.fingerprint = tls.fingerprint(self.cert)
         self.events = EventHub()
+        self.speech = speech if speech is not None else PhoneSpeech()
         self.local = MobileServer(bridge, self.store, nonces=self.nonces, connection=self.connection,
-                                  events=self.events)
+                                  events=self.events, speech=self.speech)
         self.usb = usb if usb is not None else UsbLink(settings.MOBILE_PORT, usb_module.find_adb())
         self.wifi_enabled = wifi
         self.home_networks = list(home_networks or [])
@@ -84,6 +86,7 @@ class MobileService:
         while not self._stop.wait(self.check_seconds):
             try:
                 self.check_network()
+                self.speech.release_if_idle()
             except Exception:
                 logger.exception("Mobile: network check failed")
 
@@ -112,7 +115,7 @@ class MobileService:
             self._stop_wifi()
             server = MobileServer(self.bridge, self.store, port=settings.MOBILE_WIFI_PORT, host=address,
                                   kind="wifi", tls=tls.server_context(self.cert, self.key), nonces=self.nonces,
-                                  connection=self.connection, events=self.events)
+                                  connection=self.connection, events=self.events, speech=self.speech)
             try:
                 server.start()
                 self._discovery = network.DiscoveryResponder(address, settings.MOBILE_DISCOVERY_PORT,

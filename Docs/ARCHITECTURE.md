@@ -354,7 +354,8 @@ where alone pairing works, and an HTTPS listener for home Wi-Fi), `tls.py`
 (AURORA's own certificate, pinned by the phone), `usb.py` (`adb reverse`
 for a plugged-in phone), `network.py` (Wi-Fi name, address, discovery),
 `service.py` (runs them together; Wi-Fi only on home networks), `events.py` (the feed the
-phone waits on: every finished exchange, from `Backend.exchanged`, and due reminders).
+phone waits on: every finished exchange, from `Backend.exchanged`, and due reminders), `speech.py`
+(the phone's recordings to text with Vosk, replies and reminders to WAV with Piper).
 `aurora/interface/mobile_bridge.py` connects it to the Backend: chat goes
 through `send_message` like Chat (and appears there), plus status,
 history, briefing, reminders and memories. `Backend.set_mobile()`

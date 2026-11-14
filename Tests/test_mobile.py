@@ -658,3 +658,98 @@ def test_the_phone_hears_about_pc_chats_and_reminders(backend, qapp):
     finally:
         backend.set_mobile(False)
     backend.reminder_due.emit({"id": 2, "text": "after"})                                  # disconnected: no error
+
+# --- Speech for the phone (milestone 3) -------------------------------------------------------
+
+from aurora.mobile.speech import PhoneSpeech, SpeechError, make_wav, read_wav
+
+
+class FakeListener:
+    def __init__(self):
+        self.heard = []
+
+    def transcribe(self, audio, rate):
+        self.heard.append((len(audio), rate))
+        return "remind me in five minutes to stretch"
+
+
+class FakeVoice:
+    rate = 22050
+
+    def __init__(self):
+        self.said, self.speed = [], None
+
+    def set_rate(self, words_per_minute):
+        self.speed = words_per_minute
+
+    def _audio(self, text):
+        self.said.append(text)
+        yield b"\x01\x00" * 2205
+
+
+def test_wav_round_trip_and_checks():
+    pcm, rate = read_wav(make_wav(b"\x00\x00" * 1600, 16000))
+    assert rate == 16000 and len(pcm) == 3200
+    with pytest.raises(SpeechError, match="WAV"):
+        read_wav(b"not a wav")
+    with pytest.raises(SpeechError, match="up to"):
+        read_wav(make_wav(b"\x00\x00" * 16000 * 61, 16000))                    # over a minute
+
+
+def test_phone_speech_hears_says_and_lets_go():
+    now = [0.0]
+    listener, voice = FakeListener(), FakeVoice()
+    speech = PhoneSpeech(lambda: listener, lambda: voice, clock=lambda: now[0], keep_seconds=600)
+    assert speech.hear(make_wav(b"\x00\x00" * 8000, 16000)) == "remind me in five minutes to stretch"
+    audio = speech.say("**Done.** It's 14:10.")
+    assert read_wav(audio)[1] == 22050 and voice.said == ["Done. It's 14:10."]          # cleaned for speaking
+    with pytest.raises(SpeechError, match="Nothing"):
+        speech.say("   ")
+    now[0] = 300
+    assert not speech.release_if_idle()
+    now[0] = 1000
+    assert speech.release_if_idle() and speech._listener is None and speech._voice is None
+
+
+def test_speech_unavailable_is_explained():
+    def missing():
+        raise RuntimeError("no model")
+
+    speech = PhoneSpeech(missing, missing)
+    with pytest.raises(SpeechError, match="recognition isn't available"):
+        speech.hear(make_wav(b"\x00\x00" * 100, 16000))
+    with pytest.raises(SpeechError, match="voice isn't available"):
+        speech.say("hello")
+
+
+@pytest.fixture
+def speaking_server(tmp_path):
+    speech = PhoneSpeech(FakeListener, FakeVoice)
+    server = MobileServer(FakeBridge(), DeviceStore(tmp_path / "m.db"), port=0, speech=speech)
+    server.start()
+    _ALLOWED_PORTS.add(server.port)
+    yield server
+    server.stop()
+
+
+def test_voice_and_speak_over_the_api(speaking_server, phone):
+    server = speaking_server
+    token = _paired(server, phone)
+    recording = make_wav(b"\x00\x00" * 16000 * 3, 16000)                         # 3 s: bigger than 64 KB
+    assert len(recording) > 64 * 1024
+    status, data, _ = call(server, "POST", "/api/voice", token=token, raw=recording, phone=phone)
+    assert status == 200 and data["heard"] == "remind me in five minutes to stretch"
+    status, audio, headers = call(server, "POST", "/api/speak", {"text": "Hello"}, token=token, phone=phone)
+    assert status == 200 and headers["Content-Type"] == "audio/wav" and read_wav(audio)[1] == 22050
+    status, data, _ = call(server, "POST", "/api/voice", token=token, raw=b"junk", phone=phone)
+    assert status == 422 and "WAV" in data["error"]
+    assert call(server, "POST", "/api/voice", token=token, raw=recording)[0] == 401            # unsigned
+    assert call(server, "POST", "/api/chat", token=token, raw=b"x" * (100 * 1024))[0] == 413   # only voice is larger
+    log = [(w, o) for _, _, w, o in server.store.recent_log()]
+    assert ("voice", "allowed") in log and ("speak", "allowed") in log
+
+
+def test_no_speech_on_a_server_without_it(server, phone):
+    token = _paired(server, phone)
+    status, data, _ = call(server, "POST", "/api/speak", {"text": "hi"}, token=token, phone=phone)
+    assert status == 503

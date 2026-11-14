@@ -38,6 +38,40 @@ object Protocol {
         return if (pinned.lowercase().startsWith(prefix)) port else null
     }
 
+    /** A 16-bit mono WAV file around [pcm] (what /api/voice expects). */
+    fun wav(pcm: ByteArray, rate: Int): ByteArray {
+        val out = java.io.ByteArrayOutputStream(44 + pcm.size)
+        fun int(v: Int) = out.write(byteArrayOf(v.toByte(), (v shr 8).toByte(), (v shr 16).toByte(), (v shr 24).toByte()))
+        fun short(v: Int) = out.write(byteArrayOf(v.toByte(), (v shr 8).toByte()))
+        out.write("RIFF".toByteArray()); int(36 + pcm.size); out.write("WAVE".toByteArray())
+        out.write("fmt ".toByteArray()); int(16); short(1); short(1); int(rate); int(rate * 2); short(2); short(16)
+        out.write("data".toByteArray()); int(pcm.size); out.write(pcm)
+        return out.toByteArray()
+    }
+
+    /** PCM and sample rate from a 16-bit mono WAV (what /api/speak returns), or null. */
+    fun pcm(wav: ByteArray): Pair<ByteArray, Int>? {
+        fun int(at: Int) = (wav[at].toInt() and 0xff) or ((wav[at + 1].toInt() and 0xff) shl 8) or
+            ((wav[at + 2].toInt() and 0xff) shl 16) or ((wav[at + 3].toInt() and 0xff) shl 24)
+        if (wav.size < 44 || String(wav, 0, 4) != "RIFF" || String(wav, 8, 4) != "WAVE") return null
+        var at = 12
+        var rate = 0
+        while (at + 8 <= wav.size) {
+            val id = String(wav, at, 4)
+            val size = int(at + 4)
+            if (id == "fmt ") rate = int(at + 12)
+            if (id == "data") {
+                val end = minOf(wav.size, at + 8 + size)
+                return if (rate > 0) wav.copyOfRange(at + 8, end) to rate else null
+            }
+            at += 8 + size + (size and 1)
+        }
+        return null
+    }
+
+    /** "Remind me in 10 minutes to …" for the reminder screen's snooze button. */
+    fun snooze(text: String, minutes: Int = 10): String = "remind me in $minutes minutes to ${text.trim().trimEnd('.')}"
+
     fun routeName(base: String?): String = when {
         base == null -> "Not connected"
         base == USB_BASE -> "USB cable"

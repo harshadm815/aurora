@@ -148,10 +148,21 @@ Each ends with something you can use on the phone, tested.
    connected" on the PC tab). Notifications show no content on the lock
    screen. The app asks Android to leave it running when saving battery;
    ColorOS also needs AURORA allowed under App battery management.
-3. **Voice from the phone**: hold to talk; the phone sends the sound to the
-   PC (16 kHz, about 32 KB/s), the PC recognises it with Vosk and answers
-   with the Piper voice, played on the phone. No cloud speech service:
-   Android's own recogniser may send audio to Google, so it isn't used.
+3. **Voice from the phone** (**built, 0.48.0 / app 0.4.0**): hold 🎤 in
+   Chat; the phone records 16 kHz mono (only while held, up to 30 s, never
+   saved) and sends it to `POST /api/voice`; the PC recognises it with Vosk
+   (`aurora/mobile/speech.py`) and the text goes through Chat as usual. If
+   you spoke, the reply is spoken: `POST /api/speak` returns a WAV in the
+   Piper voice, played on the phone. No cloud speech service (Android's own
+   recogniser may send audio to Google, so it isn't used; Android's own
+   voice is used only if the PC can't speak). Measured on this PC:
+   speaking a sentence 0.15 s and recognising one about 1 s once loaded;
+   the first use loads the models (about 10 s and 8 s), freed after 10
+   minutes unused. Words recognised exactly in a Piper-to-Vosk loop test.
+   **Reminders** also got an alarm: sound and vibration (alarm volume), a
+   full-screen reminder screen over the lock screen (Done / Remind me in
+   10 minutes), and AURORA saying the reminder; each can be switched off
+   on the app's PC tab.
 4. **Calling Agent**: call AURORA from the phone, and AURORA can call you
    for a reminder or a briefing you scheduled. The call rings like a real
    call (Android's self-managed `ConnectionService`), uses the phone's echo

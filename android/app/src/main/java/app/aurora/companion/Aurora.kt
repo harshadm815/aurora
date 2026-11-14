@@ -14,8 +14,8 @@ import javax.net.ssl.HttpsURLConnection
 import javax.net.ssl.SSLContext
 import javax.net.ssl.X509TrustManager
 
-/** AURORA's answer: the HTTP status and its JSON (or an error message). */
-class Reply(val status: Int, val json: JSONObject) {
+/** AURORA's answer: the HTTP status and its JSON (or an error message); [audio] for /api/speak. */
+class Reply(val status: Int, val json: JSONObject, val audio: ByteArray? = null) {
     val ok get() = status == 200
     val error: String get() = json.optString("error", "Something went wrong (HTTP $status).")
 }
@@ -96,11 +96,22 @@ class Aurora private constructor(context: Context) {
     fun post(path: String, body: JSONObject, timeoutMs: Int = 10_000): Reply =
         call("POST", path, body.toString().toByteArray(), timeoutMs)
 
+    /** What was said in [wav] (16-bit mono), recognised on the PC. */
+    fun hear(wav: ByteArray): Reply = call("POST", "/api/voice", wav, 60_000, "audio/wav")
+
+    /** [text] in AURORA's voice (a WAV made on the PC), or null if the PC can't speak now. */
+    fun say(text: String): ByteArray? = try {
+        call("POST", "/api/speak", JSONObject().put("text", text).toString().toByteArray(), 60_000).audio
+    } catch (error: IOException) {
+        null
+    }
+
     /** Tries the routes in order (last good, USB, home Wi-Fi, then a discovery broadcast). */
-    fun call(method: String, path: String, body: ByteArray = ByteArray(0), timeoutMs: Int = 10_000): Reply {
+    fun call(method: String, path: String, body: ByteArray = ByteArray(0), timeoutMs: Int = 10_000,
+             type: String = "application/json"): Reply {
         for (base in Protocol.routes(route, wifiBase)) {
             try {
-                return sendAndRemember(base, method, path, body, timeoutMs)
+                return sendAndRemember(base, method, path, body, timeoutMs, type)
             } catch (error: NotConnected) {
                 // try the next route
             }
@@ -108,7 +119,7 @@ class Aurora private constructor(context: Context) {
         val found = discover()
         if (found != null) {
             try {
-                return sendAndRemember(found, method, path, body, timeoutMs)
+                return sendAndRemember(found, method, path, body, timeoutMs, type)
             } catch (error: NotConnected) {
                 // fall through
             }
@@ -117,8 +128,9 @@ class Aurora private constructor(context: Context) {
         throw NotConnected()
     }
 
-    private fun sendAndRemember(base: String, method: String, path: String, body: ByteArray, timeoutMs: Int): Reply {
-        val reply = send(base, method, path, body, signed = true, timeoutMs = timeoutMs)
+    private fun sendAndRemember(base: String, method: String, path: String, body: ByteArray, timeoutMs: Int,
+                                type: String): Reply {
+        val reply = send(base, method, path, body, signed = true, timeoutMs = timeoutMs, type = type)
         remember(base)
         if (path == "/api/status" || path == "/api/connection") learnWifi(reply)
         return reply
@@ -161,7 +173,7 @@ class Aurora private constructor(context: Context) {
     }
 
     private fun send(base: String, method: String, path: String, body: ByteArray, signed: Boolean,
-                     timeoutMs: Int = 10_000): Reply {
+                     timeoutMs: Int = 10_000, type: String = "application/json"): Reply {
         val connection = try {
             URL(base + path).openConnection() as HttpURLConnection
         } catch (error: IOException) {
@@ -173,7 +185,10 @@ class Aurora private constructor(context: Context) {
             connection.connectTimeout = 3000
             connection.readTimeout = timeoutMs
             connection.useCaches = false
-            connection.setRequestProperty("Content-Type", "application/json")
+            connection.setRequestProperty("Content-Type", type)
+            // A fresh connection every time: AURORA closes idle ones after 30 s, and Android would otherwise
+            // reuse a closed one ("unexpected end of stream"), which it doesn't retry for messages and voice.
+            connection.setRequestProperty("Connection", "close")
             if (signed) {
                 val token = prefs.getString("token", null) ?: throw IOException("This phone isn't paired.")
                 val time = (System.currentTimeMillis() / 1000).toString()
@@ -199,6 +214,9 @@ class Aurora private constructor(context: Context) {
             val status = connection.responseCode           // a slow answer (read timeout) is a real error
             if (connection.getHeaderField("Server")?.startsWith("AURORA") != true) throw NotConnected()
             val stream = if (status < 400) connection.inputStream else connection.errorStream
+            if (status == 200 && connection.contentType?.startsWith("audio/") == true) {
+                return Reply(status, JSONObject(), stream.use { it.readBytes() })
+            }
             val text = stream?.bufferedReader()?.use { it.readText() } ?: "{}"
             val json = try { JSONObject(text) } catch (error: Exception) { JSONObject() }
             if (status == 401 && signed && json.optString("error").contains("isn't paired")) forget()

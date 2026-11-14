@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.48.0 — Talk to AURORA from the phone; reminder alarms (2026-11-14)
+
+### Added
+- **Hold to talk** in the phone's Chat (app 0.4.0): the recording is
+  recognised on the PC (Vosk, nothing saved, no cloud), and AURORA's
+  answer is spoken on the phone in its Piper voice.
+- **Reminder alarms on the phone**: sound and vibration through the alarm
+  volume, a full-screen reminder over the lock screen with Done and
+  "Remind me in 10 minutes", and AURORA saying the reminder aloud. Both
+  can be switched off in the app.
+- PC side: `POST /api/voice` (WAV up to a minute) and `POST /api/speak`
+  (`aurora/mobile/speech.py`; models loaded on first use, freed after 10
+  minutes).
+
+### Fixed
+- "Unexpected end of stream" on the phone after a pause: the app reused a
+  connection AURORA had closed; it now opens a fresh one per request.
+
 ## 0.47.0 — Phone notifications and live chat (2026-11-14)
 
 ### Added

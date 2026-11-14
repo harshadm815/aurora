@@ -16,6 +16,7 @@ from aurora.config import settings
 from aurora.mobile import network, tls
 from aurora.mobile.devices import DeviceStore
 from aurora.mobile.events import EventHub
+from aurora.mobile.files import Outbox
 from aurora.mobile.server import MobileServer
 from aurora.mobile.signing import NonceCache
 from aurora.mobile.speech import PhoneSpeech
@@ -38,8 +39,9 @@ class MobileService:
         self.fingerprint = tls.fingerprint(self.cert)
         self.events = EventHub()
         self.speech = speech if speech is not None else PhoneSpeech()
+        self.outbox = Outbox(settings.MOBILE_MAX_FILE_BYTES)
         self.local = MobileServer(bridge, self.store, nonces=self.nonces, connection=self.connection,
-                                  events=self.events, speech=self.speech)
+                                  events=self.events, speech=self.speech, outbox=self.outbox)
         self.usb = usb if usb is not None else UsbLink(settings.MOBILE_PORT, usb_module.find_adb())
         self.wifi_enabled = wifi
         self.home_networks = list(home_networks or [])
@@ -115,7 +117,8 @@ class MobileService:
             self._stop_wifi()
             server = MobileServer(self.bridge, self.store, port=settings.MOBILE_WIFI_PORT, host=address,
                                   kind="wifi", tls=tls.server_context(self.cert, self.key), nonces=self.nonces,
-                                  connection=self.connection, events=self.events, speech=self.speech)
+                                  connection=self.connection, events=self.events, speech=self.speech,
+                                  outbox=self.outbox)
             server.call_lock = self.local.call_lock
             try:
                 server.start()
@@ -151,6 +154,12 @@ class MobileService:
         """Rings the paired phone (it calls back over its own connection)."""
         self.events.publish("call", reason="pc")
         self.speech.warm()                          # ready by the time you answer
+
+    def send_file(self, path) -> str:
+        """Offers a file you chose to the phone, which fetches it at once. Returns its name; raises FileError."""
+        key, offer = self.outbox.offer(path)
+        self.events.publish("file", file=key, name=offer.name, size=offer.size)
+        return offer.name
 
     def describe(self) -> dict:
         wifi = self.wifi

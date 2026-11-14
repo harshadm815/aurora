@@ -171,6 +171,105 @@ class Aurora private constructor(context: Context) {
         }
     }
 
+    // ------------------------------------------------------------------ files (aurora/mobile/files.py)
+
+    /** Runs [block] on the first route where the PC answers (as [call] does). */
+    private fun <T> onAnyRoute(block: (String) -> T): T {
+        for (base in Protocol.routes(route, wifiBase)) {
+            try { return block(base).also { remember(base) } } catch (error: NotConnected) { }
+        }
+        val found = discover()
+        if (found != null) {
+            try { return block(found).also { remember(found) } } catch (error: NotConnected) { }
+        }
+        remember(null)
+        throw NotConnected()
+    }
+
+    /**
+     * Sends a file to the PC's "From phone" folder. [sha256] (hex) is signed with the request, so the PC
+     * keeps the file only if every byte arrives as it was; [open] gives the file's bytes ([size] of them).
+     */
+    fun upload(name: String, size: Long, sha256: String, open: () -> java.io.InputStream,
+               progress: (Long) -> Unit = {}): Reply = onAnyRoute { base ->
+        val path = "/api/file?name=" + java.net.URLEncoder.encode(name, "UTF-8").replace("+", "%20")
+        val connection = signedConnection(base, "POST", path, 120_000, sha256)
+        try {
+            connection.setRequestProperty("Content-Type", "application/octet-stream")
+            connection.setRequestProperty("X-Aurora-Content-Sha256", sha256)
+            connection.doOutput = true
+            connection.setFixedLengthStreamingMode(size)
+            try { connection.connect() } catch (error: IOException) { throw NotConnected() }
+            connection.outputStream.use { out ->
+                open().use { input ->
+                    val buffer = ByteArray(64 * 1024)
+                    var sent = 0L
+                    while (true) {
+                        val n = input.read(buffer)
+                        if (n < 0) break
+                        out.write(buffer, 0, n)
+                        sent += n
+                        progress(sent)
+                    }
+                }
+            }
+            reply(connection, signed = true)
+        } finally {
+            connection.disconnect()
+        }
+    }
+
+    /** Fetches a file the PC offered (a "file" event); [save] gets its name, size and bytes. */
+    fun <T> download(id: String, save: (name: String, size: Long, input: java.io.InputStream) -> T): T = onAnyRoute { base ->
+        val path = "/api/file?id=" + java.net.URLEncoder.encode(id, "UTF-8")
+        val connection = signedConnection(base, "GET", path, 60_000, null)
+        try {
+            try { connection.connect() } catch (error: IOException) { throw NotConnected() }
+            val status = connection.responseCode
+            if (connection.getHeaderField("Server")?.startsWith("AURORA") != true) throw NotConnected()
+            if (status != 200) throw IOException(reply(connection, signed = true).error)
+            val name = java.net.URLDecoder.decode(connection.getHeaderField("X-Aurora-Name") ?: "file", "UTF-8")
+            connection.inputStream.use { save(name, connection.contentLengthLong, it) }
+        } finally {
+            connection.disconnect()
+        }
+    }
+
+    /** A signed request, not yet connected ([bodyHash]: the signed SHA-256 of a streamed body). */
+    private fun signedConnection(base: String, method: String, path: String, timeoutMs: Int, bodyHash: String?): HttpURLConnection {
+        val connection = try {
+            URL(base + path).openConnection() as HttpURLConnection
+        } catch (error: IOException) {
+            throw NotConnected()
+        }
+        if (connection is HttpsURLConnection) pin(connection)
+        connection.requestMethod = method
+        connection.connectTimeout = 3000
+        connection.readTimeout = timeoutMs
+        connection.useCaches = false
+        connection.setRequestProperty("Connection", "close")
+        val token = prefs.getString("token", null) ?: throw IOException("This phone isn't paired.")
+        val time = (System.currentTimeMillis() / 1000).toString()
+        val nonce = ByteArray(12).also { random.nextBytes(it) }.joinToString("") { "%02x".format(it) }
+        connection.setRequestProperty("Authorization", "Bearer $token")
+        connection.setRequestProperty("X-Aurora-Time", time)
+        connection.setRequestProperty("X-Aurora-Nonce", nonce)
+        connection.setRequestProperty("X-Aurora-Signature", PhoneKey.sign(
+            if (bodyHash != null) Protocol.canonicalHash(method, path, time, nonce, bodyHash)
+            else Protocol.canonical(method, path, time, nonce, ByteArray(0))))
+        return connection
+    }
+
+    private fun reply(connection: HttpURLConnection, signed: Boolean): Reply {
+        val status = connection.responseCode
+        if (connection.getHeaderField("Server")?.startsWith("AURORA") != true) throw NotConnected()
+        val stream = if (status < 400) connection.inputStream else connection.errorStream
+        val text = stream?.bufferedReader()?.use { it.readText() } ?: "{}"
+        val json = try { JSONObject(text) } catch (error: Exception) { JSONObject() }
+        if (status == 401 && signed && json.optString("error").contains("isn't paired")) forget()
+        return Reply(status, json)
+    }
+
     /** Tries the routes in order (last good, USB, home Wi-Fi, then a discovery broadcast). */
     fun call(method: String, path: String, body: ByteArray = ByteArray(0), timeoutMs: Int = 10_000,
              type: String = "application/json"): Reply {

@@ -18,6 +18,14 @@ class ProtocolTest {
     }
 
     @Test
+    fun a_streamed_file_signs_its_checksum_the_same_way() {
+        // A file's request signs the checksum worked out beforehand: identical to signing the bytes.
+        val bytes = "{}".toByteArray()
+        val streamed = Protocol.canonicalHash("POST", "/api/file?name=a.txt", "1", "n0nce123", Protocol.sha256Hex(bytes).uppercase())
+        assertEquals(String(Protocol.canonical("POST", "/api/file?name=a.txt", "1", "n0nce123", bytes)), String(streamed))
+    }
+
+    @Test
     fun empty_body_hash() {
         assertEquals("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", Protocol.sha256Hex(ByteArray(0)))
     }

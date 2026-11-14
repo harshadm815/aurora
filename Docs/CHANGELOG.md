@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.50.0 — Files between the phone and the PC (2026-11-14)
+
+### Added
+- **Share to AURORA** from any app on the phone (app 0.6.0): "AURORA (PC)"
+  in the share menu sends photos, documents or anything else (up to 20 at
+  a time, 500 MB each) to **Documents › From phone** on the PC. Shared
+  text becomes a .txt file. A file with the same name is never
+  overwritten: the new one is "photo (2).jpg". The PC shows a tray notice.
+- **Send a file to my phone…** in Settings → Phone: the phone saves it in
+  **Downloads › AURORA** and shows a notification that opens it.
+- Safety: the phone signs each file's SHA-256 with its key, and the PC
+  keeps the file only if every byte matches. File names can't reach
+  outside the folder (no `..\`, reserved or hidden names). Received
+  files are marked as coming from another device, as browser downloads
+  are, and nothing is opened or run. A file from the PC is fetchable only
+  by a random id for one hour, and only files you picked are offered. The
+  access log notes "file received/sent", never the name. Neither side
+  fills its disk (500 MB stays free on the PC).
+- PC side: `aurora/mobile/files.py`, `POST/GET /api/file`.
+
 ## 0.49.0 — The Calling Agent (2026-11-14)
 
 ### Added

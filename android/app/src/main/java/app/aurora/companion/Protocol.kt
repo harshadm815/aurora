@@ -17,6 +17,10 @@ object Protocol {
     fun canonical(method: String, path: String, time: String, nonce: String, body: ByteArray): ByteArray =
         listOf(method.uppercase(), path, time, nonce, sha256Hex(body)).joinToString("\n").toByteArray(Charsets.UTF_8)
 
+    /** The same, for a body sent in pieces: [bodyHash] is its SHA-256 (hex), worked out beforehand. */
+    fun canonicalHash(method: String, path: String, time: String, nonce: String, bodyHash: String): ByteArray =
+        listOf(method.uppercase(), path, time, nonce, bodyHash.lowercase()).joinToString("\n").toByteArray(Charsets.UTF_8)
+
     /** True only for the exact certificate AURORA showed at pairing (SHA-256 of its DER bytes). */
     fun certificateMatches(der: ByteArray, pinned: String?): Boolean =
         !pinned.isNullOrBlank() && MessageDigest.isEqual(

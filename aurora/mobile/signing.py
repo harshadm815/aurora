@@ -17,6 +17,7 @@ useless on any other device.
 import base64
 import binascii
 import hashlib
+import re
 import threading
 import time
 
@@ -43,8 +44,11 @@ def load_public_key(text: str) -> ec.EllipticCurvePublicKey:
     return key
 
 
-def canonical(method: str, path: str, timestamp: str, nonce: str, body: bytes) -> bytes:
-    return "\n".join((method.upper(), path, timestamp, nonce, hashlib.sha256(body).hexdigest())).encode("utf-8")
+def canonical(method: str, path: str, timestamp: str, nonce: str, body: bytes,
+              body_hash: str | None = None) -> bytes:
+    """``body_hash`` (hex SHA-256) instead of ``body`` for a file that's checked as it arrives (files.py)."""
+    digest = body_hash.lower() if body_hash is not None else hashlib.sha256(body).hexdigest()
+    return "\n".join((method.upper(), path, timestamp, nonce, digest)).encode("utf-8")
 
 
 class NonceCache:
@@ -67,7 +71,8 @@ class NonceCache:
 
 
 def verify(public_key: str, method: str, path: str, timestamp: str | None, nonce: str | None,
-           signature: str | None, body: bytes, nonces: NonceCache, clock=time.time) -> None:
+           signature: str | None, body: bytes, nonces: NonceCache, clock=time.time,
+           body_hash: str | None = None) -> None:
     """Raises SignatureError unless the request was signed just now by this phone's key."""
     if not (timestamp and nonce and signature):
         raise SignatureError("The request isn't signed.")
@@ -77,11 +82,13 @@ def verify(public_key: str, method: str, path: str, timestamp: str | None, nonce
         sent = int(timestamp)
     except ValueError:
         raise SignatureError("The request isn't signed properly.")
+    if body_hash is not None and not re.fullmatch(r"[0-9a-fA-F]{64}", body_hash):
+        raise SignatureError("The request isn't signed properly.")
     if abs(clock() - sent) > MAX_SKEW_SECONDS:
         raise SignatureError("The phone's clock and the PC's clock disagree by more than two minutes.")
     try:
         raw = base64.b64decode(signature, validate=True)
-        load_public_key(public_key).verify(raw, canonical(method, path, timestamp, nonce, body),
+        load_public_key(public_key).verify(raw, canonical(method, path, timestamp, nonce, body, body_hash),
                                            ec.ECDSA(hashes.SHA256()))
     except (InvalidSignature, ValueError, binascii.Error):
         raise SignatureError("The request wasn't signed by the paired phone.")

@@ -6,6 +6,8 @@ Double-click (or single click) the icon to open the window. The tooltip
 and the enabled menu items follow AURORA's real state.
 """
 
+from pathlib import Path
+
 from PySide6.QtCore import QObject, Signal
 from PySide6.QtGui import QAction, QIcon
 from PySide6.QtWidgets import QMenu, QSystemTrayIcon
@@ -67,6 +69,8 @@ class Tray(QObject):
         # Reminders and scheduled tasks are always shown (you asked for them).
         backend.reminder_due.connect(lambda data: self.notify("AURORA: reminder", f"⏰ {data.get('text', '')}"))
         backend.reminders_missed.connect(self.missed)
+        backend.phone_file.connect(lambda path, device: self.notify(
+            "AURORA: from your phone", f"📎 {Path(path).name} is in Documents › {Path(path).parent.name}"))
         backend.task_ran.connect(self.task_ran)
 
     def notify(self, title: str, message: str, warning: bool = False) -> None:

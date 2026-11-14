@@ -225,6 +225,11 @@ class SettingsView(BaseView):
         self.call_button.setToolTip("AURORA rings your phone; answer it to talk (the phone must be connected).")
         self.call_button.clicked.connect(self._call_phone)
         pair_row.addWidget(self.call_button)
+        self.send_file_button = QPushButton("📎 Send a file to my phone…")
+        self.send_file_button.setToolTip("The phone saves it in Downloads › AURORA. Files you share to AURORA "
+                                         "from the phone land in Documents › From phone.")
+        self.send_file_button.clicked.connect(self._send_file_to_phone)
+        pair_row.addWidget(self.send_file_button)
         pair_row.addStretch(1)
         phone.add_layout(pair_row)
         self.device_rows = QVBoxLayout()
@@ -565,6 +570,7 @@ class SettingsView(BaseView):
         if not running and not settings.MOBILE_DATABASE_PATH.is_file():
             self.pair_button.setEnabled(False)
             self.call_button.setEnabled(False)
+            self.send_file_button.setEnabled(False)
             self.device_rows.addWidget(label("No phone paired yet.", "Faint"))     # nothing to read (or create)
             self.phone_activity.setText("")
             return
@@ -577,6 +583,7 @@ class SettingsView(BaseView):
             return
         self.pair_button.setEnabled(running and not devices)
         self.call_button.setEnabled(running and bool(devices))
+        self.send_file_button.setEnabled(running and bool(devices))
         self.pair_button.setToolTip("Only one phone can be paired. Disconnect it to pair another." if devices else
                                     "Shows a one-time code to type in the AURORA app (phone plugged in by USB).")
         if not devices:
@@ -611,6 +618,23 @@ class SettingsView(BaseView):
         if self.backend.mobile is not None:
             self.backend.mobile.call_phone()
             self._status("Calling your phone… (it rings if the AURORA app is connected)")
+
+    def _send_file_to_phone(self):
+        from PySide6.QtWidgets import QFileDialog
+        from aurora.mobile.files import FileError
+
+        if self.backend.mobile is None:
+            return
+        start = str(settings.DOCUMENTS_DIR) if settings.DOCUMENTS_DIR.is_dir() else ""
+        path, _ = QFileDialog.getOpenFileName(self, "Send a file to my phone", start)
+        if not path:
+            return
+        try:
+            name = self.backend.mobile.send_file(path)
+        except (FileError, OSError) as error:
+            QMessageBox.information(self, "Send a file to my phone", str(error))
+            return
+        self._status(f"Sending {name} to your phone… (it arrives in Downloads › AURORA while the app is connected)")
 
     def _pair_phone(self):
         from aurora.mobile.devices import PairingError

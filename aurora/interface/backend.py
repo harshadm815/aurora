@@ -175,6 +175,7 @@ class Backend(QObject):
     remote_exchange = Signal(str, str, str)   # a phone's message and AURORA's reply: device, text, reply
     exchanged = Signal(str, str, str)         # every finished exchange: source ("pc" | "phone"), text, reply
     mobile_changed = Signal(bool)             # the phone server started / stopped
+    phone_file = Signal(str, str)             # a file shared from the phone was saved: path, device
 
     def __init__(self, engine_factory: Callable | None = None, parent=None):
         super().__init__(parent)

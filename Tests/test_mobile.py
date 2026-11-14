@@ -16,6 +16,7 @@ import sqlite3
 import ssl
 import threading
 import time
+import urllib.parse
 from datetime import datetime, timedelta
 
 import pytest
@@ -978,3 +979,142 @@ def test_call_my_phone_rings_through_the_event_feed(tmp_path):
                             speech=speech)
     service.call_phone()
     assert service.events.since(0)["events"][-1]["kind"] == "call" and speech.warmed     # models load while it rings
+
+# --- Files (milestone 5) ------------------------------------------------------------------
+
+from aurora.mobile import files as phone_files  # noqa: E402
+
+
+@pytest.mark.parametrize("given, kept", [
+    ("photo.jpg", "photo.jpg"),
+    (r"..\..\Windows\win.ini", "win.ini"),
+    ("../../etc/passwd", "passwd"),
+    (r"C:\Users\x\a.txt", "a.txt"),
+    ("CON.txt", "_CON.txt"),
+    ("nul", "_nul"),
+    ("a<b>c:d|e?.pdf", "a b c d e.pdf"),
+    ("   ", "shared file"),
+    (".hidden", "hidden"),
+    ("...", "shared file"),
+    ("trailing. . .", "trailing"),
+    ("x" * 300 + ".png", "x" * 116 + ".png"),
+])
+def test_shared_file_names_stay_in_the_folder(given, kept):
+    assert phone_files.safe_name(given) == kept
+
+
+def _upload(server, phone, token, data, name="photo.jpg", claimed=None):
+    path = "/api/file?name=" + urllib.parse.quote(name)
+    digest = claimed or hashlib.sha256(data).hexdigest()
+    when, nonce = str(int(time.time())), secrets.token_urlsafe(12)
+    signature = phone.key.sign(signing.canonical("POST", path, when, nonce, b"", digest), ec.ECDSA(hashes.SHA256()))
+    headers = {"X-Aurora-Time": when, "X-Aurora-Nonce": nonce, "X-Aurora-Signature": base64.b64encode(signature).decode(),
+               "X-Aurora-Content-Sha256": hashlib.sha256(data).hexdigest(), "Content-Type": "application/octet-stream"}
+    return call(server, "POST", path, raw=data, token=token, headers=headers)
+
+
+@pytest.fixture
+def received(server, tmp_path, monkeypatch):
+    seen = []
+    server.fake.file_received = lambda path, device: seen.append((path.name, device))
+    return seen
+
+
+def test_a_shared_file_is_saved_and_never_overwrites(server, phone, received, tmp_path):
+    token = _paired(server, phone)
+    folder = settings.MOBILE_FILES_DIR
+    for content in (b"first", b"second", b"third"):
+        status, data, _ = _upload(server, phone, token, content)
+        assert status == 200, data
+    assert sorted(p.name for p in folder.iterdir()) == ["photo (2).jpg", "photo (3).jpg", "photo.jpg"]
+    assert (folder / "photo.jpg").read_bytes() == b"first" and (folder / "photo (3).jpg").read_bytes() == b"third"
+    assert data == {"saved": "photo (3).jpg", "folder": "From phone"}
+    assert received[-1] == ("photo (3).jpg", "Pixel")
+    status, data, _ = _upload(server, phone, token, b"evil", name=r"..\..\evil.bat")
+    assert status == 200 and data["saved"] == "evil.bat" and (folder / "evil.bat").is_file()
+    assert not (tmp_path / "evil.bat").exists()
+    assert not any(p.name.endswith(".part") for p in folder.iterdir())
+    log = " ".join(" ".join(map(str, row)) for row in server.store.recent_log(20))
+    assert "photo" not in log and "evil" not in log                                   # names never logged
+
+
+def test_a_damaged_or_unsigned_file_is_thrown_away(server, phone, received):
+    token = _paired(server, phone)
+    status, data, _ = _upload(server, phone, token, b"real content", claimed="00" * 32)
+    assert status == 401                                       # the signature covers a different checksum
+    path = "/api/file?name=a.txt"
+    headers = phone.sign("POST", path)                          # signed without a checksum at all
+    headers["X-Aurora-Content-Sha256"] = hashlib.sha256(b"x").hexdigest()
+    assert call(server, "POST", path, raw=b"x", token=token, headers=headers)[0] == 401
+    assert _upload(server, phone, None, b"x")[0] == 401         # no device key
+    # signed and claimed checksum agree, but the bytes on the wire are different
+    data = b"what the phone meant"
+    path = "/api/file?name=b.txt"
+    digest = hashlib.sha256(data).hexdigest()
+    when, nonce = str(int(time.time())), secrets.token_urlsafe(12)
+    signature = phone.key.sign(signing.canonical("POST", path, when, nonce, b"", digest), ec.ECDSA(hashes.SHA256()))
+    headers = {"X-Aurora-Time": when, "X-Aurora-Nonce": nonce, "X-Aurora-Signature": base64.b64encode(signature).decode(),
+               "X-Aurora-Content-Sha256": digest}
+    status, answer, _ = call(server, "POST", path, raw=b"what an attacker sent", token=token, headers=headers)
+    assert status == 422 and "damaged" in answer["error"]
+    folder = settings.MOBILE_FILES_DIR
+    assert not folder.exists() or list(folder.iterdir()) == []
+    assert received == []
+
+
+def test_too_big_or_empty_files_are_refused(server, phone, received, monkeypatch):
+    token = _paired(server, phone)
+    server._http.max_file = 10
+    status, data, _ = _upload(server, phone, token, b"x" * 11)
+    assert status == 422 and "too big" in data["error"]
+    assert _upload(server, phone, token, b"")[0] == 422
+    assert received == []
+
+
+def test_files_from_the_pc_are_fetched_by_their_id_only(server, phone, tmp_path):
+    token = _paired(server, phone)
+    shared = tmp_path / "report.pdf"
+    shared.write_bytes(b"%PDF pretend")
+    key, offer = server.outbox.offer(shared)
+    status, body, headers = call(server, "GET", f"/api/file?id={key}", token=token, phone=phone)
+    assert status == 200 and body == b"%PDF pretend"
+    assert headers["X-Aurora-Name"] == "report.pdf" and headers["Content-Type"] == "application/octet-stream"
+    assert call(server, "GET", "/api/file?id=guess", token=token, phone=phone)[0] == 404
+    assert call(server, "GET", f"/api/file?id={key}", token=token)[0] == 401               # unsigned
+    shared.write_bytes(b"changed since")                                                    # changed: not offered
+    assert call(server, "GET", f"/api/file?id={key}", token=token, phone=phone)[0] == 404
+
+
+def test_the_outbox_forgets_after_an_hour(tmp_path):
+    now = [1000.0]
+    box = phone_files.Outbox(limit=100, clock=lambda: now[0])
+    path = tmp_path / "a.txt"
+    path.write_text("hello")
+    key, _ = box.offer(path)
+    assert box.get(key).name == "a.txt"
+    now[0] += phone_files.OUTBOX_SECONDS + 1
+    assert box.get(key) is None
+    with pytest.raises(phone_files.FileError):
+        box.offer(tmp_path / "missing.txt")
+    (tmp_path / "big.bin").write_bytes(b"x" * 101)
+    with pytest.raises(phone_files.FileError):
+        box.offer(tmp_path / "big.bin")
+
+
+def test_sending_a_file_tells_the_phone(tmp_path):
+    service = MobileService(FakeBridge(), DeviceStore(tmp_path / "m.db"), usb=FakeUsb(), check_seconds=0,
+                            speech=CallSpeech([]))
+    path = tmp_path / "notes.txt"
+    path.write_text("hello")
+    assert service.send_file(path) == "notes.txt"
+    event = service.events.since(0)["events"][-1]
+    assert event["kind"] == "file" and event["name"] == "notes.txt" and event["size"] == 5
+    assert service.outbox.get(event["file"]).path == path
+
+
+def test_a_large_file_streams_through_in_pieces(server, phone, received):
+    token = _paired(server, phone)
+    data = secrets.token_bytes(3 * 1024 * 1024 + 7)           # several 256 KB pieces and a remainder
+    status, answer, _ = _upload(server, phone, token, data, name="video.mp4")
+    assert status == 200, answer
+    assert (settings.MOBILE_FILES_DIR / "video.mp4").read_bytes() == data

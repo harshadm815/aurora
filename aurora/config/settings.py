@@ -9,7 +9,7 @@ import sys
 from pathlib import Path
 
 APP_NAME = "AURORA"
-VERSION = "0.49.0"
+VERSION = "0.50.0"
 
 USER_NAME = "Harry"
 
@@ -343,6 +343,8 @@ MOBILE_HOST_SUFFIXES = (".ts.net",)                           # host names accep
 MOBILE_MAX_PHONES = 1                                         # only your phone
 MOBILE_ADB_PATH = None                                        # adb.exe for the USB link; None: look for it
 MOBILE_WIFI_CHECK_SECONDS = 20                                # how often to check which network the PC is on
+MOBILE_FILES_DIR = DOCUMENTS_DIR / "From phone"               # what you share to AURORA from the phone
+MOBILE_MAX_FILE_BYTES = 500 * 1024 * 1024                     # largest file either way
 # Voice activity detection (aurora/voice/vad.py): when you start and stop talking.
 VOICE_NO_SPEECH_SECONDS = 5        # Stop listening if nobody starts speaking.
 VOICE_VAD_RATIO = 3.0              # Speech must be this many times louder than the room.

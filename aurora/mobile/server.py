@@ -35,6 +35,8 @@ API (JSON):
     GET  /api/today                        → {"briefing", "reminders"}
     GET  /api/memories                     → saved facts (if allowed)
     POST /api/unpair                       → this phone disconnects itself
+    POST /api/file?name=N  (the file)      → {"saved", "folder"}: kept in "From phone", never overwriting
+    GET  /api/file?id=I                    → a file you sent from the PC (files.py)
 """
 
 import json
@@ -42,11 +44,14 @@ import logging
 import ssl
 import threading
 from http import HTTPStatus
+from pathlib import Path
+from urllib.parse import quote
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from aurora.config import settings
 from aurora.mobile.devices import DeviceStore, PairingError
 from aurora.mobile.events import EventHub
+from aurora.mobile.files import FileError, Outbox, receive
 from aurora.mobile.signing import NonceCache, SignatureError, verify
 from aurora.mobile.call import CallSession
 from aurora.mobile.speech import SpeechError
@@ -128,7 +133,7 @@ class Handler(BaseHTTPRequestHandler):
             raise ApiError(HTTPStatus.BAD_REQUEST, "Bad request.")
         return data
 
-    def _device(self, method: str, path: str, raw: bytes, signed_path: str):
+    def _device(self, method: str, path: str, raw: bytes, signed_path: str, body_hash: str | None = None):
         header = self.headers.get("Authorization", "")
         token = header[7:].strip() if header.startswith("Bearer ") else None
         device = self.server.store.authenticate(token)
@@ -137,7 +142,7 @@ class Handler(BaseHTTPRequestHandler):
         try:
             verify(device.public_key, method, signed_path, self.headers.get("X-Aurora-Time"),
                    self.headers.get("X-Aurora-Nonce"), self.headers.get("X-Aurora-Signature"), raw,
-                   self.server.nonces)
+                   self.server.nonces, body_hash=body_hash)
         except SignatureError as error:
             self.server.store.log(device.name, path[5:], "refused: not signed by the phone")
             raise ApiError(HTTPStatus.UNAUTHORIZED, str(error))
@@ -181,6 +186,14 @@ class Handler(BaseHTTPRequestHandler):
         store, bridge = server.store, server.bridge
         device = None
         try:
+            if path == "/api/file":                    # streamed: checked against the signed SHA-256 as it arrives
+                if method == "POST":
+                    claimed = self.headers.get("X-Aurora-Content-Sha256") or ""
+                    device = self._device(method, path, b"", full, body_hash=claimed)
+                else:
+                    device = self._device(method, path, b"", full)
+                self._file(method, device, self._query(full))
+                return
             raw = (self._raw_body(MAX_VOICE_BODY if path == "/api/voice" else MAX_BODY)
                    if method == "POST" else b"")
             if (method, path) == ("POST", "/api/pair"):
@@ -255,6 +268,8 @@ class Handler(BaseHTTPRequestHandler):
             store.log(device.name, what, "allowed")
             self._json(HTTPStatus.OK, result)
         except ApiError as error:
+            if path == "/api/file" and method == "POST":
+                self.close_connection = True           # the unread file mustn't be taken for the next request
             if device is not None:
                 store.log(device.name, path[5:], "refused")
             self._json(error.status, {"error": str(error)})
@@ -262,6 +277,53 @@ class Handler(BaseHTTPRequestHandler):
             logger.exception("Mobile: request failed")
             self._json(HTTPStatus.INTERNAL_SERVER_ERROR, {"error": "Something went wrong on the PC."})
 
+
+    def _file(self, method: str, device, query: dict) -> None:
+        server = self.server
+        if method == "POST":
+            try:
+                length = int(self.headers.get("Content-Length") or 0)
+            except ValueError:
+                raise ApiError(HTTPStatus.BAD_REQUEST, "Bad request.")
+            try:
+                saved = receive(self.rfile, length, Path(server.files_dir), str(query.get("name", "")),
+                                self.headers.get("X-Aurora-Content-Sha256", ""), server.max_file)
+            except FileError as error:
+                self.close_connection = True            # the rest of the body may still be on its way
+                raise ApiError(HTTPStatus.UNPROCESSABLE_ENTITY, str(error))
+            except OSError:
+                self.close_connection = True
+                logger.warning("Mobile: a file from the phone couldn't be saved")
+                raise ApiError(HTTPStatus.INTERNAL_SERVER_ERROR, "The PC couldn't save that file.")
+            server.store.log(device.name, "file", "received")   # never the file's name
+            try:
+                server.bridge.file_received(saved, device.name)
+            except Exception:
+                logger.exception("Mobile: couldn't announce a received file")
+            self._json(HTTPStatus.OK, {"saved": saved.name, "folder": saved.parent.name})
+            return
+        offer = server.outbox.get(query.get("id", ""))
+        if offer is None:
+            raise ApiError(HTTPStatus.NOT_FOUND, "That file is no longer offered. Send it again from the PC.")
+        server.store.log(device.name, "file", "sent")
+        left = offer.size
+        with open(offer.path, "rb") as source:
+            self.send_response(HTTPStatus.OK)
+            self.send_header("Content-Type", "application/octet-stream")
+            self.send_header("Content-Length", str(offer.size))
+            self.send_header("X-Aurora-Name", quote(offer.name))
+            self.send_header("Cache-Control", "no-store")
+            for name, value in SECURITY_HEADERS.items():
+                self.send_header(name, value)
+            self.end_headers()
+            while left:
+                chunk = source.read(min(256 * 1024, left))
+                if not chunk:
+                    break
+                self.wfile.write(chunk)
+                left -= len(chunk)
+        if left:
+            self.close_connection = True                 # changed while sending: the phone sees it's short
 
     def _call(self, device, query: dict) -> None:
         server = self.server
@@ -312,8 +374,10 @@ class MobileServer:
     def __init__(self, bridge, store: DeviceStore | None = None, port: int | None = None,
                  host: str = "127.0.0.1", kind: str = "local", tls: ssl.SSLContext | None = None,
                  nonces: NonceCache | None = None, connection=None, events: EventHub | None = None,
-                 speech=None):
+                 speech=None, outbox: Outbox | None = None, files_dir=None):
         self.bridge = bridge
+        self.outbox = outbox or Outbox(settings.MOBILE_MAX_FILE_BYTES)
+        self.files_dir = files_dir
         self.store = store or DeviceStore()
         self.port = settings.MOBILE_PORT if port is None else port
         self.host = host
@@ -347,6 +411,9 @@ class MobileServer:
         http.events = self.events
         http.speech = self.speech
         http.call_lock = self.call_lock
+        http.outbox = self.outbox
+        http.files_dir = self.files_dir or settings.MOBILE_FILES_DIR     # looked up now (tests change it)
+        http.max_file = settings.MOBILE_MAX_FILE_BYTES
         self.port = http.server_address[1]
         self._http = http
         self._thread = threading.Thread(target=http.serve_forever, name=f"aurora-mobile-{self.kind}", daemon=True)

@@ -183,8 +183,16 @@ Each ends with something you can use on the phone, tested.
    talking; the first call after a quiet spell waits about 10 s while
    the voice and recogniser load (when AURORA calls you they load while
    it rings).
-5. **Files**: share anything to AURORA from the phone's share menu (saved
-   in a "From phone" folder, never overwriting) and send files from the PC.
+5. **Files** (**built, 0.50.0 / app 0.6.0**): "AURORA (PC)" in the
+   phone's share menu sends files (or text, as a .txt) to Documents › From
+   phone, never overwriting ("photo (2).jpg"); "Send a file to my phone…"
+   in Settings → Phone puts one in the phone's Downloads › AURORA. Files
+   stream in both directions (up to 500 MB). The phone signs the file's
+   SHA-256 up front and the PC checks every byte against it before
+   keeping it (`aurora/mobile/files.py`); names are cleaned so nothing
+   lands outside the folder, received files get Windows' "from another
+   device" mark, and the PC offers a file only by a random id for an
+   hour.
 6. **Away from home and audit**: Tailscale route, poor-network behaviour,
    battery use over a day, a security review of everything the phone can
    reach.

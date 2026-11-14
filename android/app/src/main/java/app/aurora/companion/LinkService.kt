@@ -148,8 +148,27 @@ class LinkService : Service(), Live.Listener {
                 Calls.ring(this, "reminder", event.optString("text"))
             } else remind(event.optString("text"))
             "call" -> Calls.ring(this, event.optString("reason", "pc"), "")
+            "file" -> fetch(event.optString("file"), event.optString("name", "file"))
             "message" -> if (event.optString("source") == "phone" && !Live.visible)
                 notify(CHANNEL_REPLIES, "AURORA replied", event.optString("reply"))
+        }
+    }
+
+    /** A file you sent from the PC: saved in Downloads/AURORA; the notification opens it. */
+    private fun fetch(id: String, name: String) {
+        if (id.isBlank()) return
+        thread(name = "aurora-file") {
+            try {
+                val uri = Aurora.get(this).download(id) { real, size, input -> Files.saveDownload(this, real, size, input) }
+                val open = if (uri.scheme == "content") PendingIntent.getActivity(
+                    this, nextId, Intent(Intent.ACTION_VIEW).setDataAndType(uri, Files.mimeOf(name))
+                        .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK),
+                    PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+                ) else openApp()
+                notify(CHANNEL_REPLIES, "From your PC", "$name is in Downloads › ${Files.FOLDER}. Tap to open.", open)
+            } catch (error: IOException) {
+                notify(CHANNEL_REPLIES, "A file from your PC didn't arrive", error.message ?: "Send it again from the PC.")
+            }
         }
     }
 
@@ -189,13 +208,13 @@ class LinkService : Service(), Live.Listener {
         }
     }
 
-    private fun notify(channel: String, title: String, text: String) {
+    private fun notify(channel: String, title: String, text: String, tap: PendingIntent? = null) {
         val notification = Notification.Builder(this, channel)
             .setSmallIcon(R.drawable.ic_notify)
             .setContentTitle(title)
             .setContentText(text)
             .setStyle(Notification.BigTextStyle().bigText(text))
-            .setContentIntent(openApp())
+            .setContentIntent(tap ?: openApp())
             .setAutoCancel(true)
             .setVisibility(Notification.VISIBILITY_PRIVATE)      // the lock screen shows no content
             .setPublicVersion(Notification.Builder(this, channel)

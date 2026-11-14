@@ -91,6 +91,10 @@ class MobileBridge:
         return [{"text": r.text, "due": r.due.isoformat(timespec="minutes")}
                 for r in tool.scheduler.shown_since(midnight)]
 
+    def file_received(self, path, device: str) -> None:
+        """A file the phone shared was saved; tell the PC (a tray notice)."""
+        self.backend.phone_file.emit(str(path), device)
+
     def memories(self) -> list[dict]:
         engine = self.backend.engine
         if engine is None:

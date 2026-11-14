@@ -9,6 +9,8 @@ through the same Host check, device key and signature as everything else.
 Events (kept in memory only, the last EVENT_KEEP of them):
     {"id", "kind": "message", "source": "pc" | "phone", "text", "reply", "time"}
     {"id", "kind": "reminder", "text", "time"}
+    {"id", "kind": "call", "reason", "time"}           AURORA rings the phone
+    {"id", "kind": "file", "file", "name", "size"}     a file sent from the PC (fetch it with /api/file?id=)
 
 ``session`` changes each time AURORA starts, so the phone knows that ids
 started again from 1. ``after=-1`` asks only for the current position

@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.46.0 — The AURORA Android app (2026-11-14)
+
+### Added
+- **The AURORA app for Android** (`android/`, app 0.2.0): pair once, then
+  Chat (the same conversation as the PC), Today (briefing and reminders),
+  PC status and Memories, and sign out. It finds the PC over the USB cable
+  or the home Wi-Fi by itself.
+- **Only your phone**: one phone can be paired, only over the USB cable
+  and with the code from Settings → Phone. The phone makes a signing key in
+  Android's Keystore that never leaves it; the PC refuses any request not
+  freshly signed by it (a copied key or a recorded request doesn't work).
+- **Home Wi-Fi** (Settings → Phone, off until ticked): HTTPS with AURORA's
+  own certificate, which the phone pins at pairing; only while the PC is
+  on a network you marked as home.
+- **Automatic USB link**: AURORA sets up `adb reverse` when the phone is
+  plugged in (needs Android Platform Tools on the PC).
+
+### Changed
+- The 0.45 phone web app is retired (a browser can't keep a key the PC
+  can trust); phones paired with it are disconnected.
+- New dependency: `cryptography` (signatures and the Wi-Fi certificate).
+
 ## 0.45.0 — Mobile Companion, first milestone (2026-11-14)
 
 ### Added

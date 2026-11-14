@@ -43,7 +43,6 @@ hidden += ["PySide6.QtWebEngineCore", "PySide6.QtWebEngineWidgets"]
 datas = [(ICON, os.path.join("aurora", "interface", "assets"))]
 datas += collect_data_files("rapidocr_onnxruntime")      # OCR models and config
 datas += collect_data_files("vosk")
-datas += [(os.path.join(ROOT, "aurora", "mobile", "web"), os.path.join("aurora", "mobile", "web"))]   # phone app
 datas += collect_data_files("piper")                     # espeak-ng pronunciation data (Piper voice)
 binaries = collect_dynamic_libs("vosk")                  # libvosk.dll and its runtime
 

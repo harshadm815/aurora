@@ -9,7 +9,7 @@ import sys
 from pathlib import Path
 
 APP_NAME = "AURORA"
-VERSION = "0.45.0"
+VERSION = "0.46.0"
 
 USER_NAME = "Harry"
 
@@ -331,11 +331,18 @@ WAKE_MODEL_KEEP_MINUTES = 10       # Keep the speech model loaded this long afte
 WAKE_GREETING = "I'm awake. How can I help you?"
 
 # --- Mobile Companion (aurora/mobile/) ---------------------------------------------------
-# A small web server for the phone app, on THIS PC ONLY (127.0.0.1). Tailscale forwards it to
-# your phone with HTTPS; nothing listens on your Wi-Fi or the internet. Off until switched on.
+# The server for the AURORA Android app. Off until switched on. It listens on THIS PC ONLY
+# (127.0.0.1), reached over the USB cable (adb reverse) or Tailscale, and, if you choose, on
+# Wi-Fi networks you marked as home (HTTPS with a certificate the phone pins). One phone only,
+# paired over USB; every request is signed by a key locked in that phone. See aurora/mobile.
 MOBILE_PORT = 8765
-MOBILE_DATABASE_PATH = PROJECT_ROOT / "aurora_mobile.db"     # paired devices (key hashes) and access log
+MOBILE_WIFI_PORT = 8766                                       # HTTPS, home Wi-Fi only
+MOBILE_DISCOVERY_PORT = 8767                                  # UDP: answers the phone's "AURORA?" at home
+MOBILE_DATABASE_PATH = PROJECT_ROOT / "aurora_mobile.db"     # paired phone (key hashes) and access log
 MOBILE_HOST_SUFFIXES = (".ts.net",)                           # host names accepted besides localhost
+MOBILE_MAX_PHONES = 1                                         # only your phone
+MOBILE_ADB_PATH = None                                        # adb.exe for the USB link; None: look for it
+MOBILE_WIFI_CHECK_SECONDS = 20                                # how often to check which network the PC is on
 # Voice activity detection (aurora/voice/vad.py): when you start and stop talking.
 VOICE_NO_SPEECH_SECONDS = 5        # Stop listening if nobody starts speaking.
 VOICE_VAD_RATIO = 3.0              # Speech must be this many times louder than the room.

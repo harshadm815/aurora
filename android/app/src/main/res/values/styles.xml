@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.Aurora" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/background</item>
+        <item name="android:statusBarColor">@color/background</item>
+        <item name="android:navigationBarColor">@color/background</item>
+        <item name="android:colorAccent">@color/accent</item>
+    </style>
+    <color name="background">#0B1020</color>
+    <color name="panel">#141B33</color>
+    <color name="mine">#123A4A</color>
+    <color name="text">#E6EDF7</color>
+    <color name="muted">#8A97B5</color>
+    <color name="accent">#35D6F0</color>
+    <color name="ok">#4ADE80</color>
+    <color name="warn">#F5B94A</color>
+</resources>

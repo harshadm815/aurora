@@ -60,7 +60,10 @@ INTERFACE = {
     "speak_replies": (bool, False, lambda v: True),
     "speak_reminders": (bool, False, lambda v: True),     # say reminders aloud when they're due
     "wake_enabled": (bool, False, lambda v: True),        # run the Wake Engine's helper
-    "mobile_enabled": (bool, False, lambda v: True),      # serve the phone app (this PC only; see aurora/mobile)
+    "mobile_enabled": (bool, False, lambda v: True),      # serve the phone app (see aurora/mobile)
+    "mobile_wifi": (bool, False, lambda v: True),         # also listen on Wi-Fi, on home networks only
+    "mobile_home_networks": (list, [], lambda v: len(v) <= 5 and all(isinstance(n, str) and 0 < len(n) <= 64
+                                                                    for n in v)),
 }
 
 
@@ -82,7 +85,8 @@ def defaults() -> dict:
     values = {key: getattr(settings, attribute) for key, (attribute, _, _) in BACKEND.items()}
     values["voice_input_device"] = settings.VOICE_INPUT_DEVICE if isinstance(settings.VOICE_INPUT_DEVICE, str) else ""
     values["voice_volume"] = float(values["voice_volume"])
-    values.update({key: default for key, (_, default, _) in INTERFACE.items()})
+    values.update({key: list(default) if isinstance(default, list) else default
+                   for key, (_, default, _) in INTERFACE.items()})
     return values
 
 

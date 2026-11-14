@@ -2,10 +2,16 @@
 Paired phones and the codes that pair them.
 
 Pairing: the Command Centre shows a one-time code (8 characters, valid
-10 minutes, one use). The phone sends it with a name; AURORA replies with
-a long random device key, which only the phone keeps. AURORA stores just
-a SHA-256 hash of it, so the database alone can't be used to connect.
-Five wrong codes and the current code is withdrawn.
+10 minutes, one use). The AURORA app sends it, over the USB cable only,
+with a name and the public half of a signing key it made in the phone's
+Keystore; AURORA replies with a long random device key, which only the
+phone keeps. AURORA stores just a SHA-256 hash of the device key (so the
+database alone can't be used to connect) and the phone's public key
+(signing.py: every request must be signed by that phone). Five wrong
+codes and the current code is withdrawn.
+
+Only one phone (settings.MOBILE_MAX_PHONES) can be paired: while it is,
+no code can be made and pairing is refused. Disconnect it to pair another.
 
 Each device has permissions (chat, reminders and briefing always; seeing
 memories and approving actions only if you allow them) and a last-seen
@@ -24,6 +30,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 from aurora.config import settings
+from aurora.mobile.signing import SignatureError, load_public_key
 
 logger = logging.getLogger(__name__)
 
@@ -46,6 +53,7 @@ class Device:
     last_seen: datetime | None
     allow_memories: bool
     allow_actions: bool
+    public_key: str = ""
 
 
 class PairingError(Exception):
@@ -70,6 +78,13 @@ class DeviceStore:
                             last_seen TEXT,
                             allow_memories INTEGER NOT NULL DEFAULT 0,
                             allow_actions INTEGER NOT NULL DEFAULT 0)""")
+            columns = {row[1] for row in db.execute("PRAGMA table_info(devices)")}
+            if "public_key" not in columns:
+                db.execute("ALTER TABLE devices ADD COLUMN public_key TEXT NOT NULL DEFAULT ''")
+            # Phones paired before signing keys (the 0.45 web app) can't prove who they are: unpair them.
+            removed = db.execute("DELETE FROM devices WHERE public_key = ''").rowcount
+            if removed:
+                logger.info("Mobile: %d phone(s) without a signing key were disconnected", removed)
             db.execute("""CREATE TABLE IF NOT EXISTS access_log (
                             time TEXT NOT NULL, device TEXT NOT NULL, what TEXT NOT NULL, outcome TEXT NOT NULL)""")
 
@@ -78,8 +93,16 @@ class DeviceStore:
 
     # ---------------------------------------------------------------- pairing
 
+    @property
+    def full(self) -> bool:
+        """True while the allowed number of phones (one) is paired."""
+        with self._connect() as db:
+            return db.execute("SELECT COUNT(*) FROM devices").fetchone()[0] >= settings.MOBILE_MAX_PHONES
+
     def new_code(self) -> str:
         """A fresh one-time pairing code (any earlier one stops working)."""
+        if self.full:
+            raise PairingError("Your phone is already paired. Disconnect it in Settings → Phone to pair another.")
         with self._lock:
             self._code = "".join(secrets.choice(CODE_ALPHABET) for _ in range(CODE_LENGTH))
             self._code_expires = self.clock() + timedelta(minutes=CODE_MINUTES)
@@ -95,10 +118,18 @@ class DeviceStore:
         with self._lock:
             self._code = None
 
-    def pair(self, code: str, name: str) -> tuple[str, Device]:
-        """Exchanges a valid code for a new device key. Raises PairingError otherwise."""
+    def pair(self, code: str, name: str, public_key: str) -> tuple[str, Device]:
+        """Exchanges a valid code (and the phone's public key) for a device key. Raises PairingError otherwise."""
         name = " ".join((name or "").split())[:40] or "Phone"
         typed = "".join(ch for ch in (code or "").upper() if ch.isalnum())
+        try:
+            load_public_key(public_key or "")
+        except SignatureError as error:
+            raise PairingError(str(error))
+        if self.full:
+            with self._lock:
+                self._code = None
+            raise PairingError("A phone is already paired. Disconnect it on the PC to pair another.")
         with self._lock:
             if self._code is None or self.clock() >= self._code_expires:
                 self._code = None
@@ -114,31 +145,32 @@ class DeviceStore:
         token = secrets.token_urlsafe(32)
         now = self.clock()
         with self._connect() as db:
-            cursor = db.execute("INSERT INTO devices (name, token_hash, created) VALUES (?, ?, ?)",
-                                (name, _hash(token), now.isoformat()))
+            cursor = db.execute("INSERT INTO devices (name, token_hash, created, public_key) VALUES (?, ?, ?, ?)",
+                                (name, _hash(token), now.isoformat(), public_key))
             device_id = cursor.lastrowid
         logger.info("Mobile: a device was paired")
         self.log(name, "pair", "allowed")
-        return token, Device(device_id, name, now, None, False, False)
+        return token, Device(device_id, name, now, None, False, False, public_key)
 
     # ---------------------------------------------------------------- devices
 
     def _row(self, row) -> Device:
         return Device(row[0], row[1], datetime.fromisoformat(row[2]),
-                      datetime.fromisoformat(row[3]) if row[3] else None, bool(row[4]), bool(row[5]))
+                      datetime.fromisoformat(row[3]) if row[3] else None, bool(row[4]), bool(row[5]), row[6])
 
     def devices(self) -> list[Device]:
         with self._connect() as db:
-            rows = db.execute("SELECT id, name, created, last_seen, allow_memories, allow_actions FROM devices "
+            rows = db.execute("SELECT id, name, created, last_seen, allow_memories, allow_actions, public_key FROM devices "
                               "ORDER BY id").fetchall()
         return [self._row(r) for r in rows]
 
     def authenticate(self, token: str | None) -> Device | None:
-        """The device this key belongs to (and marks it seen), or None."""
+        """The device this key belongs to (and marks it seen), or None. The caller must also check
+        the request's signature against ``device.public_key`` (signing.verify)."""
         if not token or len(token) > 200:
             return None
         with self._connect() as db:
-            row = db.execute("SELECT id, name, created, last_seen, allow_memories, allow_actions FROM devices "
+            row = db.execute("SELECT id, name, created, last_seen, allow_memories, allow_actions, public_key FROM devices "
                              "WHERE token_hash = ?", (_hash(token),)).fetchone()
             if row is None:
                 return None

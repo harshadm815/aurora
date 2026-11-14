@@ -29,3 +29,14 @@ dist-*/
 
 # Training text (downloaded or your own; not committed)
 Data/
+
+# Android app: Gradle caches, SDK location, signing keys
+android/.gradle/
+android/local.properties
+android/**/build/
+*.jks
+*.keystore
+
+# The phone link's own TLS certificate and private key (made on this PC)
+aurora_mobile_tls.pem
+aurora_mobile_tls.key

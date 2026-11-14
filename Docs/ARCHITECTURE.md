@@ -345,15 +345,20 @@ callbacks never fired.
 
 ## Mobile Companion
 
-`aurora/mobile/`: `devices.py` (pairing codes, device key hashes,
-permissions, access log in `aurora_mobile.db`), `server.py` (the phone
-app and JSON API on 127.0.0.1:`MOBILE_PORT` only, Host check, device key
-on every call), `web/` (the phone app). `aurora/interface/mobile_bridge.py`
-connects it to the Backend: chat goes through `send_message` like Chat
-(and appears there), plus status, history, briefing, reminders and
-memories. `Backend.set_mobile()` starts/stops it (`mobile_enabled`, Settings
-→ Phone). Reaching it from a phone is Tailscale's job (`tailscale serve`),
-see Docs/VOICE_WAKE_MOBILE.md.
+`aurora/mobile/` (the PC side of the Android app in `android/`):
+`devices.py` (pairing codes, one phone, device key hashes and the phone's
+public key, permissions, access log in `aurora_mobile.db`), `signing.py`
+(every request signed by the phone's Keystore key; time and nonce checks),
+`server.py` (the JSON API; a 127.0.0.1 listener for USB and Tailscale,
+where alone pairing works, and an HTTPS listener for home Wi-Fi), `tls.py`
+(AURORA's own certificate, pinned by the phone), `usb.py` (`adb reverse`
+for a plugged-in phone), `network.py` (Wi-Fi name, address, discovery),
+`service.py` (runs them together; Wi-Fi only on home networks).
+`aurora/interface/mobile_bridge.py` connects it to the Backend: chat goes
+through `send_message` like Chat (and appears there), plus status,
+history, briefing, reminders and memories. `Backend.set_mobile()`
+starts/stops it (`mobile_enabled`, `mobile_wifi`, `mobile_home_networks`;
+Settings → Phone). See Docs/ANDROID_APP.md.
 
 ## Voice conversations and briefings
 

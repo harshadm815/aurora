@@ -47,6 +47,13 @@ def isolated_database(tmp_path, monkeypatch):
     # Paired phones and their access log (and the phone server on a free port, never 8765).
     monkeypatch.setattr(settings, "MOBILE_DATABASE_PATH", tmp_path / "mobile_test.db")
     monkeypatch.setattr(settings, "MOBILE_PORT", 0)
+    monkeypatch.setattr(settings, "MOBILE_WIFI_PORT", 0)
+    monkeypatch.setattr(settings, "MOBILE_DISCOVERY_PORT", 0)
+    # The phone service never runs adb or netsh in tests (no USB link, "not on Wi-Fi").
+    from aurora.mobile import network as mobile_network, usb as mobile_usb
+    monkeypatch.setattr(mobile_usb, "find_adb", lambda: None)
+    monkeypatch.setattr(mobile_network, "current_ssid", lambda run=None: None)
+    monkeypatch.setattr(mobile_network, "lan_address", lambda: None)
 
 
 @pytest.fixture(autouse=True)

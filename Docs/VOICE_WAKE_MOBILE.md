@@ -11,7 +11,7 @@ work. Nothing here is marked done until it has been tested on this PC.
 | Voice Engine | `aurora/voice/` (exists) | Vosk, VAD, Windows SAPI, Piper, `VoiceSession` | **Built**: provider interface, words while you speak, pitch (0.41.0), natural Piper voice (0.42.0); multilingual and Whisper optional, later |
 | Wake Engine | `aurora/wake/` | `aurora/voice/` (Vosk grammar recogniser), the packaged .exe | **Built (0.43.0)**: hold Right Ctrl (or Space), say "Wake up"; measured below |
 | Voice conversation | `aurora/voice/conversation.py`, Chat | Engine, Chat, barge-in, Stop | **Built (0.44.0)**: conversation mode, briefings, spoken reminders |
-| Mobile Companion | `aurora/mobile/` | Engine, memory, conversation | **First milestone built (0.45.0)**: pairing, chat, briefing, reminders, memories, PC status; voice on the phone and file transfer next |
+| Mobile Companion | `aurora/mobile/`, `android/` | Engine, memory, conversation | **Android app (0.46.0)**: one phone, paired over USB, signed requests, USB and home Wi-Fi; chat, briefing, reminders, memories, PC status. See ANDROID_APP.md |
 | Calling Agent | `aurora/calling/` (planned) | Voice Engine, Mobile Companion transport | Not started |
 
 The proposal's top-level folders (`aurora_voice/`, `aurora_wake/`, …) map
@@ -233,7 +233,9 @@ Already there: listen, answer, speak, interrupt. To add:
 
 ## 4. Mobile Companion
 
-**First milestone built in 0.45.0** (`aurora/mobile/`, Settings → Phone).
+**First milestone built in 0.45.0** (`aurora/mobile/`, Settings → Phone). **Replaced in 0.46.0 by the
+Android app** (Docs/ANDROID_APP.md): the web app below is retired, pairing is over USB only, one phone,
+every request signed by a key held in the phone. The notes below describe 0.45.
 
 - **Server**: Python's own HTTP server on **127.0.0.1:8765 only**; it never
   listens on the Wi-Fi or the internet. Requests must name this PC or a

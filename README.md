@@ -169,10 +169,12 @@ Voice: Chat's 🎙 asks one question; 🗣 Conversation talks back and forth
 until you say "that's all". "Give me my briefing" lists today's reminders,
 scheduled tasks and recent research.
 
-Phone: Settings → Phone starts a small server on this PC only; with
-Tailscale on the PC and phone, the phone app (chat, today's briefing,
-reminders, PC status) works at home and away. Phones pair with a one-time
-code and can be disconnected at any time.
+Phone: the AURORA Android app (`android/`, built with Gradle, see
+Docs/ANDROID_APP.md) gives chat, today's briefing, reminders, memories and
+the PC's status. Only one phone, paired over the USB cable with a code from
+Settings → Phone; it then connects by cable or, if you choose, over your
+home Wi-Fi (HTTPS, the PC's certificate pinned), and signs every request
+with a key that never leaves the phone.
 
 Wake Engine (hold Right Ctrl, say "Wake up"): switch it on in Settings →
 Wake Engine. A small helper (about 35 MB, no CPU while idle) watches for the

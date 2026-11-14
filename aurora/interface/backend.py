@@ -602,16 +602,18 @@ class Backend(QObject):
     # --- Mobile Companion ---------------------------------------------------
 
     def set_mobile(self, on: bool) -> str:
-        """Starts or stops the phone server (127.0.0.1 only). Returns "" or why it couldn't start."""
+        """Starts or stops the phone service (USB/Tailscale listener, USB link, home Wi-Fi).
+        Returns "" or why it couldn't start."""
         if on and self.mobile is None:
             from aurora.interface.mobile_bridge import MobileBridge
-            from aurora.mobile.server import MobileServer
-            server = MobileServer(MobileBridge(self))
+            from aurora.mobile.service import MobileService
             try:
+                server = MobileService(MobileBridge(self), wifi=bool(self.preferences.get("mobile_wifi")),
+                                       home_networks=self.preferences.get("mobile_home_networks") or [])
                 server.start()
             except OSError as error:
                 logger.warning("Mobile: server couldn't start (%s)", type(error).__name__)
-                return f"The phone server couldn't start on port {server.port}: {error.strerror or error}"
+                return f"The phone server couldn't start on port {settings.MOBILE_PORT}: {error.strerror or error}"
             self.mobile = server
             self.mobile_changed.emit(True)
         elif not on and self.mobile is not None:

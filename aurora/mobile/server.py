@@ -26,6 +26,7 @@ API (JSON):
     POST /api/pair       {"code", "name", "public_key"} → {"token", "device", "fingerprint", "wifi_port"}
     GET  /api/status                       → AI state, model, CPU/RAM, version
     GET  /api/connection                   → the Wi-Fi address while AURORA listens there
+    GET  /api/events?after=N&wait=S        → new messages and due reminders (long polling; events.py)
     GET  /api/history                      → the shared conversation (last 40 messages)
     POST /api/chat       {"text"}          → {"reply", "needs_confirmation", "sources"}
     GET  /api/today                        → {"briefing", "reminders"}
@@ -42,6 +43,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from aurora.config import settings
 from aurora.mobile.devices import DeviceStore, PairingError
+from aurora.mobile.events import EventHub
 from aurora.mobile.signing import NonceCache, SignatureError, verify
 
 logger = logging.getLogger(__name__)
@@ -120,14 +122,14 @@ class Handler(BaseHTTPRequestHandler):
             raise ApiError(HTTPStatus.BAD_REQUEST, "Bad request.")
         return data
 
-    def _device(self, method: str, path: str, raw: bytes):
+    def _device(self, method: str, path: str, raw: bytes, signed_path: str):
         header = self.headers.get("Authorization", "")
         token = header[7:].strip() if header.startswith("Bearer ") else None
         device = self.server.store.authenticate(token)
         if device is None:
             raise ApiError(HTTPStatus.UNAUTHORIZED, "This phone isn't paired (or was disconnected). Pair it again.")
         try:
-            verify(device.public_key, method, path, self.headers.get("X-Aurora-Time"),
+            verify(device.public_key, method, signed_path, self.headers.get("X-Aurora-Time"),
                    self.headers.get("X-Aurora-Nonce"), self.headers.get("X-Aurora-Signature"), raw,
                    self.server.nonces)
         except SignatureError as error:
@@ -155,14 +157,20 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/":
             self._send(HTTPStatus.OK, b"AURORA. Use the AURORA app on your phone.", "text/plain; charset=utf-8")
             return
-        self._api("GET", path)
+        self._api("GET", path, self.path)
 
     def do_POST(self):
         if not self._guard():
             return
-        self._api("POST", self.path.split("?", 1)[0])
+        self._api("POST", self.path.split("?", 1)[0], self.path)
 
-    def _api(self, method: str, path: str):
+    @staticmethod
+    def _query(full: str) -> dict:
+        from urllib.parse import parse_qs, urlsplit
+        return {key: values[-1] for key, values in parse_qs(urlsplit(full).query).items()}
+
+    def _api(self, method: str, path: str, full: str | None = None):
+        full = full or path                             # the signature covers the query too
         server = self.server
         store, bridge = server.store, server.bridge
         device = None
@@ -183,8 +191,16 @@ class Handler(BaseHTTPRequestHandler):
                 return
             if not path.startswith("/api/"):
                 raise ApiError(HTTPStatus.NOT_FOUND, "Not found.")
-            device = self._device(method, path, raw)
+            device = self._device(method, path, raw, full)
             what = path[5:]
+            if (method, path) == ("GET", "/api/events"):
+                query = self._query(full)
+                try:
+                    after, wait = int(query.get("after", "-1")), float(query.get("wait", "0"))
+                except ValueError:
+                    raise ApiError(HTTPStatus.BAD_REQUEST, "Bad request.")
+                self._json(HTTPStatus.OK, server.events.since(after, wait, query.get("session")))
+                return                                   # not logged: the phone asks every half minute
             if (method, path) == ("GET", "/api/status"):
                 result = bridge.status()
             elif (method, path) == ("GET", "/api/connection"):
@@ -200,7 +216,8 @@ class Handler(BaseHTTPRequestHandler):
                                                          "isn't allowed to approve actions, so answer it on the PC.")
                 result = bridge.chat(text, device.name)
             elif (method, path) == ("GET", "/api/today"):
-                result = {"briefing": bridge.briefing(), "reminders": bridge.reminders()}
+                result = {"briefing": bridge.briefing(), "reminders": bridge.reminders(),
+                          "earlier": bridge.earlier_reminders()}
             elif (method, path) == ("GET", "/api/memories"):
                 if not device.allow_memories:
                     raise ApiError(HTTPStatus.FORBIDDEN, "This phone isn't allowed to see your memories. "
@@ -245,7 +262,7 @@ class MobileServer:
 
     def __init__(self, bridge, store: DeviceStore | None = None, port: int | None = None,
                  host: str = "127.0.0.1", kind: str = "local", tls: ssl.SSLContext | None = None,
-                 nonces: NonceCache | None = None, connection=None):
+                 nonces: NonceCache | None = None, connection=None, events: EventHub | None = None):
         self.bridge = bridge
         self.store = store or DeviceStore()
         self.port = settings.MOBILE_PORT if port is None else port
@@ -254,6 +271,7 @@ class MobileServer:
         self.tls = tls
         self.nonces = nonces or NonceCache()
         self.connection = connection or (lambda: {})
+        self.events = events or EventHub()
         self._http: _Http | None = None
         self._thread: threading.Thread | None = None
 
@@ -274,6 +292,7 @@ class MobileServer:
         http.store, http.bridge, http.nonces = self.store, self.bridge, self.nonces
         http.extra_hosts = () if self.host in ("127.0.0.1", "::1") else (self.host,)
         http.connection = self.connection
+        http.events = self.events
         self.port = http.server_address[1]
         self._http = http
         self._thread = threading.Thread(target=http.serve_forever, name=f"aurora-mobile-{self.kind}", daemon=True)
@@ -283,6 +302,8 @@ class MobileServer:
     def stop(self) -> None:
         if self._http is None:
             return
+        if self.kind == "local":
+            self.events.close()                         # let waiting phones go
         self._http.shutdown()
         self._http.server_close()
         self._http = None

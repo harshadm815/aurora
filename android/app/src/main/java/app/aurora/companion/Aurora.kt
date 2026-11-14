@@ -27,8 +27,16 @@ class NotConnected : IOException("Can't reach your PC. Plug in the cable, or be 
  * Remembers the device key, the PC's certificate fingerprint and its Wi-Fi address; signs every
  * request with [PhoneKey]; finds the PC over the USB cable or the home Wi-Fi.
  */
-class Aurora(context: Context) {
-    private val prefs = context.getSharedPreferences("aurora", Context.MODE_PRIVATE)
+class Aurora private constructor(context: Context) {
+    companion object {
+        @Volatile private var shared: Aurora? = null
+
+        /** One connection for the whole app (the screens and the background service). */
+        fun get(context: Context): Aurora =
+            shared ?: synchronized(this) { shared ?: Aurora(context.applicationContext).also { shared = it } }
+    }
+
+    val prefs = context.getSharedPreferences("aurora", Context.MODE_PRIVATE)
     private val random = SecureRandom()
 
     val paired: Boolean get() = prefs.getString("token", null) != null && PhoneKey.exists()
@@ -68,6 +76,7 @@ class Aurora(context: Context) {
         prefs.edit().clear().apply()
         PhoneKey.delete()
         route = null
+        Live.routeChanged(null)
     }
 
     /** Signs out on both sides (the PC forgets this phone), as far as the PC can be reached. */
@@ -88,7 +97,6 @@ class Aurora(context: Context) {
         call("POST", path, body.toString().toByteArray(), timeoutMs)
 
     /** Tries the routes in order (last good, USB, home Wi-Fi, then a discovery broadcast). */
-    @Synchronized
     fun call(method: String, path: String, body: ByteArray = ByteArray(0), timeoutMs: Int = 10_000): Reply {
         for (base in Protocol.routes(route, wifiBase)) {
             try {
@@ -117,8 +125,11 @@ class Aurora(context: Context) {
     }
 
     private fun remember(base: String?) {
-        route = base
-        prefs.edit().putString("route", base).apply()
+        if (route != base) {
+            route = base
+            prefs.edit().putString("route", base).apply()
+            Live.routeChanged(base)
+        }
     }
 
     private fun learnWifi(reply: Reply) {

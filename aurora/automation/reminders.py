@@ -132,6 +132,13 @@ class ReminderScheduler:
         with self._lock:
             return sorted(self._reminders.values(), key=lambda r: r.due)
 
+    def shown_since(self, since: datetime) -> list[Reminder]:
+        """Reminders that already went off (or were missed while AURORA was closed) since ``since``."""
+        with self.store.connect() as connection:
+            rows = connection.execute("SELECT id, text, due FROM reminders WHERE status IN ('shown', 'missed') "
+                                      "AND due >= ? ORDER BY due", (since.isoformat(timespec="seconds"),)).fetchall()
+        return [Reminder(row["id"], row["text"], datetime.fromisoformat(row["due"])) for row in rows]
+
     def cancel(self, reminder_id: int) -> Reminder | None:
         with self._lock:
             reminder = self._reminders.pop(reminder_id, None)

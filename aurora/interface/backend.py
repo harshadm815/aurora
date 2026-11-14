@@ -173,6 +173,7 @@ class Backend(QObject):
     ai_state_changed = Signal(str)
     performance_changed = Signal(bool, str)   # graphics reduced?, one line for the Dashboard
     remote_exchange = Signal(str, str, str)   # a phone's message and AURORA's reply: device, text, reply
+    exchanged = Signal(str, str, str)         # every finished exchange: source ("pc" | "phone"), text, reply
     mobile_changed = Signal(bool)             # the phone server started / stopped
 
     def __init__(self, engine_factory: Callable | None = None, parent=None):
@@ -447,7 +448,7 @@ class Backend(QObject):
 
     # --- Chat ---------------------------------------------------------------
 
-    def send_message(self, text: str, on_reply, on_error, on_token=None) -> None:
+    def send_message(self, text: str, on_reply, on_error, on_token=None, source: str = "pc") -> None:
         """
         Sends ``text`` to the engine. ``on_token`` gets the model's reply as
         it is written (when streaming is on); ``on_reply`` gets
@@ -476,6 +477,7 @@ class Backend(QObject):
         def replied(result):
             if self._activity in ("thinking", "responding"):
                 self._set_activity(None)
+            self.exchanged.emit(source, text, result[0])
             on_reply(result)
 
         def failed(error):
@@ -615,12 +617,24 @@ class Backend(QObject):
                 logger.warning("Mobile: server couldn't start (%s)", type(error).__name__)
                 return f"The phone server couldn't start on port {settings.MOBILE_PORT}: {error.strerror or error}"
             self.mobile = server
+            self.exchanged.connect(self._tell_phone_exchange)
+            self.reminder_due.connect(self._tell_phone_reminder)
             self.mobile_changed.emit(True)
         elif not on and self.mobile is not None:
+            self.exchanged.disconnect(self._tell_phone_exchange)
+            self.reminder_due.disconnect(self._tell_phone_reminder)
             self.mobile.stop()
             self.mobile = None
             self.mobile_changed.emit(False)
         return ""
+
+    def _tell_phone_exchange(self, source: str, text: str, reply: str) -> None:
+        if self.mobile is not None:
+            self.mobile.events.publish("message", source=source, text=text, reply=reply)
+
+    def _tell_phone_reminder(self, data: dict) -> None:
+        if self.mobile is not None:
+            self.mobile.events.publish("reminder", text=str(data.get("text", "")))
 
     # --- Helpers for views --------------------------------------------------
 

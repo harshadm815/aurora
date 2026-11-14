@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.47.0 — Phone notifications and live chat (2026-11-14)
+
+### Added
+- **Reminders on your phone** as notifications when they're due, and
+  AURORA's replies while the app is closed (app 0.3.0).
+- **Live chat**: what you say to AURORA on the PC appears in the phone's
+  Chat too.
+- **Stay connected** (on by default, PC tab in the app): the phone keeps
+  the connection open in the background, reconnects by itself and after a
+  restart. Lock-screen notifications hide their content.
+- PC side: `GET /api/events` (long polling, `aurora/mobile/events.py`),
+  signed like every other request (the query included).
+- The phone's Today lists reminders that already went off today ("Earlier
+  today") as well as the ones coming up; before, a reminder disappeared
+  from it once it had been shown.
+
+### Changed
+- The build script moves the old build aside in one step before replacing
+  it; if something still uses it, nothing is touched (deleting it file by
+  file could leave half a build that won't start).
+
 ## 0.46.0 — The AURORA Android app (2026-11-14)
 
 ### Added

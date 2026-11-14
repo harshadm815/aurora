@@ -35,7 +35,7 @@ class MobileBridge:
             outcome["error"] = str(error)
             done.set()
 
-        self.backend.on_gui(lambda _: self.backend.send_message(text, replied, failed))
+        self.backend.on_gui(lambda _: self.backend.send_message(text, replied, failed, source="phone"))
         if not done.wait(self.timeout):
             raise TimeoutError("AURORA took too long to answer.")
         if "error" in outcome:
@@ -81,6 +81,15 @@ class MobileBridge:
             return []
         return [{"text": r.text, "due": r.due.isoformat(timespec="minutes")}
                 for r in sorted(tool.scheduler.pending(), key=lambda r: r.due)]
+
+    def earlier_reminders(self) -> list[dict]:
+        """Today's reminders that already went off, so the phone's Today still shows them."""
+        tool = self.backend.tool("Reminders")
+        if tool is None:
+            return []
+        midnight = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+        return [{"text": r.text, "due": r.due.isoformat(timespec="minutes")}
+                for r in tool.scheduler.shown_since(midnight)]
 
     def memories(self) -> list[dict]:
         engine = self.backend.engine

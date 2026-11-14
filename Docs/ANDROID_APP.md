@@ -137,9 +137,17 @@ Each ends with something you can use on the phone, tested.
    yours), key in the Keystore, chat, Today, PC status, memories,
    approvals (same permissions as before), sign out. PC: automatic USB
    link; home Wi-Fi listening with TLS; one phone only. Details below.
-2. **Live connection and notifications**: replies arrive with the app in
-   the background; reminders and briefings as phone notifications; the
-   foreground service and the ColorOS battery setting; reconnecting.
+2. **Live connection and notifications** (**built, 0.47.0 / app 0.3.0**):
+   a background service keeps one request to `/api/events` waiting (long
+   polling over the same signed, encrypted routes; no new port), so due
+   reminders arrive as notifications and AURORA's replies too while the
+   app is closed. Chats held on the PC appear in the phone's Chat. The
+   service shows a quiet "AURORA · connected by …" notification (Android
+   requires one), reconnects by itself (5 s up to 1 minute apart), starts
+   again after the phone restarts, and can be switched off ("Stay
+   connected" on the PC tab). Notifications show no content on the lock
+   screen. The app asks Android to leave it running when saving battery;
+   ColorOS also needs AURORA allowed under App battery management.
 3. **Voice from the phone**: hold to talk; the phone sends the sound to the
    PC (16 kHz, about 32 KB/s), the PC recognises it with Vosk and answers
    with the Piper voice, played on the phone. No cloud speech service:

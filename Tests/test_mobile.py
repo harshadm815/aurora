@@ -243,6 +243,9 @@ class FakeBridge:
     def reminders(self):
         return [{"text": "call home", "due": "2026-11-14T18:00"}]
 
+    def earlier_reminders(self):
+        return [{"text": "test the phone", "due": "2026-11-14T14:49"}]
+
     def memories(self):
         return [{"value": "likes tea", "category": "Preference"}]
 
@@ -343,6 +346,7 @@ def test_chat_today_history(server, phone):
     assert call(server, "GET", "/api/history", token=token, phone=phone)[1]["messages"][1]["text"] == "hello"
     today = call(server, "GET", "/api/today", token=token, phone=phone)[1]
     assert today["briefing"].startswith("Here's") and today["reminders"][0]["text"] == "call home"
+    assert today["earlier"][0]["text"] == "test the phone"
     assert call(server, "POST", "/api/chat", {"text": "   "}, token=token, phone=phone)[0] == 400
     assert call(server, "GET", "/api/connection", token=token, phone=phone)[1]["wifi_port"] == 8766
 
@@ -594,3 +598,63 @@ def test_settings_switch_starts_the_server(qapp, backend, monkeypatch, phone):
     page.mobile_enabled.setChecked(False)
     page.auto_save()
     assert backend.mobile is None and "Off" in page.mobile_status.text()
+
+
+# --- The event feed (milestone 2) -------------------------------------------------------------
+
+from aurora.mobile.events import EventHub
+
+
+def test_event_hub_order_waiting_and_restart():
+    hub = EventHub(keep=3)
+    assert hub.since(-1) == {"session": hub.session, "last": 0, "events": []}
+    started = time.time()
+    assert hub.since(0, wait=0.2)["events"] == [] and time.time() - started >= 0.15      # waited, nothing new
+    for n in range(4):
+        hub.publish("reminder", text=f"r{n}")
+    got = hub.since(1)
+    assert [e["text"] for e in got["events"]] == ["r1", "r2", "r3"] and got["last"] == 4    # only the last 3 kept
+    assert hub.since(-1)["events"] == [] and hub.since(-1)["last"] == 4                    # "where are we?" only
+    assert [e["id"] for e in hub.since(99)["events"]] == [2, 3, 4]                        # ids from an older run
+    assert [e["id"] for e in hub.since(3, session="old-run")["events"]] == [2, 3, 4]      # AURORA restarted
+    assert [e["id"] for e in hub.since(3, session=hub.session)["events"]] == [4]
+    threading.Timer(0.2, lambda: hub.publish("message", source="pc", text="hi", reply="hello")).start()
+    started = time.time()
+    woke = hub.since(4, wait=10)
+    assert woke["events"][0]["reply"] == "hello" and time.time() - started < 5            # answered at once
+    hub.close()
+    assert hub.since(5, wait=10)["events"] == []                                          # closing frees waiters
+
+
+def test_events_over_the_api_are_signed_with_the_query(server, phone):
+    token = _paired(server, phone)
+    status, data, _ = call(server, "GET", "/api/events?after=-1", token=token, phone=phone)
+    assert status == 200 and data["last"] == 0
+    server.events.publish("reminder", text="call home")
+    data = call(server, "GET", "/api/events?after=0&wait=5", token=token, phone=phone)[1]
+    assert data["events"][0]["kind"] == "reminder" and data["events"][0]["text"] == "call home"
+    signed_for_other = phone.sign("GET", "/api/events?after=-1")
+    status, data, _ = call(server, "GET", "/api/events?after=0", token=token, headers=signed_for_other)
+    assert status == 401                                                                   # query changed on the way
+    assert call(server, "GET", "/api/events?after=x", token=token, phone=phone)[0] == 400
+    assert call(server, "GET", "/api/events?after=0", token=token)[0] == 401              # unsigned
+
+
+def test_the_phone_hears_about_pc_chats_and_reminders(backend, qapp):
+    from aurora.interface.backend import wait_for
+
+    assert backend.set_mobile(True) == ""
+    _ALLOWED_PORTS.add(backend.mobile.port)
+    try:
+        replies = []
+        backend.send_message("what is 12 times 7", lambda result: replies.append(result), lambda error: None)
+        assert wait_for(lambda: bool(replies), 10)
+        last = backend.mobile.events.since(0)["events"][-1]
+        assert (last["kind"], last["source"], last["text"], last["reply"]) == \
+            ("message", "pc", "what is 12 times 7", "12 * 7 = 84")
+        backend.reminder_due.emit({"id": 1, "text": "call home"})
+        last = backend.mobile.events.since(0)["events"][-1]
+        assert (last["kind"], last["text"]) == ("reminder", "call home")
+    finally:
+        backend.set_mobile(False)
+    backend.reminder_due.emit({"id": 2, "text": "after"})                                  # disconnected: no error

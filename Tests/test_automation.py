@@ -373,6 +373,9 @@ def test_reminder_fires(scheduler):
     timer.fire()
     assert scheduler.shown == ["⏰ Reminder: stretch"]
     assert scheduler.pending() == []
+    gone_off = scheduler.shown_since(NOW.replace(hour=0))           # still listed as "earlier today"
+    assert [(r.text, r.due.strftime("%H:%M")) for r in gone_off] == [("stretch", "14:10")]
+    assert scheduler.shown_since(NOW.replace(hour=15)) == []
 
 
 def test_timer_message(scheduler):

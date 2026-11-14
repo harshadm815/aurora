@@ -2,6 +2,12 @@ package app.aurora.companion
 
 import android.app.Activity
 import android.app.AlertDialog
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.net.Uri
+import android.os.PowerManager
+import android.provider.Settings
+import android.widget.Switch
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.os.Build
@@ -22,7 +28,7 @@ import java.io.IOException
 import java.util.concurrent.Executors
 
 /** AURORA on the phone: pairing over USB, then Chat, Today, PC and Memories. */
-class MainActivity : Activity() {
+class MainActivity : Activity(), Live.Listener {
     private lateinit var aurora: Aurora
     private val work = Executors.newSingleThreadExecutor()
     private val dp by lazy { resources.displayMetrics.density }
@@ -39,7 +45,8 @@ class MainActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        aurora = Aurora(applicationContext)
+        aurora = Aurora.get(this)
+        LinkService.channels(this)
 
         val title = text("AURORA", 22f, R.color.accent, bold = true).apply { letterSpacing = 0.25f }
         routeLabel = text("", 13f, R.color.muted).apply { gravity = Gravity.END }
@@ -66,7 +73,48 @@ class MainActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
-        if (aurora.paired) refreshRoute()
+        Live.visible = true
+        Live.add(this)
+        if (aurora.paired) {
+            refreshRoute()
+            LinkService.start(this)
+        }
+    }
+
+    override fun onPause() {
+        Live.visible = false
+        Live.remove(this)
+        super.onPause()
+    }
+
+    /** Something said on the PC appears here too (the phone's own messages are already shown). */
+    override fun onEvent(event: org.json.JSONObject) {
+        if (event.optString("kind") != "message" || event.optString("source") != "pc") return
+        ui {
+            if (chatList == null || !chatLoaded) return@ui
+            bubble("user", "🖥 " + event.optString("text"))
+            bubble("assistant", event.optString("reply"))
+        }
+    }
+
+    override fun onRoute(base: String?) = ui { routeLabel.text = if (aurora.paired) Protocol.routeName(base) else "Not paired" }
+
+    private fun askForNotifications() {
+        if (Build.VERSION.SDK_INT >= 33 &&
+            checkSelfPermission("android.permission.POST_NOTIFICATIONS") != PackageManager.PERMISSION_GRANTED
+        ) requestPermissions(arrayOf("android.permission.POST_NOTIFICATIONS"), 1)
+    }
+
+    private fun batteryFree(): Boolean =
+        getSystemService(PowerManager::class.java).isIgnoringBatteryOptimizations(packageName)
+
+    @android.annotation.SuppressLint("BatteryLife")
+    private fun askBatteryFree() {
+        try {
+            startActivity(Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:$packageName")))
+        } catch (error: Exception) {
+            startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName")))
+        }
     }
 
     override fun onDestroy() {
@@ -185,6 +233,8 @@ class MainActivity : Activity() {
                     pair.isEnabled = true
                     if (problem == null) {
                         tab = "Chat"; chatLoaded = false; show(); refreshRoute()
+                        askForNotifications()
+                        LinkService.start(this)
                     } else {
                         status.setTextColor(getColor(R.color.warn))
                         status.text = if (problem.startsWith("Can't reach"))
@@ -359,7 +409,14 @@ class MainActivity : Activity() {
                 val r = reminders!!.getJSONObject(it)
                 r.optString("due").replace("T", " ") + "  " + r.optString("text")
             }
-            section(body, "Reminders", lines.ifBlank { "No reminders." })
+            section(body, "Coming up", lines.ifBlank { "No reminders waiting." })
+            val earlier = data.optJSONArray("earlier")
+            if (earlier != null && earlier.length() > 0) {
+                section(body, "Earlier today (already reminded)", (0 until earlier.length()).joinToString("\n") {
+                    val r = earlier.getJSONObject(it)
+                    r.optString("due").substringAfter("T") + "  " + r.optString("text")
+                })
+            }
         }
     }
 
@@ -373,6 +430,26 @@ class MainActivity : Activity() {
                 "  ·  " + (if (ram.isNaN()) "RAM –" else "RAM ${ram.toInt()}%"))
             section(body, "This phone", "${aurora.deviceName}\nKey kept in " +
                 (if (PhoneKey.inHardware()) "the phone's secure hardware" else "Android's Keystore") + ".")
+            body.addView(Switch(this).apply {
+                text = "Stay connected in the background"
+                textSize = 15f
+                setTextColor(getColor(R.color.text))
+                isChecked = LinkService.enabled(this@MainActivity)
+                setPadding(0, px(6), 0, px(6))
+                setOnCheckedChangeListener { _, on -> LinkService.setEnabled(this@MainActivity, on) }
+            })
+            body.addView(text("Reminders and replies arrive as notifications even when the app is closed. Android " +
+                "shows a quiet \"AURORA\" notification while it's connected.", 13f, R.color.muted))
+            if (batteryFree()) {
+                body.addView(text("✓ Allowed to run in the background.", 14f, R.color.ok).apply { setPadding(0, px(10), 0, 0) })
+            } else {
+                body.addView(button("Allow AURORA to run in the background") { askBatteryFree() })
+            }
+            body.addView(text("On OPPO (ColorOS) also: Settings → Battery → App battery management → AURORA → " +
+                "allow background activity and auto launch. Otherwise the phone may close AURORA to save " +
+                "battery and notifications stop until you open it.", 13f, R.color.muted).apply {
+                setPadding(0, px(6), 0, px(14))
+            })
             body.addView(button("Sign out of AURORA") { confirmSignOut() })
         }
     }
@@ -382,6 +459,7 @@ class MainActivity : Activity() {
             .setTitle("Sign out?")
             .setMessage("This phone's key is deleted and the PC forgets it. To use AURORA again, pair over the USB cable.")
             .setPositiveButton("Sign out") { _, _ ->
+                LinkService.stop(this)
                 background {
                     aurora.signOut()
                     ui { chatList = null; chatLoaded = false; show() }

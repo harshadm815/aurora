@@ -58,13 +58,26 @@ def prepare(folder: Path) -> bool:
         print(f"AURORA is still running from {folder} (process {', '.join(map(str, still))}). "
               "Exit it from the tray icon (and switch off the Wake Engine) first. Nothing was changed.")
         return False
+    for leftover in folder.parent.glob(f"{folder.name}.old-*"):      # from an earlier build, if it's free now
+        shutil.rmtree(leftover, ignore_errors=True)
     if folder.exists():
-        try:
-            shutil.rmtree(folder)
-        except OSError as error:
-            print(f"The old build in {folder} is locked ({error.__class__.__name__}). Restart Windows to free it, "
-                  "or build into another folder: packaging\\build_windows.py --into dist-new")
-            return False
+        # Move the whole old build aside first: if anything holds a file in it, the rename fails and
+        # nothing is touched (deleting file by file could leave half a build that won't start).
+        aside = folder.with_name(f"{folder.name}.old-{int(time.time())}")
+        for attempt in range(10):
+            try:
+                folder.rename(aside)
+                break
+            except OSError as error:
+                if attempt == 9:
+                    print(f"The old build in {folder} is in use ({error.__class__.__name__}); nothing was changed. "
+                          "Close what uses it, restart Windows, or build elsewhere: "
+                          "packaging\\build_windows.py --into dist-new")
+                    return False
+                time.sleep(1)
+        shutil.rmtree(aside, ignore_errors=True)
+        if aside.exists():
+            print(f"(Part of the old build is still in use; {aside.name} will be removed by a later build.)")
     return True
 
 

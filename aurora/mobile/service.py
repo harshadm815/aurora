@@ -15,6 +15,7 @@ import threading
 from aurora.config import settings
 from aurora.mobile import network, tls
 from aurora.mobile.devices import DeviceStore
+from aurora.mobile.events import EventHub
 from aurora.mobile.server import MobileServer
 from aurora.mobile.signing import NonceCache
 from aurora.mobile import usb as usb_module
@@ -34,7 +35,9 @@ class MobileService:
         self.cert, self.key = tls.paths(settings.MOBILE_DATABASE_PATH)
         tls.ensure_certificate(self.cert, self.key)
         self.fingerprint = tls.fingerprint(self.cert)
-        self.local = MobileServer(bridge, self.store, nonces=self.nonces, connection=self.connection)
+        self.events = EventHub()
+        self.local = MobileServer(bridge, self.store, nonces=self.nonces, connection=self.connection,
+                                  events=self.events)
         self.usb = usb if usb is not None else UsbLink(settings.MOBILE_PORT, usb_module.find_adb())
         self.wifi_enabled = wifi
         self.home_networks = list(home_networks or [])
@@ -109,7 +112,7 @@ class MobileService:
             self._stop_wifi()
             server = MobileServer(self.bridge, self.store, port=settings.MOBILE_WIFI_PORT, host=address,
                                   kind="wifi", tls=tls.server_context(self.cert, self.key), nonces=self.nonces,
-                                  connection=self.connection)
+                                  connection=self.connection, events=self.events)
             try:
                 server.start()
                 self._discovery = network.DiscoveryResponder(address, settings.MOBILE_DISCOVERY_PORT,

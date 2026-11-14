@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.44.0 — Voice conversations and briefings (2026-11-14)
+
+### Added
+- **Conversation mode** (Chat → 🗣 Conversation, and every wake): AURORA
+  answers aloud and listens again, until you say "that's all" or
+  "goodbye", stay quiet for a few seconds, or press Stop.
+- **Briefing** ("give me my briefing", "brief me", "what's on today"):
+  today's and overdue reminders, today's scheduled tasks and the latest
+  research session from the last two days, from AURORA's own records.
+- **Waking offers a briefing** when something is due today ("I'm awake.
+  You have two reminders today. Would you like a briefing?").
+- **Spoken reminders** (Settings → Voice, off by default).
+
+### Changed
+- The Wake Engine no longer lists "wait up" as a sound-alike: it took 3
+  of 30 real "wake up"s from the Piper voice. Now 30/30 are recognised
+  and false activations stay at 0/30.
+
 ## 0.43.1 — Settings save themselves (2026-11-14)
 
 ### Fixed

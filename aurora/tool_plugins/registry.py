@@ -2,6 +2,7 @@ import httpx
 
 from aurora.memory.manager import MemoryManager
 from aurora.tool_plugins.apps import AppsTool
+from aurora.tool_plugins.briefing import BriefingTool
 from aurora.tool_plugins.calculator import CalculatorTool
 from aurora.tool_plugins.files import FilesTool
 from aurora.tool_plugins.schedule import ScheduleTool
@@ -53,4 +54,5 @@ def default_tools(
         FilesTool(),
         ScheduleTool(),
         ResearchAssistantTool(),
+        BriefingTool(),
     ]

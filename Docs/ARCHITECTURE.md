@@ -343,6 +343,18 @@ pyttsx3 was dropped: with version 2.99 on this machine only its first
 reply was spoken, saving to a file hung on the second call and its
 callbacks never fired.
 
+## Voice conversations and briefings
+
+Chat has three ways to talk: 🎙 Ask by voice (one request), 🗣
+Conversation (answer aloud, listen again, until "that's all", silence or
+Stop; `aurora/voice/conversation.py` has the end, yes and no phrases), and
+waking AURORA, which starts a conversation. The `Briefing` tool
+(`aurora/tool_plugins/briefing.py`, intent `briefing`, permission
+`memory.read`) builds today's briefing from the Reminders, Schedule and
+Research tools' records; `summary_line()` is the one sentence the wake
+greeting uses to offer it. `speak_reminders` (Settings → Voice) says due
+reminders aloud.
+
 ## Wake Engine
 
 `aurora/wake/`: hold a key, say "Wake up", and AURORA starts (or comes

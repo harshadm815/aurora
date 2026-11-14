@@ -674,6 +674,23 @@ def _clock(when: str) -> str | None:
     return f"{hour:02d}:{minute:02d}"
 
 
+_BRIEFING = re.compile(
+    # Requests only: a bare "morning briefing" stays free to be the name of your own routine.
+    r"^(?:(?:give|read|tell)\s+me\s+(?:my\s+|a\s+|the\s+)?(?:daily\s+|morning\s+|today's\s+)?briefing"
+    r"|(?:can|could)\s+(?:i|you)\s+(?:have|get|give\s+me)\s+(?:my\s+|a\s+|the\s+)?briefing"
+    r"|briefing\s+please"
+    r"|brief\s+me(?:\s+on\s+(?:today|my\s+day))?"
+    r"|what(?:'?s|\s+is)\s+(?:on|coming\s+up|happening)\s+(?:for\s+)?(?:today|my\s+day)"
+    r"|what\s+do\s+i\s+have\s+(?:on\s+|coming\s+up\s+)?today"
+    r"|what(?:'?s|\s+is)\s+my\s+day\s+(?:like|look\s+like))$", re.I)
+
+
+def briefing_rule(original: str, body: str) -> RouteDecision | None:
+    if _BRIEFING.match(_clean(body)):
+        return RouteDecision(Intent.BRIEFING, 0.95, targets.BRIEFING, {}, "A briefing for today.")
+    return None
+
+
 def reminders_rule(original: str, body: str) -> RouteDecision | None:
     text = _clean(body)
 
@@ -795,6 +812,7 @@ DEFAULT_RULES: tuple[Rule, ...] = (
     health_rule,
     devices_rule,
     reminders_rule,
+    briefing_rule,
     automation_rules.apps_rule,
     automation_rules.files_rule,
     research_session_rule,

@@ -42,8 +42,9 @@ def unknown_words(phrase: str, model) -> list[str]:
 
 
 # Phrases that sound like common wake phrases. Listed in the recogniser's grammar, they give
-# "what's up" somewhere better to go than "wake up" (measured: 1 in 10 → see the tests).
-SOUND_ALIKES = ["what's up", "wait up", "make up", "take up", "shake up", "wake me", "break up", "wake",
+# "what's up" somewhere better to go than "wake up" (measured: 1 in 10 → see the tests). "wait up" was left
+# out: it took 3 of 30 real "wake up"s from Piper.
+SOUND_ALIKES = ["what's up", "make up", "take up", "shake up", "wake me", "break up", "wake",
                 "up", "hey", "aurora", "hello"]          # parts of the phrase itself are left out (decoys())
 
 

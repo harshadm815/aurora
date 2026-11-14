@@ -133,6 +133,7 @@ class MainWindow(QMainWindow):
 
         dashboard = self.pages["Dashboard"]
         dashboard.navigate.connect(self.open_page)
+        backend.reminder_due.connect(self.say_reminder)
         dashboard.browser_tabs = self.pages["Browser"].open_tabs
         dashboard.ask.connect(self.ask_in_chat)
         dashboard.listen_requested.connect(lambda: self._in_chat(lambda chat: chat.listen()))
@@ -238,8 +239,9 @@ class MainWindow(QMainWindow):
     # --- Wake Engine ------------------------------------------------------------------
 
     def wake(self):
-        """The Wake Engine heard you: show the window, greet you by voice and listen for a request.
-        If AURORA is still starting, the greeting waits until it's ready."""
+        """The Wake Engine heard you: show the window, greet you by voice and start a conversation
+        (offering a briefing when something is coming up). If AURORA is still starting, the
+        greeting waits until it's ready."""
         self.show_from_tray()
         self.open_page("Chat")
         chat = self.pages["Chat"]
@@ -251,9 +253,20 @@ class MainWindow(QMainWindow):
             if waiting:
                 self.backend.engine_ready.disconnect(greet)
                 waiting.clear()
-            greeting = settings.WAKE_GREETING
-            chat._add_bubble("AURORA", greeting)
-            self.backend.voice.speak(greeting, on_done=lambda finished: chat.listen() if finished else None)
+            # Offer a briefing when something is coming up today (real data, read off the GUI thread).
+            def start(line: str):
+                if line:
+                    chat.start_conversation(f"I'm awake. {line} Would you like a briefing?",
+                                            offer="give me my briefing")
+                else:
+                    chat.start_conversation(settings.WAKE_GREETING)
+
+            briefing = self.backend.tool("Briefing")
+            if briefing is None:
+                start("")
+                return
+            from aurora.tool_plugins.briefing import summary_line
+            self.backend.run_io(lambda: summary_line(briefing.gather()), start, lambda error: start(""))
 
         waiting = []
         if self.backend.engine is None:
@@ -261,6 +274,12 @@ class MainWindow(QMainWindow):
             self.backend.engine_ready.connect(greet)
         else:
             greet()
+
+    def say_reminder(self, data: dict):
+        """A reminder fell due: say it aloud if that's switched on (Settings → Voice)."""
+        text = (data or {}).get("text", "")
+        if text and self.backend.preferences.get("speak_reminders", False):
+            self.backend.voice.speak(f"Reminder: {text}")
 
     def start_wake_helper(self):
         """Starts the Wake Engine's helper if it's switched on (Settings) and not already running."""

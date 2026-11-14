@@ -1,4 +1,14 @@
-"""Conversation with AURORA through the existing engine."""
+"""
+Conversation with AURORA through the existing engine.
+
+Voice, three ways:
+    🎙 Ask by voice     one request, then back to typing
+    🗣 Conversation     AURORA answers aloud and listens again, until you say
+                        "that's all" / "goodbye", say nothing for a few seconds,
+                        or press Stop (aurora/voice/conversation.py)
+    waking AURORA       the Wake Engine starts a conversation with a greeting,
+                        and offers a briefing when something is coming up
+"""
 
 from datetime import datetime
 from pathlib import Path
@@ -12,6 +22,7 @@ from PySide6.QtWidgets import (
 
 from aurora.config import settings
 from aurora.interface.components.base_view import BaseView
+from aurora.voice import conversation
 from aurora.interface.components.widgets import clear_layout, label, safe_markdown
 
 
@@ -119,10 +130,17 @@ class ChatView(BaseView):
         self.mic_button = QPushButton("🎙  Ask by voice")
         self.mic_button.setToolTip("Opens the microphone for one question. It closes again when you stop talking.")
         self.mic_button.clicked.connect(self.listen)
+        self.talk_button = QPushButton("🗣  Conversation")
+        self.talk_button.setCheckable(True)
+        self.talk_button.setToolTip("Talk back and forth: AURORA answers aloud and listens again. Say "
+                                    "\"that's all\" or press Stop to finish.")
+        self.talk_button.clicked.connect(lambda on: self.start_conversation() if on else self.end_conversation())
         self.stop_voice_button = QPushButton("■  Stop")
-        self.stop_voice_button.setToolTip("Stop listening or speaking now.")
-        self.stop_voice_button.clicked.connect(self.backend.voice.stop)
+        self.stop_voice_button.setToolTip("Stop listening or speaking now (and end a conversation).")
+        self.stop_voice_button.clicked.connect(self.stop_voice)
         self.stop_voice_button.setEnabled(False)
+        self.in_conversation = False
+        self._offer = None               # a question AURORA asked by voice ("Would you like a briefing?")
         self.speak_replies = QCheckBox("Speak replies")
         self.speak_replies.setChecked(bool(self.backend.preferences.get("speak_replies", False)))
         self.speak_replies.toggled.connect(lambda on: self.backend.save_preferences({"speak_replies": on}))
@@ -132,6 +150,7 @@ class ChatView(BaseView):
         self.image_button.clicked.connect(lambda: self.ask_image())
         voice_row.addWidget(self.image_button)
         voice_row.addWidget(self.mic_button)
+        voice_row.addWidget(self.talk_button)
         voice_row.addWidget(self.stop_voice_button)
         voice_row.addWidget(self.speak_replies)
         voice_row.addWidget(self.voice_status, 1)
@@ -212,10 +231,86 @@ class ChatView(BaseView):
         self.backend.voice.listen(self._heard, self._voice_failed)
 
     def _heard(self, text: str):
+        if self.in_conversation:
+            self._heard_in_conversation(text)
+            return
         if not text:
             self.voice_status.setText("I didn't hear anything. Try again, a little closer to the microphone.")
             return
         self.voice_status.setText("")
+        self.send(text, by_voice=True)
+
+    # --- Conversation ------------------------------------------------------------
+
+    def start_conversation(self, greeting: str | None = None, offer: str | None = None):
+        """Talk back and forth. ``greeting`` is said first; ``offer`` is what a "yes" to it asks for."""
+        if self.busy:
+            self.talk_button.setChecked(False)
+            return
+        self.backend.voice.stop()                  # stop a reply that's still being spoken
+        self.in_conversation = True
+        self._offer = offer
+        self.talk_button.setChecked(True)
+        if greeting:
+            self._add_bubble("AURORA", greeting)
+            self._say(greeting)
+        else:
+            self._listen_again()
+
+    def end_conversation(self, farewell: str | None = None):
+        if not self.in_conversation:
+            self.talk_button.setChecked(False)
+            return
+        self.in_conversation = False
+        self._offer = None
+        self.talk_button.setChecked(False)
+        if farewell:
+            self._add_bubble("AURORA", farewell)
+            self.backend.voice.speak(farewell)
+        self.voice_status.setText("Conversation ended.")
+
+    def stop_voice(self):
+        """The Stop button: stop speaking or listening now, and end a conversation."""
+        self.end_conversation()
+        self.backend.voice.stop()
+
+    def _say(self, text: str):
+        """Speak, then (still in a conversation) listen for the answer."""
+        def done(finished: bool):
+            # Not finished = interrupted: by Stop (the conversation has ended) or by
+            # barge-in (you started talking): then listen to what you said.
+            self._listen_again()
+        self.backend.voice.speak(text, on_done=done)
+
+    def _listen_again(self):
+        if not self.in_conversation or self.busy:
+            return
+        self.backend.voice.listen(self._heard, self._conversation_failed)
+
+    def _conversation_failed(self, error):
+        self.end_conversation()
+        self._voice_failed(error)
+
+    def _heard_in_conversation(self, text: str):
+        if not text:
+            self.end_conversation()
+            self.voice_status.setText("Conversation ended (I didn't hear anything). Press 🗣 to talk again.")
+            return
+        offer, self._offer = self._offer, None
+        if conversation.is_end(text):
+            self._add_bubble("You (voice)", text, "user")
+            self.end_conversation("Okay. I'm here if you need me.")
+            return
+        if offer and conversation.is_yes(text):
+            self._add_bubble("You (voice)", text, "user")
+            self.send(offer, by_voice=True, show=False)
+            return
+        if offer and conversation.is_no(text):
+            self._add_bubble("You (voice)", text, "user")
+            reply = "Okay. How can I help?"
+            self._add_bubble("AURORA", reply)
+            self._say(reply)
+            return
         self.send(text, by_voice=True)
 
     def _voice_failed(self, error):
@@ -226,7 +321,9 @@ class ChatView(BaseView):
         self.stop_voice_button.setEnabled(speaking_or_listening)
         self.mic_button.setEnabled(state not in ("listening", "loading"))
         messages = {"loading": "Loading the speech model (the first time takes a while)…",
-                    "listening": "🎙  Listening… speak now", "speaking": "🔊  Speaking… (Stop to interrupt)",
+                    "listening": ("🗣  Listening… (say “that's all” to finish)" if self.in_conversation
+                                  else "🎙  Listening… speak now"),
+                    "speaking": "🔊  Speaking… (Stop to interrupt)",
                     "unavailable": f"Voice isn't available: {self.backend.voice.problem}"}
         if state in messages:
             self.voice_status.setText(messages[state])
@@ -242,7 +339,8 @@ class ChatView(BaseView):
     def _voice_partial(self, text: str):
         self._partial = text
 
-    def send(self, text: str | None = None, by_voice: bool = False):
+    def send(self, text: str | None = None, by_voice: bool = False, show: bool = True):
+        """Sends a message. ``show=False``: the request was already shown (a spoken "yes" to an offer)."""
         if self.busy:
             return
         text = (text if text is not None else self.input.toPlainText()).strip()
@@ -250,7 +348,8 @@ class ChatView(BaseView):
             return
         self.input.clear()
         self.confirm_row.hide()
-        self._add_bubble("You (voice)" if by_voice else "You", text, "user")
+        if show:
+            self._add_bubble("You (voice)" if by_voice else "You", text, "user")
 
         self.busy = True
         self._streaming_bubble = None
@@ -318,13 +417,17 @@ class ChatView(BaseView):
         self._streaming_bubble = None
         self.confirm_row.setVisible(needs_confirmation)
         self._finish()
-        if self.speak_replies.isChecked():
+        if self.in_conversation:
+            self._say(reply)                      # answer aloud, then listen again
+        elif self.speak_replies.isChecked():
             self.backend.voice.speak(reply)
 
     def _on_error(self, error):
         self._streaming_bubble = None
         self._add_bubble("AURORA", f"Something went wrong: {error}", "error")
         self._finish()
+        if self.in_conversation:
+            self._say("Sorry, something went wrong. You can try again.")
 
     def clear(self):
         if self.busy:

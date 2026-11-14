@@ -58,6 +58,7 @@ INTERFACE = {
     "minimize_to_tray": (bool, True, lambda v: True),
     "close_to_tray": (bool, False, lambda v: True),
     "speak_replies": (bool, False, lambda v: True),
+    "speak_reminders": (bool, False, lambda v: True),     # say reminders aloud when they're due
     "wake_enabled": (bool, False, lambda v: True),        # run the Wake Engine's helper
 }
 

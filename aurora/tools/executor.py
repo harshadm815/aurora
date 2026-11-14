@@ -53,6 +53,7 @@ INTENT_TOOLS = {
     Intent.APPS: "Apps",
     Intent.FILES: "Files",
     Intent.SCHEDULE: "Schedule",
+    Intent.BRIEFING: "Briefing",
 }
 
 SOURCE = "ToolExecutor"
@@ -87,6 +88,8 @@ def default_sources(name: str, result: ToolResult) -> list[Source]:
         return [Source(MEMORY)]
     if name == "Episodes":
         return [Source(MEMORY, "activity history")]
+    if name == "Briefing":
+        return [Source(MEMORY, "your reminders, scheduled tasks and research log")]
     if name in ("Sensors", "Health"):
         return [Source(SENSOR)]
     if name == "Camera":

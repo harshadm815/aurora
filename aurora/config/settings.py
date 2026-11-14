@@ -9,7 +9,7 @@ import sys
 from pathlib import Path
 
 APP_NAME = "AURORA"
-VERSION = "0.43.1"
+VERSION = "0.44.0"
 
 USER_NAME = "Harry"
 
@@ -120,6 +120,8 @@ PERMISSION_GRANTS: dict[str, list[str]] = {
     "MemoryControl": ["memory.read", "memory.write"],
     # Episodic memory: "what did we do today?"
     "Episodes": ["memory.read"],
+    # Today's reminders, scheduled tasks and latest research (read only, nothing leaves the PC).
+    "Briefing": ["memory.read"],
     # Procedural memory: routines you teach ("when I say morning briefing, ...").
     "Routines": ["memory.read", "memory.write"],
     # Learns facts from conversation and gives relevant ones to the Brain.

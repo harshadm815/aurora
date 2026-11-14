@@ -142,6 +142,9 @@ class SettingsView(BaseView):
                                   "the microphone hears AURORA and cuts it off)")
         self.barge_in.setChecked(values["voice_barge_in"])
         form.addRow("", self.barge_in)
+        self.speak_reminders = QCheckBox("Say reminders aloud when they're due")
+        self.speak_reminders.setChecked(values["speak_reminders"])
+        form.addRow("", self.speak_reminders)
         voice.add_layout(form)
         tests = QHBoxLayout()
         test_voice = QPushButton("Test the voice")
@@ -359,6 +362,7 @@ class SettingsView(BaseView):
             "voice_pitch": self.voice_pitch.value(),
             "voice_input_device": self.voice_device.currentData() or "",
             "voice_barge_in": self.barge_in.isChecked(),
+            "speak_reminders": self.speak_reminders.isChecked(),
             "wake_enabled": self.wake_enabled.isChecked(),
             "wake_key": self.wake_key.currentData(),
             "wake_phrase": " ".join(self.wake_phrase.text().lower().split()),

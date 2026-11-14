@@ -492,7 +492,7 @@ def test_window_wakes_greets_and_listens(qapp, memory, tmp_path, monkeypatch):
 
     window = MainWindow(backend, use_tray=False)
     monkeypatch.setattr(backend.voice, "speak", speak)
-    monkeypatch.setattr(window.pages["Chat"], "listen", lambda: listened.append(1))
+    monkeypatch.setattr(backend.voice, "listen", lambda on_heard, on_error: listened.append(1))
     try:
         window.wake()                                  # before the engine is ready: waits for it
         assert said == []
@@ -500,7 +500,8 @@ def test_window_wakes_greets_and_listens(qapp, memory, tmp_path, monkeypatch):
         assert wait_for(lambda: backend.engine is not None, 10)
         _pump(qapp, 3, lambda: said)
         assert said == [settings.WAKE_GREETING] and listened == [1] and window.current == "Chat"
-        window.wake()                                  # engine ready: greets at once
+        window.wake()                                  # engine ready: greets straight away
+        _pump(qapp, 3, lambda: len(said) == 2)         # (after checking for a briefing, off the GUI thread)
         assert said == [settings.WAKE_GREETING] * 2
     finally:
         window.close()

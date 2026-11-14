@@ -28,6 +28,7 @@ RESEARCH = "Research"
 APPS = "Apps"
 FILES = "Files"
 SCHEDULE = "Schedule"
+BRIEFING = "Briefing"
 UNDO = "Undo"
 
 

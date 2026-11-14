@@ -10,7 +10,7 @@ work. Nothing here is marked done until it has been tested on this PC.
 |---|---|---|---|
 | Voice Engine | `aurora/voice/` (exists) | Vosk, VAD, Windows SAPI, Piper, `VoiceSession` | **Built**: provider interface, words while you speak, pitch (0.41.0), natural Piper voice (0.42.0); multilingual and Whisper optional, later |
 | Wake Engine | `aurora/wake/` | `aurora/voice/` (Vosk grammar recogniser), the packaged .exe | **Built (0.43.0)**: hold Right Ctrl (or Space), say "Wake up"; measured below |
-| Voice conversation | `aurora/voice/session.py` (exists) | Engine, Chat, barge-in, Stop | **Mostly built**; a continuous "call-like" session is missing |
+| Voice conversation | `aurora/voice/conversation.py`, Chat | Engine, Chat, barge-in, Stop | **Built (0.44.0)**: conversation mode, briefings, spoken reminders |
 | Mobile Companion | `aurora/mobile/` (planned) | Engine, memory, conversation, network gate | Not started |
 | Calling Agent | `aurora/calling/` (planned) | Voice Engine, Mobile Companion transport | Not started |
 
@@ -205,6 +205,21 @@ seconds. The helper can say "Starting AURORA…" immediately, and the
 greeting comes when the engine is ready. Start-up time will be measured.
 
 ## 3. Voice conversation (call-like sessions)
+
+**Built in 0.44.0.** Chat's 🗣 Conversation button, and every wake, start
+a conversation: AURORA answers aloud and listens again; "that's all",
+"goodbye" (and similar), a few seconds of silence or Stop end it, and
+the microphone is closed while AURORA speaks unless barge-in is on.
+The `Briefing` tool ("give me my briefing", "what's on today") reads
+today's reminders (and overdue ones), today's scheduled tasks and the
+last two days' research, from AURORA's own records only. When you wake
+AURORA and something is due, the greeting offers it: "I'm awake. You
+have two reminders today. Would you like a briefing?" ("yes" gives it,
+"not now" asks how it can help). Spoken reminders are an option in
+Settings → Voice. Tested with scripted speech; real-voice use is yours
+to try.
+
+The original notes follow.
 
 Already there: listen, answer, speak, interrupt. To add:
 

@@ -200,8 +200,15 @@ Each ends with something you can use on the phone, tested.
    device" mark, and the PC offers a file only by a random id for an
    hour.
 6. **Away from home and audit** (**built, 0.51.0 / app 0.7.0**):
-   - **Tailscale route**, as in "Connecting" above. Waiting for you to
-     install Tailscale on both devices to try it for real.
+   - **Tailscale route**, as in "Connecting" above. Working since
+     2026-11-15 (phone on mobile data, PC tab showing "Tailscale"). Setting
+     it up needed, once: Tailscale on both devices with the same account,
+     **Serve** enabled for the tailnet (Tailscale shows a link the first
+     time), then "Set up away from home". The phone must reach AURORA once
+     by cable or home Wi-Fi afterwards to learn the address, and AURORA
+     must be open on the PC (nothing answers while it's closed or the PC
+     sleeps). A Tailscale installed while AURORA runs is noticed at the
+     next network check (every 20 s).
    - **Poor networks**: when the phone joins a network (Wi-Fi back, mobile
      data back) it reconnects at once instead of waiting out the back-off
      (5 s up to 60 s); every route has a 3 s connect timeout; files and

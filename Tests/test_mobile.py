@@ -1218,7 +1218,11 @@ def test_too_many_open_connections_are_closed_at_once(server, phone, monkeypatch
             time.sleep(0.05)
         extra = socket.create_connection(("127.0.0.1", server.port), timeout=5)
         extra.sendall(b"GET / HTTP/1.1\r\nHost: localhost\r\n\r\n")
-        assert extra.recv(100) == b""                                   # closed without an answer
+        try:
+            answer = extra.recv(100)
+        except ConnectionError:                                         # Windows may report the close as an abort
+            answer = b""
+        assert answer == b""                                            # closed without an answer
         extra.close()
     finally:
         for s in held:
@@ -1233,3 +1237,12 @@ def test_too_many_open_connections_are_closed_at_once(server, phone, monkeypatch
         time.sleep(0.2)
     else:
         raise AssertionError("the server didn't recover after the connections closed")
+
+
+def test_tailscale_installed_while_aurora_runs_is_noticed(monkeypatch):
+    ts = phone_tailscale.Tailscale(8765, None, run=FakeTailscaleCli(serving=True))
+    ts.check()
+    assert not ts.installed
+    monkeypatch.setattr(phone_tailscale, "find_tailscale", lambda: "tailscale.exe")   # you install it
+    ts.check()
+    assert ts.installed and ts.address == "aurora-pc.tail1234.ts.net"

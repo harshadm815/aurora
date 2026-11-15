@@ -87,6 +87,8 @@ class Tailscale:
 
     def check(self) -> None:
         if self.executable is None:
+            self.executable = find_tailscale()         # installed while AURORA was running
+        if self.executable is None:
             return
         with self._lock:
             self.name = parse_status(self.run([self.executable, "status", "--json"]))

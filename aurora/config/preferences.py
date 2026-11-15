@@ -62,6 +62,7 @@ INTERFACE = {
     "wake_enabled": (bool, False, lambda v: True),        # run the Wake Engine's helper
     "mobile_enabled": (bool, False, lambda v: True),      # serve the phone app (see aurora/mobile)
     "mobile_wifi": (bool, False, lambda v: True),         # also listen on Wi-Fi, on home networks only
+    "mobile_launcher": (bool, False, lambda v: True),     # the phone may start AURORA while it's closed
     "mobile_home_networks": (list, [], lambda v: len(v) <= 5 and all(isinstance(n, str) and 0 < len(n) <= 64
                                                                     for n in v)),
 }

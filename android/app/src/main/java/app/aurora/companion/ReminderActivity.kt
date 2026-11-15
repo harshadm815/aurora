@@ -102,7 +102,9 @@ class ReminderActivity : Activity() {
                     timeoutMs = 120_000)
                 if (reply.ok) null else reply.error
             } catch (error: IOException) {
-                error.message
+                // The PC is away: AURORA sets it when it's back (it may then be a little late).
+                Offline.enqueue(this, "chat", JSONObject().put("text", Protocol.snooze(reminder)))
+                null
             }
             runOnUiThread {
                 if (problem == null) finishReminder()

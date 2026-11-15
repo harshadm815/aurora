@@ -613,7 +613,7 @@ class Backend(QObject):
             try:
                 server = MobileService(MobileBridge(self), wifi=bool(self.preferences.get("mobile_wifi")),
                                        home_networks=self.preferences.get("mobile_home_networks") or [])
-                server.start()
+                self._start_after_phone_helper(server)
             except OSError as error:
                 logger.warning("Mobile: server couldn't start (%s)", type(error).__name__)
                 return f"The phone server couldn't start on port {settings.MOBILE_PORT}: {error.strerror or error}"
@@ -629,13 +629,34 @@ class Backend(QObject):
             self.mobile_changed.emit(False)
         return ""
 
+    @staticmethod
+    def _start_after_phone_helper(server, tries: int = 12, pause: float = 0.5, ask_helper=None) -> None:
+        """Starts the phone service. If the port is taken by the phone helper (AURORA's closed mode, see
+        aurora/mobile/launcher.py), asks it to quit and tries again for a few seconds."""
+        import time
+        if ask_helper is None:
+            from aurora.mobile import launcher
+            ask_helper = launcher.stop_helper
+        for attempt in range(tries):
+            try:
+                server.start()
+                return
+            except OSError:
+                server.stop()
+                helper_asked = attempt == 0 and ask_helper()
+                if (attempt == 0 and not helper_asked) or attempt == tries - 1:
+                    raise                               # someone else has the port: report it
+                if helper_asked:
+                    logger.info("Mobile: asked the phone helper to step aside")
+                time.sleep(pause)
+
     def _tell_phone_exchange(self, source: str, text: str, reply: str) -> None:
         if self.mobile is not None:
             self.mobile.events.publish("message", source=source, text=text, reply=reply)
 
     def _tell_phone_reminder(self, data: dict) -> None:
         if self.mobile is not None:
-            self.mobile.events.publish("reminder", text=str(data.get("text", "")))
+            self.mobile.events.publish("reminder", text=str(data.get("text", "")), reminder=data.get("id"))
 
     # --- Helpers for views --------------------------------------------------
 

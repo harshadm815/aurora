@@ -54,6 +54,19 @@ class RedesignTest {
         assertEquals("16 Nov 09:30", Format.due("2026-11-16T09:30", "2026-11-15"))
     }
 
+    // --- Offline reminders
+
+    @Test
+    fun reminder_times_are_read_as_local_time() {
+        val due = Alarms.dueAt("2026-11-15T18:00")!!
+        val calendar = java.util.Calendar.getInstance().apply { timeInMillis = due }
+        assertEquals(18, calendar.get(java.util.Calendar.HOUR_OF_DAY))
+        assertEquals(15, calendar.get(java.util.Calendar.DAY_OF_MONTH))
+        assertEquals(null, Alarms.dueAt("not a time"))
+        assertEquals("r7", Alarms.key(7))
+        assertTrue(Alarms.GRACE_MS in 10_000..120_000)          // the PC's announcement wins if it's on
+    }
+
     // --- Call
 
     @Test

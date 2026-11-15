@@ -41,6 +41,7 @@ API (JSON):
     POST /api/memories/edit {"id", "value"} / POST /api/memories/delete {"id"}   (if allowed)
     POST /api/clear                        → clears the shared conversation (memories stay)
     POST /api/control    {"action"}        → "pause", "start" or "stop_speaking" only
+    (While AURORA is closed, the phone helper answers only status, connection and "start": launcher.py.)
     POST /api/unpair                       → this phone disconnects itself
     POST /api/file?name=N  (the file)      → {"saved", "folder"}: kept in "From phone", never overwriting
     GET  /api/file?id=I                    → a file you sent from the PC (files.py)
@@ -74,7 +75,10 @@ SECURITY_HEADERS = {
     "Content-Security-Policy": "default-src 'none'; frame-ancestors 'none'",
 }
 LOCAL_NAMES = ("localhost", "127.0.0.1", "::1")
-MAX_CONNECTIONS = 16           # the phone uses 2-3 at once (events, a request, a call)
+MAX_CONNECTIONS = 16
+# While AURORA is closed the phone helper (launcher.py) serves only these, and only "start" as a command.
+CLOSED_ROUTES = {("GET", "/api/status"), ("GET", "/api/connection"), ("POST", "/api/control")}
+CLOSED_MESSAGE = "AURORA is closed on your PC. Start it from the app (Home or Control)."           # the phone uses 2-3 at once (events, a request, a call)
 
 
 def host_name(host: str | None) -> str:
@@ -196,17 +200,22 @@ class Handler(BaseHTTPRequestHandler):
         store, bridge = server.store, server.bridge
         device = None
         try:
+            closed = getattr(bridge, "closed", False)
             if path == "/api/file":                    # streamed: checked against the signed SHA-256 as it arrives
                 if method == "POST":
                     claimed = self.headers.get("X-Aurora-Content-Sha256") or ""
                     device = self._device(method, path, b"", full, body_hash=claimed)
                 else:
                     device = self._device(method, path, b"", full)
+                if closed:
+                    raise ApiError(HTTPStatus.SERVICE_UNAVAILABLE, CLOSED_MESSAGE)
                 self._file(method, device, self._query(full))
                 return
             raw = (self._raw_body(MAX_VOICE_BODY if path == "/api/voice" else MAX_BODY)
                    if method == "POST" else b"")
             if (method, path) == ("POST", "/api/pair"):
+                if closed:
+                    raise ApiError(HTTPStatus.SERVICE_UNAVAILABLE, "Open AURORA on the PC to pair a phone.")
                 if not self._may_pair():
                     store.log("(unpaired)", "pair", "refused: not over USB")
                     raise ApiError(HTTPStatus.FORBIDDEN, "Pairing works only with the phone plugged in by USB.")
@@ -223,6 +232,8 @@ class Handler(BaseHTTPRequestHandler):
                 raise ApiError(HTTPStatus.NOT_FOUND, "Not found.")
             device = self._device(method, path, raw, full)
             what = path[5:]
+            if closed and (method, path) not in CLOSED_ROUTES:
+                raise ApiError(HTTPStatus.SERVICE_UNAVAILABLE, CLOSED_MESSAGE)
             if (method, path) == ("GET", "/api/events"):
                 query = self._query(full)
                 try:
@@ -255,6 +266,9 @@ class Handler(BaseHTTPRequestHandler):
                 result = server.connection()
             elif (method, path) == ("GET", "/api/history"):
                 result = {"messages": bridge.history(40)}
+            elif (method, path) in (("POST", "/api/chat"), ("POST", "/api/memories"), ("POST", "/api/memories/edit"),
+                                    ("POST", "/api/memories/delete")) and self._already_applied(raw):
+                result = {"ok": True, "duplicate": True, "reply": ""}
             elif (method, path) == ("POST", "/api/chat"):
                 text = " ".join(str(self._parse(raw).get("text", "")).split())[:4000]
                 if not text:
@@ -263,6 +277,7 @@ class Handler(BaseHTTPRequestHandler):
                     raise ApiError(HTTPStatus.FORBIDDEN, "AURORA is waiting for an answer to an action. This phone "
                                                          "isn't allowed to approve actions, so answer it on the PC.")
                 result = bridge.chat(text, device.name)
+                self._mark_applied(raw)
             elif (method, path) == ("GET", "/api/today"):
                 result = {"briefing": bridge.briefing(), "reminders": bridge.reminders(),
                           "earlier": bridge.earlier_reminders()}
@@ -284,19 +299,21 @@ class Handler(BaseHTTPRequestHandler):
                         done = bridge.add_memory(value)
                     else:
                         memory_id = int(data.get("id"))
+                        changed_at = float(data["changed_at"]) if data.get("changed_at") is not None else None
                         if path.endswith("/edit"):
                             if not value:
                                 raise ApiError(HTTPStatus.BAD_REQUEST, "A memory can't be empty.")
-                            done = bridge.edit_memory(memory_id, value)
+                            done = bridge.edit_memory(memory_id, value, changed_at)
                         else:
-                            done = bridge.forget_memory(memory_id)
+                            done = bridge.forget_memory(memory_id, changed_at)
                 except (TypeError, ValueError):
                     raise ApiError(HTTPStatus.BAD_REQUEST, "Bad request.")
                 except RuntimeError as error:
                     raise ApiError(HTTPStatus.SERVICE_UNAVAILABLE, str(error))
                 if not done:
                     raise ApiError(HTTPStatus.NOT_FOUND, "That memory isn't there any more.")
-                result = {"ok": True}
+                self._mark_applied(raw)
+                result = {"ok": True, "kept_pc": done == "kept"}
             elif (method, path) == ("POST", "/api/clear"):
                 bridge.clear_conversation()
                 result = {"ok": True}
@@ -304,6 +321,8 @@ class Handler(BaseHTTPRequestHandler):
                 action = str(self._parse(raw).get("action", ""))
                 if action not in ("pause", "start", "stop_speaking"):
                     raise ApiError(HTTPStatus.BAD_REQUEST, "The phone can only pause or start AURORA, or stop it speaking.")
+                if closed and action != "start":
+                    raise ApiError(HTTPStatus.SERVICE_UNAVAILABLE, CLOSED_MESSAGE)
                 result = {"message": bridge.control(action)}
                 what = f"control: {action}"
             elif (method, path) == ("POST", "/api/unpair"):
@@ -323,6 +342,26 @@ class Handler(BaseHTTPRequestHandler):
             logger.exception("Mobile: request failed")
             self._json(HTTPStatus.INTERNAL_SERVER_ERROR, {"error": "Something went wrong on the PC."})
 
+
+    @staticmethod
+    def _op(raw: bytes) -> str | None:
+        """The id of a change the phone queued while the PC was away (letters, digits, - and _ only)."""
+        try:
+            op = json.loads(raw or b"{}").get("op")
+        except (ValueError, AttributeError):
+            return None
+        if isinstance(op, str) and 8 <= len(op) <= 64 and op.replace("-", "").replace("_", "").isalnum():
+            return op
+        return None
+
+    def _already_applied(self, raw: bytes) -> bool:
+        op = self._op(raw)
+        return op is not None and self.server.store.op_applied(op)
+
+    def _mark_applied(self, raw: bytes) -> None:
+        op = self._op(raw)
+        if op is not None:
+            self.server.store.mark_op(op)
 
     def _file(self, method: str, device, query: dict) -> None:
         server = self.server

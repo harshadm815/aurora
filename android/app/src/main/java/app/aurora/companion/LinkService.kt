@@ -21,7 +21,7 @@ class LinkService : Service(), Live.Listener {
     companion object {
         private const val LINK_ID = 1
         private const val CHANNEL_LINK = "link"
-        private const val CHANNEL_REMINDERS = "reminder_alerts"     // sound, vibration, full screen
+        const val CHANNEL_REMINDERS = "reminder_alerts"             // sound, vibration, full screen
         private const val CHANNEL_REPLIES = "replies"
         private const val WAIT_SECONDS = 25
         private val BACKOFF = longArrayOf(5_000, 10_000, 20_000, 30_000, 60_000)
@@ -156,6 +156,7 @@ class LinkService : Service(), Live.Listener {
                 )
                 if (!reply.ok) throw IOException(reply.error)
                 failures = 0
+                if (Sync.needed(this)) thread(name = "aurora-sync") { Sync.run(this) }   // back in touch: catch up
                 val data = reply.json
                 aurora.prefs.edit()
                     .putString("event_session", data.optString("session"))
@@ -182,10 +183,14 @@ class LinkService : Service(), Live.Listener {
     private fun handle(event: JSONObject) {
         Live.event(event)
         when (event.optString("kind")) {
-            "reminder" -> if (option(this, "reminder_call", false)) {
-                notify(CHANNEL_REPLIES, "Reminder", event.optString("text"))      // kept if you miss the call
-                Calls.ring(this, "reminder", event.optString("text"))
-            } else remind(event.optString("text"))
+            "reminder" -> {
+                val id = event.optInt("reminder")
+                if (id > 0 && !Offline.markShown(this, Alarms.key(id))) return    // the phone already rang it
+                if (option(this, "reminder_call", false)) {
+                    notify(CHANNEL_REPLIES, "Reminder", event.optString("text"))  // kept if you miss the call
+                    Calls.ring(this, "reminder", event.optString("text"))
+                } else Alarms.remind(this, event.optString("text"))
+            }
             "call" -> Calls.ring(this, event.optString("reason", "pc"), "")
             "file" -> fetch(event.optString("file"), event.optString("name", "file"))
             "message" -> if (event.optString("source") == "phone" && !Live.visible)
@@ -215,37 +220,6 @@ class LinkService : Service(), Live.Listener {
         this, 0, Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
         PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
     )
-
-    /** A due reminder: sound and the reminder screen (over the lock screen), then AURORA says it. */
-    private fun remind(text: String) {
-        val id = nextId++
-        val screen = PendingIntent.getActivity(
-            this, id, Intent(this, ReminderActivity::class.java)
-                .putExtra(ReminderActivity.TEXT, text)
-                .putExtra(ReminderActivity.NOTIFICATION, id)
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_NO_USER_ACTION),
-            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
-        )
-        val builder = Notification.Builder(this, CHANNEL_REMINDERS)
-            .setSmallIcon(R.drawable.ic_notify)
-            .setContentTitle("Reminder")
-            .setContentText(text)
-            .setStyle(Notification.BigTextStyle().bigText(text))
-            .setCategory(Notification.CATEGORY_ALARM)
-            .setContentIntent(screen)
-            .setAutoCancel(true)
-            .setVisibility(Notification.VISIBILITY_PRIVATE)
-            .setPublicVersion(Notification.Builder(this, CHANNEL_REMINDERS)
-                .setSmallIcon(R.drawable.ic_notify).setContentTitle("AURORA: reminder").build())
-        if (option(this, "reminder_screen")) builder.setFullScreenIntent(screen, true)
-        getSystemService(NotificationManager::class.java).notify(id, builder.build())
-        if (option(this, "speak_reminders")) {
-            thread(name = "aurora-say-reminder") {
-                Thread.sleep(1500)                              // after the notification sound
-                Speech.say(this, "Reminder: $text", alarm = true)
-            }
-        }
-    }
 
     private fun notify(channel: String, title: String, text: String, tap: PendingIntent? = null) {
         val notification = Notification.Builder(this, channel)

@@ -5,6 +5,7 @@ Starts the AURORA Command Centre.
     command_centre.py --minimized  start in the notification area (used by "start with Windows")
     command_centre.py --wake       start (or wake the running one), greet and listen (the Wake Engine)
     command_centre.py --wake-helper   the Wake Engine's small background helper (no main window)
+    command_centre.py --phone-helper  lets the paired phone start AURORA while it's closed (no window)
     command_centre.py --train …    run a training job (used by the Training monitor; no window)
     command_centre.py --voice-check / --vision-check   self-tests (no window)
 
@@ -88,6 +89,9 @@ def run(argv: list[str] | None = None) -> int:
         return voice_check(argv[2:])
     if argv[1:2] == ["--vision-check"]:
         return vision_check(argv[2:])
+    if argv[1:2] == ["--phone-helper"]:
+        from aurora.mobile.launcher import main as phone_helper
+        return phone_helper(argv[2:])
     if argv[1:2] == ["--wake-helper"]:
         setup_logging()
         from aurora.wake.helper import main as wake_helper
@@ -140,6 +144,13 @@ def run(argv: list[str] | None = None) -> int:
         backend.shutdown()     # Safe if the window already did it.
         guard.release()
         logger.info("Command Centre stopped")
+        prefs = backend.preferences
+        if prefs.get("mobile_launcher") and prefs.get("mobile_enabled"):
+            try:                                     # the phone can start AURORA again while it's closed
+                from aurora.mobile import launcher
+                launcher.start_helper()
+            except Exception:
+                logger.exception("Couldn't start the phone helper")
 
     app.aboutToQuit.connect(finish)
 

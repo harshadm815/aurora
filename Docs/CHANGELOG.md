@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.54.0 — The phone starts AURORA; the phone on its own (2026-11-15)
+
+### Added
+- **Call AURORA even when it's closed on the PC**: "Let my phone start
+  AURORA when it's closed" on the Phone page runs a small helper (no
+  window) from Windows sign-in and whenever AURORA quits. It answers only
+  your signed phone, and only "is AURORA running?" and "start AURORA"; it
+  starts AURORA in the notification area and steps aside. The app's Call
+  then starts AURORA first and calls as soon as it's ready; Home and
+  Control offer **Start AURORA**. A paused AURORA is resumed the same way.
+- **The phone keeps working while the PC is away** (app 0.9.0):
+  - reminders ring from the phone itself (Android alarms, 30 s after
+    they're due unless the PC announced them first; never twice), also
+    after the phone restarts;
+  - messages typed in Chat wait on the phone (⏳) and go to AURORA when
+    the PC is back, in order; replies come as notifications;
+  - memories can be read from the phone's copy and added, changed or
+    deleted offline; the changes go to the PC when it's back;
+  - snoozing a reminder offline is passed on later.
+- **Sync** whenever the phone reaches AURORA: the phone's changes first
+  (each applied once, even if sent twice; when both sides changed a
+  memory, the newer change wins), then fresh memories and reminders.
+
 ## 0.53.0 — AURORA Call and a redesigned phone app (2026-11-15)
 
 ### Changed

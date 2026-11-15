@@ -87,6 +87,11 @@
             android:exported="false"
             android:foregroundServiceType="remoteMessaging" />
 
+        <!-- The phone's own reminder alarms (Alarms.kt): only Android's alarm service sends these. -->
+        <receiver
+            android:name=".AlarmReceiver"
+            android:exported="false" />
+
         <receiver
             android:name=".BootReceiver"
             android:exported="true">

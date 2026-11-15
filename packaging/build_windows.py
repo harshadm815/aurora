@@ -43,6 +43,9 @@ def stop_wake_helper() -> None:
         from aurora.wake import launcher
         if launcher.stop_helper():
             print("Asked the Wake Engine helper to quit.")
+        from aurora.mobile import launcher as phone_launcher
+        if phone_launcher.stop_helper():
+            print("Asked the phone helper to quit.")
     except Exception as error:          # no PySide6, no helper: nothing to stop
         print(f"(Couldn't ask the Wake Engine helper to quit: {error})")
 

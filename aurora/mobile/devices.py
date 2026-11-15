@@ -87,6 +87,8 @@ class DeviceStore:
                 logger.info("Mobile: %d phone(s) without a signing key were disconnected", removed)
             db.execute("""CREATE TABLE IF NOT EXISTS access_log (
                             time TEXT NOT NULL, device TEXT NOT NULL, what TEXT NOT NULL, outcome TEXT NOT NULL)""")
+            # Ids of changes the phone made while the PC was away, already applied (so a retry adds nothing).
+            db.execute("CREATE TABLE IF NOT EXISTS applied_ops (op TEXT PRIMARY KEY, time TEXT NOT NULL)")
 
     def _connect(self):
         return sqlite3.connect(self.path)
@@ -197,6 +199,16 @@ class DeviceStore:
         with self._connect() as db:
             db.execute("INSERT INTO access_log VALUES (?, ?, ?, ?)", (now.isoformat(), device, what, outcome))
             db.execute("DELETE FROM access_log WHERE time < ?", ((now - timedelta(days=LOG_KEEP_DAYS)).isoformat(),))
+
+    def op_applied(self, op: str) -> bool:
+        with self._connect() as db:
+            return db.execute("SELECT 1 FROM applied_ops WHERE op = ?", (op,)).fetchone() is not None
+
+    def mark_op(self, op: str) -> None:
+        now = self.clock()
+        with self._connect() as db:
+            db.execute("INSERT OR IGNORE INTO applied_ops VALUES (?, ?)", (op, now.isoformat()))
+            db.execute("DELETE FROM applied_ops WHERE time < ?", ((now - timedelta(days=LOG_KEEP_DAYS)).isoformat(),))
 
     def recent_log(self, limit: int = 50) -> list[tuple[datetime, str, str, str]]:
         with self._connect() as db:

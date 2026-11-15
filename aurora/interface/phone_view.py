@@ -53,6 +53,14 @@ class PhoneView(BaseView):
                                     "on Wi-Fi at all.")
         self.mobile_wifi.toggled.connect(lambda on: self._save(mobile_wifi=on))
         connection.add(self.mobile_wifi)
+        self.mobile_launcher = QCheckBox("Let my phone start AURORA when it's closed")
+        self.mobile_launcher.setChecked(values.get("mobile_launcher", False))
+        self.mobile_launcher.setToolTip("A small helper (no window) runs while AURORA is closed, from Windows sign-in "
+                                        "on. It answers only your paired phone, and only to start AURORA (in the "
+                                        "notification area). Then the app's Call button works even when AURORA "
+                                        "isn't open. It can't wake a PC that is asleep or off.")
+        self.mobile_launcher.toggled.connect(self._set_launcher)
+        connection.add(self.mobile_launcher)
         self._home_networks = list(values["mobile_home_networks"])
         home_row = QHBoxLayout()
         self.home_networks_label = label("", "Faint", wrap=True)
@@ -140,11 +148,19 @@ class PhoneView(BaseView):
         if "mobile_enabled" in changed:
             problem = self.backend.set_mobile(changed["mobile_enabled"])
             self._refresh_phone()
-        elif self.backend.mobile is not None:
+        elif self.backend.mobile is not None and ("mobile_wifi" in changed or "mobile_home_networks" in changed):
             self.backend.mobile.set_wifi(self.backend.preferences["mobile_wifi"],
                                          self.backend.preferences["mobile_home_networks"])
             self._refresh_phone_status()
         self._status(problem or f"Saved at {datetime.now():%H:%M:%S}.", problem=bool(problem))
+
+    def _set_launcher(self, on: bool) -> None:
+        self._save(mobile_launcher=on)
+        try:
+            from aurora.mobile import launcher
+            launcher.set_helper_startup(on)
+        except Exception as error:
+            self._status(f"Saved, but Windows sign-in couldn't be changed: {error}", problem=True)
 
     def _status(self, text: str, problem: bool = False):
         self.save_status.setText(("⚠  " if problem else "✓  ") + text)

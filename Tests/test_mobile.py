@@ -1273,13 +1273,13 @@ class EditingBridge(FakeBridge):
         self.notes[max(self.notes, default=0) + 1] = value
         return True
 
-    def edit_memory(self, memory_id, value):
+    def edit_memory(self, memory_id, value, changed_at=None):
         if memory_id not in self.notes:
             return False
         self.notes[memory_id] = value
         return True
 
-    def forget_memory(self, memory_id):
+    def forget_memory(self, memory_id, changed_at=None):
         return self.notes.pop(memory_id, None) is not None
 
     def clear_conversation(self):
@@ -1370,3 +1370,166 @@ def test_service_states_are_read_whatever_their_case():
 def test_a_dropped_call_is_greeted_again_briefly():
     from aurora.mobile.call import greeting_for
     assert "line dropped" in greeting_for("reconnect", "")
+
+
+# --- The phone helper: AURORA closed mode (offline plan A) ---------------------------------
+
+from aurora.mobile import launcher as phone_launcher  # noqa: E402
+
+
+@pytest.fixture
+def closed(tmp_path):
+    started = []
+    store = DeviceStore(tmp_path / "m.db")
+    server = MobileServer(phone_launcher.ClosedBridge(lambda: started.append(True)), store, port=0)
+    server.start()
+    _ALLOWED_PORTS.add(server.port)
+    server.started = started
+    yield server
+    server.stop()
+
+
+def test_while_closed_the_phone_can_only_ask_and_start(closed, phone, tmp_path):
+    code = closed.store.new_code()
+    status, data, _ = call(closed, "POST", "/api/pair", {"code": code, "name": "x", "public_key": phone.public})
+    assert status == 503 and "Open AURORA" in data["error"]                      # no pairing while closed
+    token, _device = closed.store.pair(closed.store.new_code(), "Pixel", phone.public)
+    status, data, _ = call(closed, "GET", "/api/status", token=token, phone=phone)
+    assert status == 200 and data["state"] == "closed" and data["permissions"] == {"memories": False, "actions": False}
+    assert call(closed, "GET", "/api/connection", token=token, phone=phone)[0] == 200
+    for method, path, body in [("POST", "/api/chat", {"text": "hi"}), ("GET", "/api/events?after=-1", None),
+                               ("GET", "/api/history", None), ("GET", "/api/memories", None),
+                               ("POST", "/api/clear", {}), ("GET", "/api/call", None),
+                               ("POST", "/api/control", {"action": "pause"})]:
+        status, data, _ = call(closed, method, path, body, token=token, phone=phone)
+        assert status == 503 and "closed" in data["error"], path
+    assert call(closed, "GET", "/api/status", token=token)[0] == 401              # still only the signed phone
+    assert call(closed, "POST", "/api/control", {"action": "start"}, token="wrong", phone=phone)[0] == 401
+    assert closed.started == []
+    status, data, _ = call(closed, "POST", "/api/control", {"action": "start"}, token=token, phone=phone)
+    assert status == 200 and "Starting AURORA" in data["message"] and closed.started == [True]
+
+
+def test_the_helper_lets_go_of_the_ports_before_starting_aurora():
+    order = []
+
+    class Service:
+        def start(self):
+            order.append("listen")
+
+        def stop(self):
+            order.append("let go")
+
+    done = threading.Event()
+    helper = phone_launcher.PhoneHelper({}, service_factory=lambda bridge: Service(),
+                                        launch=lambda: order.append("start AURORA"),
+                                        quit=lambda: (order.append("quit"), done.set()))
+    assert helper.start(tries=1)
+    helper.start_aurora()
+    helper.start_aurora()                                           # a second tap doesn't start it twice
+    assert done.wait(5)
+    assert order == ["listen", "let go", "start AURORA", "quit"]
+
+
+def test_the_helper_waits_for_aurora_to_let_go_of_the_ports():
+    attempts = []
+
+    class Busy:
+        def start(self):
+            attempts.append(1)
+            if len(attempts) < 3:
+                raise OSError("in use")
+
+        def stop(self):
+            pass
+
+    helper = phone_launcher.PhoneHelper({}, service_factory=lambda bridge: Busy())
+    assert helper.start(tries=5, pause=0) and len(attempts) == 3
+    attempts.clear()
+    always = phone_launcher.PhoneHelper({}, service_factory=lambda bridge: type("B", (), {
+        "start": lambda self: (_ for _ in ()).throw(OSError("in use")), "stop": lambda self: None})())
+    assert not always.start(tries=2, pause=0)
+
+
+def test_aurora_asks_the_helper_to_step_aside():
+    from aurora.interface.backend import Backend
+    tries = []
+
+    class Service:
+        def start(self):
+            tries.append(1)
+            if len(tries) == 1:
+                raise OSError("in use")
+
+        def stop(self):
+            pass
+
+    asked = []
+    Backend._start_after_phone_helper(Service(), pause=0, ask_helper=lambda: asked.append(1) or True)
+    assert asked == [1] and len(tries) == 2
+    tries.clear()
+    with pytest.raises(OSError):                                    # something else has the port: say so
+        Backend._start_after_phone_helper(Service(), pause=0, ask_helper=lambda: False)
+
+
+def test_the_phone_page_switch_sets_the_helper_up(qapp, backend, monkeypatch):
+    from aurora.interface import phone_view
+    calls = []
+    monkeypatch.setattr(phone_launcher, "set_helper_startup", lambda on, registry=None: calls.append(on))
+    page = phone_view.PhoneView(backend)
+    page.mobile_launcher.setChecked(True)
+    assert backend.preferences["mobile_launcher"] is True and calls == [True]
+    page.mobile_launcher.setChecked(False)
+    assert backend.preferences["mobile_launcher"] is False and calls == [True, False]
+
+
+# --- Offline phone and sync (offline plan B) -----------------------------------------------
+
+def test_a_queued_change_is_applied_once(editing, phone):
+    token = _paired(editing, phone)
+    editing.store.set_permissions(editing.store.devices()[0].id, memories=True)
+    body = {"text": "sent while the PC was off", "op": "op-aaaa1111"}
+    first = call(editing, "POST", "/api/chat", body, token=token, phone=phone)[1]
+    again = call(editing, "POST", "/api/chat", body, token=token, phone=phone)[1]        # the phone retried
+    assert first["reply"] == "echo: sent while the PC was off" and again["duplicate"] is True
+    assert editing.fake.said == [("Pixel", "sent while the PC was off")]                 # AURORA answered once
+    add = {"value": "the gate code is 4321", "op": "op-bbbb2222"}
+    call(editing, "POST", "/api/memories", add, token=token, phone=phone)
+    call(editing, "POST", "/api/memories", add, token=token, phone=phone)
+    assert list(editing.fake.notes.values()).count("the gate code is 4321") == 1
+    bad = call(editing, "POST", "/api/chat", {"text": "x", "op": "../../etc"}, token=token, phone=phone)[1]
+    assert bad["reply"] == "echo: x"                                                     # a bad id is just ignored
+
+
+def test_the_newer_change_wins(backend, qapp):
+    import time as clock
+    from aurora.interface.mobile_bridge import MobileBridge
+    bridge = MobileBridge(backend)
+    bridge.add_memory("Dentist on Friday")
+    memory = next(m for m in bridge.memories() if m["value"] == "Dentist on Friday")
+    assert memory["updated"] is not None
+    phone_changed_earlier = memory["updated"] - 60                     # the PC's copy is newer
+    assert bridge.edit_memory(memory["id"], "Dentist on Thursday", phone_changed_earlier) == "kept"
+    assert bridge.forget_memory(memory["id"], phone_changed_earlier) == "kept"
+    assert any(m["value"] == "Dentist on Friday" for m in bridge.memories())
+    assert bridge.edit_memory(memory["id"], "Dentist on Thursday", clock.time() + 5) is True
+    assert any(m["value"] == "Dentist on Thursday" for m in bridge.memories())
+    assert bridge.forget_memory(memory["id"], clock.time() + 10) is True
+
+
+def test_reminders_carry_their_id_to_the_phone(backend, qapp):
+    from aurora.interface.mobile_bridge import MobileBridge
+    events = []
+
+    class Hub:
+        def publish(self, kind, **data):
+            events.append((kind, data))
+
+    backend.mobile = type("M", (), {"events": Hub()})()
+    try:
+        backend._tell_phone_reminder({"id": 7, "text": "call home"})
+    finally:
+        backend.mobile = None
+    assert events == [("reminder", {"text": "call home", "reminder": 7})]
+    for reminder in MobileBridge(backend).reminders():
+        assert "id" in reminder

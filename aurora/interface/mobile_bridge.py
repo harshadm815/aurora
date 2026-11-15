@@ -15,6 +15,10 @@ from aurora.config import settings
 CHAT_TIMEOUT = 300           # seconds: TinyLlama on this laptop can take a while
 
 
+def _epoch(moment) -> float | None:
+    return moment.timestamp() if moment is not None else None
+
+
 class MobileBridge:
 
     def __init__(self, backend, timeout: float = CHAT_TIMEOUT):
@@ -87,7 +91,7 @@ class MobileBridge:
         tool = self.backend.tool("Reminders")
         if tool is None:
             return []
-        return [{"text": r.text, "due": r.due.isoformat(timespec="minutes")}
+        return [{"id": r.id, "text": r.text, "due": r.due.isoformat(timespec="minutes")}
                 for r in sorted(tool.scheduler.pending(), key=lambda r: r.due)]
 
     def earlier_reminders(self) -> list[dict]:
@@ -107,7 +111,8 @@ class MobileBridge:
         engine = self.backend.engine
         if engine is None:
             return []
-        return [{"id": f.id, "value": f.value, "category": f.category} for f in engine.memory.memories()[:300]]
+        return [{"id": f.id, "value": f.value, "category": f.category,
+                 "updated": _epoch(f.updated or f.created)} for f in engine.memory.memories()[:300]]
 
     # --- Changes from the phone (the server checks the "Memories" permission first) ---------------
 
@@ -123,10 +128,24 @@ class MobileBridge:
         self._memory().learn(Fact("Note", "User", "Note", value, 3), source=EXPLICIT, source_text=value)
         return True
 
-    def edit_memory(self, memory_id: int, value: str) -> bool:
+    def _changed_on_pc_since(self, memory_id: int, changed_at: float | None) -> bool:
+        """True if the PC's copy changed after the phone's offline change (then the PC's newer one stays)."""
+        if changed_at is None:
+            return False
+        for fact in self._memory().memories():
+            if fact.id == memory_id:
+                updated = _epoch(fact.updated or fact.created)
+                return updated is not None and updated > changed_at
+        return False
+
+    def edit_memory(self, memory_id: int, value: str, changed_at: float | None = None) -> bool | str:
+        if self._changed_on_pc_since(memory_id, changed_at):
+            return "kept"
         return self._memory().edit(memory_id, value)
 
-    def forget_memory(self, memory_id: int) -> bool:
+    def forget_memory(self, memory_id: int, changed_at: float | None = None) -> bool | str:
+        if self._changed_on_pc_since(memory_id, changed_at):
+            return "kept"
         return self._memory().forget(memory_id)
 
     def clear_conversation(self) -> None:

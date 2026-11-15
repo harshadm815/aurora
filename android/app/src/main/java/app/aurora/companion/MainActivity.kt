@@ -41,6 +41,7 @@ class MainActivity : Activity(), Live.Listener {
     companion object {
         private const val PICK_FILE = 7
         private const val MIC_FOR_CALL = 4
+        private const val QUEUED = "⏳ Kept on this phone. AURORA gets it as soon as your PC is back, and the reply comes as a notification."
     }
 
     private lateinit var aurora: Aurora
@@ -119,6 +120,16 @@ class MainActivity : Activity(), Live.Listener {
         if (aurora.paired) {
             refreshRoute()
             LinkService.start(this)
+            kotlin.concurrent.thread(name = "aurora-sync") {     // its own thread: sending can take a while
+                val sent = Sync.run(this)
+                val problem = Sync.problem
+                Sync.problem = null
+                ui {
+                    if (problem != null) AlertDialog.Builder(this).setTitle("Something done offline wasn't accepted")
+                        .setMessage(problem).setPositiveButton("OK", null).show()
+                    else if (sent > 0) Toast.makeText(this, "Sent $sent thing(s) you did offline.", Toast.LENGTH_SHORT).show()
+                }
+            }
         }
     }
 
@@ -138,6 +149,10 @@ class MainActivity : Activity(), Live.Listener {
             when {
                 event.optString("kind") == "message" && event.optString("source") == "pc" && tab == "chat" && chatLoaded -> {
                     bubble("user", "🖥 " + event.optString("text"))
+                    bubble("assistant", event.optString("reply"))
+                }
+                event.optString("kind") == "queued_reply" && tab == "chat" && chatLoaded -> {
+                    bubble("user", event.optString("text"))
                     bubble("assistant", event.optString("reply"))
                 }
                 tab == "home" && event.optString("kind") != "message" -> show()
@@ -241,7 +256,62 @@ class MainActivity : Activity(), Live.Listener {
             requestPermissions(arrayOf(android.Manifest.permission.RECORD_AUDIO), MIC_FOR_CALL)
             return
         }
-        Calls.dial(this)?.let { problem -> AlertDialog.Builder(this).setMessage(problem).setPositiveButton("OK", null).show() }
+        // Is AURORA open on the PC? If it's closed, the phone helper can start it first.
+        startAurora(then = {
+            Calls.dial(this)?.let { problem -> AlertDialog.Builder(this).setMessage(problem).setPositiveButton("OK", null).show() }
+        })
+    }
+
+    @Volatile private var starting = false
+
+    /**
+     * Makes sure AURORA is running on the PC, starting it through the phone helper if it's closed (the
+     * PC's Phone page: "Let my phone start AURORA"), then runs [then] on the screen's thread.
+     */
+    private fun startAurora(then: () -> Unit) {
+        if (starting) return
+        starting = true
+        val status = kit.text("Checking your PC…", Ui.BODY, p.text)
+        val dialog = AlertDialog.Builder(this)
+            .setView(FrameLayout(this).apply { setPadding(kit.px(24), kit.px(20), kit.px(24), kit.px(8)); addView(status) })
+            .setNegativeButton("Cancel") { _, _ -> starting = false }
+            .setCancelable(false)
+            .create()
+        val shown = Runnable { if (starting) dialog.show() }
+        content.postDelayed(shown, 600)                  // only if it takes a moment
+        fun finish(problem: String?) = ui {
+            content.removeCallbacks(shown)
+            if (dialog.isShowing) dialog.dismiss()
+            val wanted = starting
+            starting = false
+            if (problem != null) AlertDialog.Builder(this).setMessage(problem).setPositiveButton("OK", null).show()
+            else if (wanted) then()
+        }
+        background {
+            try {
+                var state = aurora.get("/api/status").json.optString("state")
+                if (state == "running") { finish(null); return@background }
+                if (state == "closed" || state == "paused") {
+                    ui { status.text = if (state == "paused") "AURORA is paused. Starting it…"
+                                       else "AURORA is closed on your PC. Starting it…" }
+                    val reply = aurora.post("/api/control", JSONObject().put("action", "start"))
+                    if (!reply.ok) { finish(reply.error); return@background }
+                } else {
+                    ui { status.text = "AURORA is starting on your PC…" }
+                }
+                val deadline = System.currentTimeMillis() + 120_000
+                while (starting && System.currentTimeMillis() < deadline) {
+                    Thread.sleep(2500)
+                    state = try { aurora.get("/api/status", timeoutMs = 5000).json.optString("state") } catch (e: IOException) { "" }
+                    if (state == "running") { finish(null); return@background }
+                    ui { status.text = "Starting AURORA on your PC… (about half a minute)" }
+                }
+                finish(if (starting) "AURORA didn't start in time. Look at the PC, or try again." else null)
+            } catch (error: IOException) {
+                finish("Can't reach your PC. If AURORA is closed there, switch on \"Let my phone start AURORA\" on " +
+                    "the PC's Phone page (the PC must be on, not asleep).")
+            }
+        }
     }
 
     override fun onRequestPermissionsResult(code: Int, permissions: Array<out String>, results: IntArray) {
@@ -320,25 +390,38 @@ class MainActivity : Activity(), Live.Listener {
         for (event in events) recent.addView(kit.text("·  " + Format.event(event.optString("kind"), event.optString("text"),
             event.optString("reply"), event.optString("source"), event.optString("name")), Ui.SMALL, p.text).apply { maxLines = 2 })
 
+        val startRow = kit.column(gap = 0)
         load("/api/status", failed = { message ->
             core.state = CoreState.DISCONNECTED; model.setTextColor(p.warn); model.text = message
         }) { data ->
-            core.state = CoreState.IDLE
-            model.text = "AURORA is ${data.optString("ai", "ready")} · model ${data.optString("model")}"
+            if (data.optString("state") == "closed") {
+                core.state = CoreState.DISCONNECTED
+                model.text = "AURORA is closed on your PC."
+                startRow.addView(kit.secondary("▷  Start AURORA on the PC", p.accent) { startAurora { show() } })
+            } else {
+                core.state = CoreState.IDLE
+                model.text = "AURORA is ${data.optString("ai", "ready")} · model ${data.optString("model")}"
+            }
         }
-        load("/api/today", failed = { coming.removeAllViews(); coming.addView(kit.note(it, p.warn)) }) { data ->
+        fun showReminders(reminders: JSONArray, offline: Boolean) {
             coming.removeAllViews()
             val today = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
-            val reminders = data.optJSONArray("reminders") ?: JSONArray()
-            if (reminders.length() == 0) coming.addView(kit.note("No reminders waiting."))
-            for (i in 0 until minOf(reminders.length(), 4)) {
-                val r = reminders.getJSONObject(i)
+            val upcoming = (0 until reminders.length()).map { reminders.getJSONObject(it) }
+                .filter { (Alarms.dueAt(it.optString("due")) ?: 0L) + Alarms.GRACE_MS > System.currentTimeMillis() }
+            if (offline) coming.addView(kit.note("From this phone's copy: they ring here even while your PC is off."))
+            if (upcoming.isEmpty()) coming.addView(kit.note("No reminders waiting."))
+            for (r in upcoming.take(4)) {
                 coming.addView(kit.row(
                     kit.text(Format.due(r.optString("due"), today), Ui.SMALL, p.accent, Ui.medium).apply { minWidth = kit.px(52) },
                     kit.weight(kit.text(r.optString("text"), Ui.BODY)),
                     gap = 10,
                 ))
             }
+        }
+        load("/api/today", failed = { showReminders(Offline.reminders(this), offline = true) }) { data ->
+            val reminders = data.optJSONArray("reminders") ?: JSONArray()
+            background { Sync.remember(this, reminders) }
+            showReminders(reminders, offline = false)
         }
 
         val quick = kit.row(
@@ -354,6 +437,7 @@ class MainActivity : Activity(), Live.Listener {
                 model.apply { gravity = Gravity.CENTER },
                 gap = 2,
             ),
+            startRow,
             kit.primary("✆   Call AURORA") { callAurora() },
             kit.card(kit.overline("Coming up"), coming),
             quick,
@@ -460,7 +544,10 @@ class MainActivity : Activity(), Live.Listener {
     private fun loadHistory() {
         chatLoaded = true
         load("/api/history", failed = { message ->
-            chatList?.removeAllViews(); bubble("note", message); chatLoaded = false
+            chatList?.removeAllViews()
+            bubble("note", "$message\n\nYou can still write: messages wait on this phone and go to AURORA when your PC is back.")
+            for (waiting in Offline.queuedMessages(this)) bubble("user", "⏳ $waiting")
+            chatLoaded = false
         }) { data ->
             chatList?.removeAllViews()
             val messages = data.optJSONArray("messages")
@@ -477,12 +564,21 @@ class MainActivity : Activity(), Live.Listener {
         val answer = bubble("assistant", "AURORA is thinking…")
         send.isEnabled = false
         send.alpha = 0.5f
+        val op = Offline.newId()
         background {
             val (reply, problem) = try {
-                val r = aurora.post("/api/chat", JSONObject().put("text", message), timeoutMs = 300_000)
-                if (r.ok) r.json to null else null to r.error
+                val r = aurora.post("/api/chat", JSONObject().put("text", message).put("op", op), timeoutMs = 300_000)
+                when {
+                    r.ok -> r.json to null
+                    r.status == 503 -> {                          // AURORA is closed on the PC: keep it for later
+                        Offline.enqueue(this, "chat", JSONObject().put("text", message), op)
+                        null to QUEUED
+                    }
+                    else -> null to r.error
+                }
             } catch (error: IOException) {
-                null to (error.message ?: "Couldn't reach your PC.")
+                Offline.enqueue(this, "chat", JSONObject().put("text", message), op)
+                null to QUEUED
             }
             ui {
                 send.isEnabled = true
@@ -493,7 +589,7 @@ class MainActivity : Activity(), Live.Listener {
                     fill(answer, reply.optString("reply") + if (sources.isNotBlank()) "\n\n$sources" else "", p.text)
                     chatScroll?.post { chatScroll?.fullScroll(View.FOCUS_DOWN) }
                 } else {
-                    fill(answer, problem ?: "Something went wrong.", p.warn)
+                    fill(answer, problem ?: "Something went wrong.", if (problem == QUEUED) p.muted else p.warn)
                     if (!aurora.paired) show()
                 }
             }
@@ -582,7 +678,8 @@ class MainActivity : Activity(), Live.Listener {
                 shown++
                 val card = kit.card(kit.overline(m.optString("category").ifBlank { "Memory" }),
                     kit.text(m.optString("value"), Ui.BODY), padding = 14, gap = 4)
-                kit.tappable(card, 18f) { editMemory(m) }
+                if (m.optBoolean("pending")) card.addView(kit.note("⏳ Goes to your PC when it's back."))
+                else kit.tappable(card, 18f) { editMemory(m) }
                 card.contentDescription = "Memory: ${m.optString("value")}. Tap to edit or delete."
                 list.addView(card)
             }
@@ -596,9 +693,18 @@ class MainActivity : Activity(), Live.Listener {
         fun reload() {
             sync.text = "Updating…"
             load("/api/memories", failed = { message ->
-                sync.text = ""; list.removeAllViews(); list.addView(kit.note(message, p.warn))
+                val copy = Offline.memories(this)
+                if (copy.length() > 0 && !message.contains("allowed")) {
+                    memories = copy
+                    memoriesAt = SimpleDateFormat("d MMM HH:mm", Locale.getDefault()).format(Date(Offline.memoriesTime(this)))
+                    sync.text = "Offline copy from $memoriesAt"
+                    render()
+                } else {
+                    sync.text = ""; list.removeAllViews(); list.addView(kit.note(message, p.warn))
+                }
             }) { data ->
                 memories = data.optJSONArray("memories") ?: JSONArray()
+                Offline.saveMemories(this, memories!!)
                 memoriesAt = SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date())
                 sync.text = "Synced $memoriesAt"
                 render()
@@ -648,13 +754,25 @@ class MainActivity : Activity(), Live.Listener {
     }
 
     private fun changeMemory(method: String, path: String, body: JSONObject) = background {
+        val kind = mapOf("/api/memories" to "memory_add", "/api/memories/edit" to "memory_edit",
+            "/api/memories/delete" to "memory_delete")[path] ?: return@background
+        var offline = false
         val problem = try {
             val r = aurora.call(method, path, body.toString().toByteArray())
-            if (r.ok) null else r.error
-        } catch (error: IOException) { error.message ?: "Couldn't reach your PC." }
+            when {
+                r.ok -> null
+                r.status == 503 -> { offline = true; null }
+                else -> r.error
+            }
+        } catch (error: IOException) { offline = true; null }
+        if (offline) {                                  // kept on the phone; the PC gets it when it's back
+            Offline.enqueue(this, kind, body)
+            Offline.changeMemory(this, kind, body.optInt("id"), body.optString("value"))
+        }
         ui {
             if (problem != null) AlertDialog.Builder(this).setMessage(problem).setPositiveButton("OK", null).show()
-            memories = null
+            if (offline) Toast.makeText(this, "Saved on this phone. It goes to your PC when it's back.", Toast.LENGTH_LONG).show()
+            memories = if (offline) Offline.memories(this) else null
             if (tab == "memory") show()
         }
     }
@@ -688,6 +806,11 @@ class MainActivity : Activity(), Live.Listener {
                     kit.text(if (on) "● on" else "○ off", Ui.SMALL, if (on) p.ok else p.muted)))
             }
             commands.removeAllViews()
+            if (data.optString("state") == "closed") {
+                commands.addView(kit.secondary("▷  Start AURORA") { startAurora { show() } })
+                commands.addView(kit.note("AURORA is closed on your PC; its phone helper can start it."))
+                return@load
+            }
             val running = data.optString("state") == "running"
             commands.addView(kit.row(
                 kit.weight(kit.secondary(if (running) "‖  Pause AURORA" else "▷  Start AURORA") {

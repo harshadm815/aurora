@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.52.0 — A Phone page of its own (2026-11-15)
+
+### Changed
+- **📱 Phone** is now its own page in the sidebar instead of a panel in
+  Settings: Connection (with one line each for USB, Wi-Fi and away from
+  home), Your phone (pairing, permissions, Disconnect), Do (call, send a
+  file) and Recent activity. Settings keeps a pointer to it.
+- AURORA notices Tailscale installed while it is running (at the next
+  network check) instead of only when the phone service starts.
+
 ## 0.51.0 — Away from home, and a security review (2026-11-15)
 
 ### Added

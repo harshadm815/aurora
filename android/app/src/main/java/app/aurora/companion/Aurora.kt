@@ -86,7 +86,7 @@ class Aurora private constructor(context: Context) {
         try {
             call("POST", "/api/unpair")
         } catch (error: IOException) {
-            // Not reachable: the phone forgets anyway; disconnect it in Settings → Phone on the PC.
+            // Not reachable: the phone forgets anyway; disconnect it on the PC's Phone page.
         }
         forget()
     }

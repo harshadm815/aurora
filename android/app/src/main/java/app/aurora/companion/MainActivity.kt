@@ -264,7 +264,7 @@ class MainActivity : Activity(), Live.Listener {
                         status.setTextColor(getColor(R.color.warn))
                         status.text = if (problem.startsWith("Can't reach"))
                             "Can't reach AURORA over the cable. Plug the phone in, keep USB debugging on, and " +
-                                "switch on Settings → Phone on the PC." else problem
+                                "switch it on on the PC's Phone page." else problem
                     }
                 }
             }
@@ -272,7 +272,7 @@ class MainActivity : Activity(), Live.Listener {
         return page(
             text("Pair this phone with your PC", 20f, bold = true),
             text("1. Plug the phone into the PC with the USB cable.\n" +
-                "2. On the PC: AURORA → Settings → Phone → Pair my phone…\n" +
+                "2. On the PC: AURORA → 📱 Phone → Pair my phone…\n" +
                 "3. Type the code it shows here.\n\n" +
                 "Pairing works only over the cable, and only one phone can be paired. This phone makes a key " +
                 "in its secure hardware that never leaves it; AURORA will accept only requests signed with it.",

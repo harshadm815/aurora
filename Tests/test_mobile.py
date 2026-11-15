@@ -577,28 +577,37 @@ def test_switching_the_phone_server_on_and_off(backend):
         http.client.HTTPConnection("127.0.0.1", port, timeout=2).request("GET", "/")
 
 
-def test_settings_switch_starts_the_server(qapp, backend, monkeypatch, phone):
-    from aurora.interface import settings_view
+def test_the_phone_page_switches_the_server(qapp, backend, monkeypatch, phone):
+    from aurora.interface import phone_view
+
+    page = phone_view.PhoneView(backend)
+    page.mobile_enabled.setChecked(True)                       # saves and applies at once
+    assert backend.mobile is not None and backend.preferences["mobile_enabled"] is True
+    status = page.mobile_status.text()
+    assert status.startswith("On.") and "Wi-Fi: off" in status and "Away from home: Tailscale isn't installed" in status
+    page._refresh_phone()
+    assert page.pair_button.isEnabled() and not page.call_button.isEnabled()
+    backend.mobile.store.pair(backend.mobile.store.new_code(), "Mine", phone.public)
+    page._refresh_phone()
+    assert not page.pair_button.isEnabled() and page.call_button.isEnabled()      # one phone only
+    page.mobile_wifi.setChecked(True)
+    assert backend.preferences["mobile_wifi"] is True and backend.mobile.wifi_enabled
+    assert "isn't on Wi-Fi" in page.mobile_status.text()
+    page.mobile_enabled.setChecked(False)
+    assert backend.mobile is None and "Off" in page.mobile_status.text()
+
+
+def test_settings_no_longer_holds_the_phone(qapp, backend, monkeypatch):
+    from aurora.interface import main_window, settings_view
 
     monkeypatch.setattr(settings_view.SettingsView, "_apply_startup", lambda self: True)
     monkeypatch.setattr(settings_view.SettingsView, "_apply_wake", lambda self, changed=True: True)
     page = settings_view.SettingsView(backend)
-    page.mobile_enabled.setChecked(True)
-    page.auto_save()
-    assert backend.mobile is not None and backend.preferences["mobile_enabled"] is True
-    assert "On." in page.mobile_status.text() and "Wi-Fi: off" in page.mobile_status.text()
-    page._refresh_phone()
-    assert page.pair_button.isEnabled()
-    backend.mobile.store.pair(backend.mobile.store.new_code(), "Mine", phone.public)
-    page._refresh_phone()
-    assert not page.pair_button.isEnabled()                                     # one phone only
-    page.mobile_wifi.setChecked(True)
-    page.auto_save()
-    assert backend.preferences["mobile_wifi"] is True and backend.mobile.wifi_enabled
-    assert "isn't on Wi-Fi" in page.mobile_status.text()
-    page.mobile_enabled.setChecked(False)
-    page.auto_save()
-    assert backend.mobile is None and "Off" in page.mobile_status.text()
+    assert not hasattr(page, "mobile_enabled") and "mobile_enabled" not in page.values()
+    backend.preferences["mobile_enabled"] = True
+    page.auto_save()                                            # saving Settings leaves the phone setting alone
+    assert backend.preferences["mobile_enabled"] is True and backend.mobile is None
+    assert ("Phone", __import__("aurora.interface.phone_view", fromlist=["PhoneView"]).PhoneView) in main_window.PAGES
 
 
 # --- The event feed (milestone 2) -------------------------------------------------------------

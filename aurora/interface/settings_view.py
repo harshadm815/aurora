@@ -15,12 +15,11 @@ from datetime import datetime
 from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import (
     QCheckBox, QComboBox, QFormLayout, QHBoxLayout, QLineEdit, QMessageBox, QPlainTextEdit, QPushButton, QSpinBox,
-    QVBoxLayout,
 )
 
 from aurora.config import preferences, settings
 from aurora.interface.components.base_view import BaseView
-from aurora.interface.components.widgets import Panel, clear_layout, label
+from aurora.interface.components.widgets import Panel, label
 from aurora.interface.voice_control import input_devices
 from aurora.interface.windows import integration
 
@@ -30,7 +29,7 @@ AUTOSAVE_MS = 600            # after a tick box, list or number changes
 TYPING_MS = 1500             # after you stop typing the personality
 WAKE_KEYS = ("wake_enabled", "wake_key", "wake_phrase", "wake_sound")
 
-PAGES = ["Dashboard", "Chat", "Memory", "Knowledge", "Tools", "Vision", "Sensors", "System", "Settings"]
+PAGES = ["Dashboard", "Chat", "Memory", "Knowledge", "Tools", "Vision", "Sensors", "Phone", "System", "Settings"]
 
 
 class SettingsView(BaseView):
@@ -191,68 +190,10 @@ class SettingsView(BaseView):
                        "Nothing is recorded or saved.", "Faint", wrap=True))
         self.body.addWidget(wake)
 
-        phone = Panel("Phone (the AURORA app on your Android phone: chat, today's briefing, reminders, PC status)")
-        form = QFormLayout()
-        self.mobile_enabled = QCheckBox("Let my phone use AURORA")
-        self.mobile_enabled.setChecked(values["mobile_enabled"])
-        self.mobile_enabled.setToolTip("Listens on this PC only (127.0.0.1), reached over the USB cable, plus your "
-                                       "home Wi-Fi if you tick it below. Only your paired phone can use it.")
-        form.addRow("", self.mobile_enabled)
-        self.mobile_wifi = QCheckBox("Also connect over Wi-Fi, on my home networks only")
-        self.mobile_wifi.setChecked(values["mobile_wifi"])
-        self.mobile_wifi.setToolTip("Encrypted (HTTPS with a certificate your phone checks), and only while this "
-                                    "PC is connected to a network listed below. Elsewhere AURORA doesn't listen "
-                                    "on Wi-Fi at all.")
-        form.addRow("", self.mobile_wifi)
-        phone.add_layout(form)
-        self._home_networks = list(values["mobile_home_networks"])
-        home_row = QHBoxLayout()
-        self.home_networks_label = label("", "Faint", wrap=True)
-        home_row.addWidget(self.home_networks_label, 1)
-        self.add_home = QPushButton("Mark this network as home")
-        self.add_home.clicked.connect(self._add_home_network)
-        self.clear_home = QPushButton("Forget home networks")
-        self.clear_home.clicked.connect(self._clear_home_networks)
-        home_row.addWidget(self.add_home)
-        home_row.addWidget(self.clear_home)
-        phone.add_layout(home_row)
-        self.mobile_status = phone.add(label("", "Faint", wrap=True))
-        pair_row = QHBoxLayout()
-        self.pair_button = QPushButton("Pair my phone…")
-        self.pair_button.clicked.connect(self._pair_phone)
-        pair_row.addWidget(self.pair_button)
-        self.call_button = QPushButton("📞 Call my phone")
-        self.call_button.setToolTip("AURORA rings your phone; answer it to talk (the phone must be connected).")
-        self.call_button.clicked.connect(self._call_phone)
-        pair_row.addWidget(self.call_button)
-        self.send_file_button = QPushButton("📎 Send a file to my phone…")
-        self.send_file_button.setToolTip("The phone saves it in Downloads › AURORA. Files you share to AURORA "
-                                         "from the phone land in Documents › From phone.")
-        self.send_file_button.clicked.connect(self._send_file_to_phone)
-        pair_row.addWidget(self.send_file_button)
-        self.away_button = QPushButton("Set up away from home")
-        self.away_button.setToolTip("Runs \"tailscale serve --bg\" for AURORA: only your own Tailscale devices can "
-                                    "reach it (never the public internet), and the phone still signs everything.")
-        self.away_button.clicked.connect(self._set_up_away)
-        self.away_button.setVisible(False)
-        pair_row.addWidget(self.away_button)
-        pair_row.addStretch(1)
-        phone.add_layout(pair_row)
-        self.device_rows = QVBoxLayout()
-        self.device_rows.setSpacing(4)
-        phone.add_layout(self.device_rows)
-        self.phone_activity = phone.add(label("", "Faint", wrap=True))
-        phone.add(label(
-            "Only one phone can be paired, and only over the USB cable: plug it in (USB debugging on), open the "
-            "AURORA app and type the code from \"Pair my phone…\". The phone keeps a key in its secure hardware "
-            "and signs everything it sends, so nothing else can pretend to be it. Away from home, Tailscale "
-            "(free, tailscale.com) carries it: install it on the PC and the phone, sign in to the same account, "
-            "then press \"Set up away from home\".", "Faint", wrap=True))
+        phone = Panel("Phone")
+        phone.add(label("Your phone has its own page now: 📱 Phone in the sidebar (connection, pairing, calls "
+                        "and files).", "Faint", wrap=True))
         self.body.addWidget(phone)
-        backend.mobile_changed.connect(lambda _: self._refresh_phone())
-        self._phone_timer = QTimer(self)
-        self._phone_timer.setInterval(5000)
-        self._phone_timer.timeout.connect(self._refresh_phone_status)
 
         network = Panel("Internet and network")
         form = QFormLayout()
@@ -377,20 +318,10 @@ class SettingsView(BaseView):
             notes.append("The wake phrase must be one to four words, letters only, so it wasn't changed")
 
         changed = {key: value for key, value in values.items() if self.backend.preferences.get(key) != value}
-        mobile_changed = "mobile_enabled" in changed
-        wifi_changed = "mobile_wifi" in changed or "mobile_home_networks" in changed
         wake_changed = any(key in changed for key in WAKE_KEYS)
         if changed:
             self.backend.save_preferences(values)
         ok = self._apply_startup() and self._apply_wake(changed=wake_changed)
-        if mobile_changed:
-            problem = self.backend.set_mobile(values["mobile_enabled"])
-            if problem:
-                notes.append(problem)
-            self._refresh_phone()
-        elif wifi_changed and self.backend.mobile is not None:
-            self.backend.mobile.set_wifi(values["mobile_wifi"], values["mobile_home_networks"])
-            self._refresh_phone_status()
         if notes:
             logger.info("Settings: some changes not saved (%d)", len(notes))
             self._status(". ".join(notes) + ".", problem=True)
@@ -400,7 +331,6 @@ class SettingsView(BaseView):
         return ok and not notes
 
     def on_hidden(self):
-        self._phone_timer.stop()
         if self._autosave.isActive():
             self.auto_save()             # leaving the page: don't lose a change still waiting to be saved
         super().on_hidden()
@@ -439,9 +369,6 @@ class SettingsView(BaseView):
             "voice_barge_in": self.barge_in.isChecked(),
             "speak_reminders": self.speak_reminders.isChecked(),
             "wake_enabled": self.wake_enabled.isChecked(),
-            "mobile_enabled": self.mobile_enabled.isChecked(),
-            "mobile_wifi": self.mobile_wifi.isChecked(),
-            "mobile_home_networks": list(self._home_networks),
             "wake_key": self.wake_key.currentData(),
             "wake_phrase": " ".join(self.wake_phrase.text().lower().split()),
             "wake_sound": self.wake_sound.isChecked(),
@@ -511,176 +438,5 @@ class SettingsView(BaseView):
         """The "Save now" button: saves at once (changes also save themselves)."""
         self.auto_save()
 
-    # --- Phone ------------------------------------------------------------------------
-
-    def _device_store(self):
-        if self.backend.mobile is not None:
-            return self.backend.mobile.store
-        from aurora.mobile.devices import DeviceStore
-        return DeviceStore()
-
-    def _refresh_phone_status(self):
-        """The status line (USB, Wi-Fi, which network) and the home networks; cheap, refreshed every 5 s."""
-        names = ", ".join(self._home_networks)
-        self.home_networks_label.setText(f"Home networks: {names}" if names else
-                                         "Home networks: none yet. Connect this PC to your home Wi-Fi, then "
-                                         "mark it as home.")
-        self.clear_home.setEnabled(bool(self._home_networks))
-        service = self.backend.mobile
-        if service is None:
-            self.mobile_status.setText("Off. Your phone can't reach AURORA.")
-            self.away_button.setVisible(False)
-            return
-        state = service.describe()
-        usb = {"no adb": "USB: Android Platform Tools (adb) not found, so the cable link can't be set up",
-               "phone plugged in": "USB: phone plugged in and linked",
-               "no phone": "USB: no phone plugged in"}[state["usb"]]
-        if not self.mobile_wifi.isChecked():
-            wifi = "Wi-Fi: off"
-        elif state["wifi"]:
-            wifi = f"Wi-Fi: listening at {state['wifi']} (HTTPS) on \"{state['network']}\""
-        elif state["wifi_problem"]:
-            wifi = f"Wi-Fi: {state['wifi_problem']}"
-        elif state["network"]:
-            wifi = f"Wi-Fi: not listening, \"{state['network']}\" isn't marked as home"
-        else:
-            wifi = "Wi-Fi: not listening (this PC isn't on Wi-Fi)"
-        away = {"not installed": "Away from home: Tailscale isn't installed",
-                "not connected": "Away from home: Tailscale is installed but not connected",
-                "not set up": "Away from home: Tailscale is connected; press \"Set up away from home\""}.get(
-            state["tailscale"], f"Away from home: through Tailscale at {state['tailscale']}")
-        self.mobile_status.setText(f"On.  {usb}.  {wifi}.  {away}.")
-        self.away_button.setVisible(state["tailscale"] == "not set up")
-
-    def _add_home_network(self):
-        from aurora.mobile.network import current_ssid
-
-        name = current_ssid()
-        if not name:
-            QMessageBox.information(self, "Home network", "This PC isn't connected to a Wi-Fi network right now.")
-            return
-        if name not in self._home_networks:
-            if len(self._home_networks) >= 5:
-                QMessageBox.information(self, "Home network", "Up to five home networks. Forget them and start again.")
-                return
-            self._home_networks.append(name)
-            self._changed = self.add_home
-            self.auto_save()
-        self._refresh_phone_status()
-
-    def _clear_home_networks(self):
-        self._home_networks.clear()
-        self._changed = self.clear_home
-        self.auto_save()
-        self._refresh_phone_status()
-
-    def _refresh_phone(self):
-        from PySide6.QtWidgets import QCheckBox as Check, QWidget
-
-        running = self.backend.mobile is not None
-        self._refresh_phone_status()
-        clear_layout(self.device_rows)
-        if not running and not settings.MOBILE_DATABASE_PATH.is_file():
-            self.pair_button.setEnabled(False)
-            self.call_button.setEnabled(False)
-            self.send_file_button.setEnabled(False)
-            self.device_rows.addWidget(label("No phone paired yet.", "Faint"))     # nothing to read (or create)
-            self.phone_activity.setText("")
-            return
-        try:
-            store = self._device_store()
-            devices = store.devices()
-            activity = store.recent_log(6)
-        except Exception as error:
-            self.device_rows.addWidget(label(f"Couldn't read the paired phone: {error}", "Faint"))
-            return
-        self.pair_button.setEnabled(running and not devices)
-        self.call_button.setEnabled(running and bool(devices))
-        self.send_file_button.setEnabled(running and bool(devices))
-        self.pair_button.setToolTip("Only one phone can be paired. Disconnect it to pair another." if devices else
-                                    "Shows a one-time code to type in the AURORA app (phone plugged in by USB).")
-        if not devices:
-            self.device_rows.addWidget(label("No phone paired yet.", "Faint"))
-        for device in devices:
-            row = QWidget()
-            line = QHBoxLayout(row)
-            line.setContentsMargins(0, 0, 0, 0)
-            seen = f"last used {device.last_seen:%d %b %H:%M}" if device.last_seen else "not used yet"
-            line.addWidget(label(f"📱 {device.name}", None), 1)
-            line.addWidget(label(seen, "Faint"))
-            memories = Check("Memories")
-            memories.setChecked(device.allow_memories)
-            memories.setToolTip("Let this phone see what AURORA remembers about you.")
-            memories.toggled.connect(lambda on, d=device.id: store.set_permissions(d, memories=on))
-            actions = Check("Approve actions")
-            actions.setChecked(device.allow_actions)
-            actions.setToolTip("Let this phone answer \"yes\" to actions (switching devices, opening apps, "
-                               "moving files). Otherwise answer those on the PC.")
-            actions.toggled.connect(lambda on, d=device.id: store.set_permissions(d, actions=on))
-            remove = QPushButton("Disconnect")
-            remove.setObjectName("Danger")
-            remove.clicked.connect(lambda _=False, d=device.id: (store.remove(d), self._refresh_phone()))
-            for widget in (memories, actions, remove):
-                line.addWidget(widget)
-            self.device_rows.addWidget(row)
-        self.phone_activity.setText(
-            "Recent phone activity: " + "; ".join(f"{t:%d %b %H:%M} {d} {w} ({o})" for t, d, w, o in activity)
-            if activity else "")
-
-    def _call_phone(self):
-        if self.backend.mobile is not None:
-            self.backend.mobile.call_phone()
-            self._status("Calling your phone… (it rings if the AURORA app is connected)")
-
-    def _set_up_away(self):
-        service = self.backend.mobile
-        if service is None:
-            return
-        problem = service.tailscale.serve()
-        if problem:
-            QMessageBox.information(self, "Away from home", problem)
-        else:
-            self._status("Away from home is set up. Open the AURORA app once at home so it learns the address.")
-        self._refresh_phone_status()
-
-    def _send_file_to_phone(self):
-        from PySide6.QtWidgets import QFileDialog
-        from aurora.mobile.files import FileError
-
-        if self.backend.mobile is None:
-            return
-        start = str(settings.DOCUMENTS_DIR) if settings.DOCUMENTS_DIR.is_dir() else ""
-        path, _ = QFileDialog.getOpenFileName(self, "Send a file to my phone", start)
-        if not path:
-            return
-        try:
-            name = self.backend.mobile.send_file(path)
-        except (FileError, OSError) as error:
-            QMessageBox.information(self, "Send a file to my phone", str(error))
-            return
-        self._status(f"Sending {name} to your phone… (it arrives in Downloads › AURORA while the app is connected)")
-
-    def _pair_phone(self):
-        from aurora.mobile.devices import PairingError
-
-        if self.backend.mobile is None:
-            return
-        try:
-            code = self.backend.mobile.store.new_code()
-        except PairingError as error:
-            QMessageBox.information(self, "Pair my phone", str(error))
-            return
-        shown = f"{code[:4]} {code[4:]}"
-        box = QMessageBox(self)
-        box.setWindowTitle("Pair my phone")
-        box.setText(f"<p>Plug your phone in with the USB cable, open the AURORA app and type this code:</p>"
-                    f"<p style='font-size:22pt; letter-spacing:4px'><b>{shown}</b></p>"
-                    f"<p>It works once, for 10 minutes, and only over the cable. "
-                    f"Close this when the phone says it's paired.</p>")
-        box.exec()
-        self.backend.mobile.store.cancel_code()
-        self._refresh_phone()
     def on_shown(self):
-        self._refresh_phone()
-        self._phone_timer.start()
         self.model.setCurrentText(settings.DEFAULT_MODEL)

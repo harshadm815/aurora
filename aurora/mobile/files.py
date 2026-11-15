@@ -9,7 +9,7 @@ is checked as it arrives and anything that doesn't match is thrown away.
 Nothing is opened or run; on Windows each file is marked as coming from
 another device (the "Mark of the Web"), as browser downloads are.
 
-**PC → phone** (Settings → Phone → "Send a file to my phone…"): the file is
+**PC → phone** (the Phone page → "Send a file to my phone…"): the file is
 offered for an hour under a random id (an event tells the phone), and the
 phone fetches it with ``GET /api/file?id=I`` into its Downloads\\AURORA folder.
 Only files you chose are offered; the phone can't ask for any other path.

@@ -12,8 +12,8 @@ android {
         // 26: Android 8, the first with self-managed calls (ConnectionService) for the Calling Agent.
         minSdk = 26
         targetSdk = 34
-        versionCode = 7
-        versionName = "0.7.0"
+        versionCode = 8
+        versionName = "0.7.1"
     }
 
     buildTypes {

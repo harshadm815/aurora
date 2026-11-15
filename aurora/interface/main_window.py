@@ -20,6 +20,7 @@ from aurora.interface.dashboard import DashboardView
 from aurora.interface.documents_view import DocumentsView
 from aurora.interface.knowledge_view import KnowledgeView
 from aurora.interface.news_view import NewsView
+from aurora.interface.phone_view import PhoneView
 from aurora.interface.memory_view import MemoryView
 from aurora.interface.model_manager import ModelManagerView
 from aurora.interface.sensors_view import SensorsView
@@ -49,6 +50,7 @@ PAGES = [
     ("Vision", VisionView),
     ("Sensors", SensorsView),
     ("Automation", AutomationView),
+    ("Phone", PhoneView),
     ("System", SystemMonitorView),
     ("Settings", SettingsView),
 ]

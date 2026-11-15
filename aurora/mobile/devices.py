@@ -102,7 +102,7 @@ class DeviceStore:
     def new_code(self) -> str:
         """A fresh one-time pairing code (any earlier one stops working)."""
         if self.full:
-            raise PairingError("Your phone is already paired. Disconnect it in Settings → Phone to pair another.")
+            raise PairingError("Your phone is already paired. Disconnect it on the Phone page to pair another.")
         with self._lock:
             self._code = "".join(secrets.choice(CODE_ALPHABET) for _ in range(CODE_LENGTH))
             self._code_expires = self.clock() + timedelta(minutes=CODE_MINUTES)

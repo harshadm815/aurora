@@ -264,7 +264,7 @@ class Handler(BaseHTTPRequestHandler):
             elif (method, path) == ("GET", "/api/memories"):
                 if not device.allow_memories:
                     raise ApiError(HTTPStatus.FORBIDDEN, "This phone isn't allowed to see your memories. "
-                                                         "Allow it in Settings → Phone on the PC.")
+                                                         "Allow it on the PC's Phone page.")
                 result = {"memories": bridge.memories()}
             elif (method, path) == ("POST", "/api/unpair"):
                 store.remove(device.id)

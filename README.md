@@ -172,7 +172,7 @@ scheduled tasks and recent research.
 Phone: the AURORA Android app (`android/`, built with Gradle, see
 Docs/ANDROID_APP.md) gives chat, today's briefing, reminders, memories and
 the PC's status. Only one phone, paired over the USB cable with a code from
-Settings → Phone; it then connects by cable or, if you choose, over your
+the Phone page; it then connects by cable or, if you choose, over your
 home Wi-Fi (HTTPS, the PC's certificate pinned), and signs every request
 with a key that never leaves the phone.
 

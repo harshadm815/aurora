@@ -364,7 +364,7 @@ the PC's ts.net name and `tailscale serve`, passed to the phone in `/api/connect
 through `send_message` like Chat (and appears there), plus status,
 history, briefing, reminders and memories. `Backend.set_mobile()`
 starts/stops it (`mobile_enabled`, `mobile_wifi`, `mobile_home_networks`;
-Settings → Phone). See Docs/ANDROID_APP.md.
+the Phone page). See Docs/ANDROID_APP.md.
 
 ## Voice conversations and briefings
 

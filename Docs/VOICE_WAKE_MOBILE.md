@@ -233,7 +233,7 @@ Already there: listen, answer, speak, interrupt. To add:
 
 ## 4. Mobile Companion
 
-**First milestone built in 0.45.0** (`aurora/mobile/`, Settings → Phone). **Replaced in 0.46.0 by the
+**First milestone built in 0.45.0** (`aurora/mobile/`, the Phone page). **Replaced in 0.46.0 by the
 Android app** (Docs/ANDROID_APP.md): the web app below is retired, pairing is over USB only, one phone,
 every request signed by a key held in the phone. The notes below describe 0.45.
 
@@ -248,7 +248,7 @@ every request signed by a key held in the phone. The notes below describe 0.45.
   `https://<pc>.<tailnet>.ts.net` (a real certificate, so the browser
   allows installing the app and, later, the microphone). Same Wi-Fi or
   away, only your own devices can reach it.
-- **Pairing**: a one-time 8-character code from Settings → Phone (10
+- **Pairing**: a one-time 8-character code from the Phone page (10
   minutes, one use, withdrawn after 5 wrong tries) gives the phone its
   own random key; AURORA stores only its SHA-256 hash. Disconnect any
   phone from Settings (or from the phone itself).
@@ -267,7 +267,7 @@ every request signed by a key held in the phone. The notes below describe 0.45.
   PC status all worked. Installing and offline start need the phone
   (the desktop's built-in browser doesn't allow service workers).
 - **Access log**: which phone used which part, and whether it was
-  allowed (30 days), shown in Settings → Phone; never what was said.
+  allowed (30 days), shown on the Phone page; never what was said.
 
 Not yet: voice from the phone (needs the HTTPS address above for the
 microphone), notifications while the app is closed, file transfer.

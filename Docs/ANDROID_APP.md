@@ -16,7 +16,7 @@ it**, like a phone signed in to an email account:
   available (below).
 - **Same everything**: one conversation, one set of memories, one list of
   reminders; the PC is the only copy, so there's nothing to keep in step.
-- **Sign out** from the phone or from Settings → Phone on the PC.
+- **Sign out** from the phone or from the Phone page on the PC.
 - **What a phone may do** is set per phone (memories, approving actions,
   files, calls), as today.
 
@@ -79,7 +79,7 @@ The app tries them in this order and switches when one appears or drops:
    and every request still needs the phone's key.
 3. **Away from home: Tailscale** (built in 0.51.0; you install it). AURORA
    reads the PC's Tailscale name (`tailscale status`) and, after you press
-   "Set up away from home" in Settings → Phone, runs `tailscale serve
+   "Set up away from home" on the Phone page, runs `tailscale serve
    --bg 8765` (never `funnel`: only your own Tailscale devices can reach
    it). The phone learns the `https://<pc>.<tailnet>.ts.net` address from
    `/api/connection` (asked every 15 minutes) and tries it after the cable
@@ -110,7 +110,7 @@ requests, so the PC can push things to the phone: replies, reminders,
 
 - **One phone.** While a phone is paired, the PC makes no pairing codes
   and refuses pairing (`MOBILE_MAX_PHONES = 1`). Disconnect it in
-  Settings → Phone to pair another.
+  the Phone page to pair another.
 - **Pairing only over the cable.** `/api/pair` is accepted only on the
   127.0.0.1 listener, from 127.0.0.1, with Host `localhost`: that is the
   `adb reverse` link. Not over Wi-Fi, not through Tailscale. And only with
@@ -123,7 +123,7 @@ requests, so the PC can push things to the phone: replies, reminders,
   recorded request is useless elsewhere.
 - **Home Wi-Fi only on home networks.** The HTTPS listener (port 8766) and
   the discovery answer (UDP 8767) run only while the PC is connected to a
-  Wi-Fi network you marked as home in Settings → Phone (checked every 20
+  Wi-Fi network you marked as home on the Phone page (checked every 20
   seconds). The phone accepts only the PC's own certificate, whose
   fingerprint it got over the cable.
 - The 0.45 web app is retired: a browser can't hold such a key.
@@ -170,7 +170,7 @@ Each ends with something you can use on the phone, tested.
    10 minutes), and AURORA saying the reminder; each can be switched off
    on the app's PC tab.
 4. **Calling Agent** (**built, 0.49.0 / app 0.5.0**): call AURORA with
-   📞 in the app, or AURORA calls you ("Call my phone" in Settings → Phone
+   📞 in the app, or AURORA calls you ("Call my phone" on the Phone page
    on the PC, or reminders set to "ring as a call" in the app). The call
    goes through Android's own call system as a self-managed calling app
    (ConnectionService): a real ringing screen over the lock screen, the
@@ -192,7 +192,7 @@ Each ends with something you can use on the phone, tested.
 5. **Files** (**built, 0.50.0 / app 0.6.0**): "AURORA (PC)" in the
    phone's share menu sends files (or text, as a .txt) to Documents › From
    phone, never overwriting ("photo (2).jpg"); "Send a file to my phone…"
-   in Settings → Phone puts one in the phone's Downloads › AURORA. Files
+   on the Phone page puts one in the phone's Downloads › AURORA. Files
    stream in both directions (up to 500 MB). The phone signs the file's
    SHA-256 up front and the PC checks every byte against it before
    keeping it (`aurora/mobile/files.py`); names are cleaned so nothing
@@ -217,7 +217,7 @@ Each ends with something you can use on the phone, tested.
      --charged`, AURORA's line only). First reading, 2026-11-15: **0.2 mAh
      in 2.6 hours on battery** (CPU 0.12, radio 0.09), about 0.04 % of
      the 559 mAh the phone used in that time; the waiting event request
-     costs almost nothing. A full day's reading is still to come.
+     costs almost nothing. Second reading, same day: 0.3 mAh in 3.0 hours on battery (the phone mostly charging in between). A whole day unplugged is still to measure.
    - **Security review**, see "Security review (0.51.0)" below.
 
 ## Security review (0.51.0)

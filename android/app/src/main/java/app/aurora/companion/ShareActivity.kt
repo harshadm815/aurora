@@ -21,6 +21,10 @@ import kotlin.concurrent.thread
 /**
  * "AURORA (PC)" in the phone's share menu: sends what you shared to the PC's Documents › From phone
  * folder (never over an existing file). Photos, documents, anything; shared text becomes a .txt file.
+ *
+ * Nothing is sent until you press Send (another app can open this screen, but can't send through it
+ * on its own), and only content:// shares are read: a file:// link could point at the app's own
+ * private files (its device key).
  */
 class ShareActivity : Activity() {
     private class Item(val name: String, val open: () -> java.io.InputStream)
@@ -29,6 +33,7 @@ class ShareActivity : Activity() {
     private lateinit var status: TextView
     private lateinit var bar: ProgressBar
     private lateinit var done: Button
+    private lateinit var cancel: Button
     @Volatile private var working = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -52,6 +57,12 @@ class ShareActivity : Activity() {
             isAllCaps = false
             setOnClickListener { finish() }
         }
+        cancel = Button(this).apply {
+            text = "Cancel"
+            isAllCaps = false
+            visibility = android.view.View.GONE
+            setOnClickListener { finish() }
+        }
         setContentView(LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_VERTICAL
@@ -60,6 +71,7 @@ class ShareActivity : Activity() {
             addView(status)
             addView(bar, LinearLayout.LayoutParams(-1, -2))
             addView(done, LinearLayout.LayoutParams(-1, -2).apply { topMargin = px(20) })
+            addView(cancel, LinearLayout.LayoutParams(-1, -2).apply { topMargin = px(8) })
         })
         val aurora = Aurora.get(this)
         if (!aurora.paired) {
@@ -71,7 +83,17 @@ class ShareActivity : Activity() {
             show("There was nothing to send.", finished = true)
             return
         }
-        send(aurora, items)
+        val names = items.joinToString("\n") { "• " + it.name }
+        title.text = if (items.size == 1) "Send this to your PC?" else "Send these ${items.size} to your PC?"
+        show("$names\n\nThey'll be saved in Documents › From phone.")
+        bar.visibility = android.view.View.GONE
+        done.text = "Send"
+        done.setOnClickListener {
+            bar.visibility = android.view.View.VISIBLE
+            title.text = "Sending to your PC"
+            send(aurora, items)
+        }
+        cancel.visibility = android.view.View.VISIBLE
     }
 
     override fun onBackPressed() {
@@ -87,7 +109,7 @@ class ShareActivity : Activity() {
             Intent.ACTION_SEND_MULTIPLE -> (if (Build.VERSION.SDK_INT >= 33) intent.getParcelableArrayListExtra(Intent.EXTRA_STREAM, Uri::class.java)
                                             else intent.getParcelableArrayListExtra<Uri>(Intent.EXTRA_STREAM))?.let { uris += it }
         }
-        val items = uris.take(20).map { uri ->
+        val items = uris.filter { it.scheme == "content" }.take(20).map { uri ->
             Item(Files.describe(this, uri).first) {
                 contentResolver.openInputStream(uri) ?: throw IOException("The phone couldn't read that file.")
             }
@@ -103,6 +125,7 @@ class ShareActivity : Activity() {
 
     private fun send(aurora: Aurora, items: List<Item>) {
         working = true
+        cancel.visibility = android.view.View.GONE
         done.text = "Hide"
         done.setOnClickListener { moveTaskToBack(true) }
         thread(name = "aurora-share") {

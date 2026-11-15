@@ -26,6 +26,22 @@ class ProtocolTest {
     }
 
     @Test
+    fun tailscale_route_only_for_ts_net_names() {
+        assertEquals("https://aurora-pc.tail1234.ts.net", Protocol.tailscaleBase("aurora-pc.tail1234.ts.net."))
+        assertNull(Protocol.tailscaleBase("evil.example.com"))
+        assertNull(Protocol.tailscaleBase("ts.net.evil.com"))
+        assertNull(Protocol.tailscaleBase("a.ts.net/path"))
+        assertNull(Protocol.tailscaleBase(null))
+        assertTrue(Protocol.isTailscale("https://aurora-pc.tail1234.ts.net"))
+        assertFalse(Protocol.isTailscale("https://192.168.1.5:8766"))
+        assertEquals(
+            listOf(Protocol.USB_BASE, "https://192.168.1.5:8766", "https://pc.t.ts.net"),
+            Protocol.routes(null, "https://192.168.1.5:8766", "https://pc.t.ts.net")
+        )
+        assertEquals("Tailscale", Protocol.routeName("https://pc.t.ts.net"))
+    }
+
+    @Test
     fun empty_body_hash() {
         assertEquals("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855", Protocol.sha256Hex(ByteArray(0)))
     }

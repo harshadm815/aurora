@@ -47,6 +47,7 @@ class Aurora private constructor(context: Context) {
 
     private val fingerprint get() = prefs.getString("fingerprint", null)
     private val wifiBase get() = Protocol.wifiBase(prefs.getString("wifi_address", null), prefs.getInt("wifi_port", 0))
+    private val tailscaleBase get() = Protocol.tailscaleBase(prefs.getString("tailscale_address", null))
 
     // ------------------------------------------------------------------ pairing
 
@@ -67,6 +68,7 @@ class Aurora private constructor(context: Context) {
             .putInt("wifi_port", data.optInt("wifi_port", 0))
             .putInt("discovery_port", data.optInt("discovery_port", 0))
             .putString("wifi_address", data.optString("wifi_address", "").ifBlank { null })
+            .putString("tailscale_address", data.optString("tailscale_address", "").ifBlank { null })
             .putString("route", Protocol.USB_BASE)
             .apply()
         route = Protocol.USB_BASE
@@ -111,7 +113,7 @@ class Aurora private constructor(context: Context) {
      * route that works. Returns the connected socket, positioned after the server's 101 answer.
      */
     fun openCall(path: String): java.net.Socket {
-        for (base in Protocol.routes(route, wifiBase)) {
+        for (base in Protocol.routes(route, wifiBase, tailscaleBase)) {
             try { return connectCall(base, path).also { remember(base) } } catch (error: NotConnected) { }
         }
         val found = discover()
@@ -126,10 +128,18 @@ class Aurora private constructor(context: Context) {
         val url = URL(base)
         val socket: java.net.Socket = try {
             if (base.startsWith("https://")) {
-                (pinnedContext().socketFactory.createSocket() as javax.net.ssl.SSLSocket).apply {
-                    connect(java.net.InetSocketAddress(url.host, url.port), 3000)
+                val tailscale = Protocol.isTailscale(base)
+                val factory = if (tailscale) javax.net.ssl.SSLSocketFactory.getDefault() as javax.net.ssl.SSLSocketFactory
+                              else pinnedContext().socketFactory
+                (factory.createSocket() as javax.net.ssl.SSLSocket).apply {
+                    val port = if (url.port > 0) url.port else 443
+                    connect(java.net.InetSocketAddress(url.host, port), 3000)
                     soTimeout = 10_000
                     startHandshake()                       // not our PC's certificate: fails here
+                    if (tailscale && !HttpsURLConnection.getDefaultHostnameVerifier().verify(url.host, session)) {
+                        close()
+                        throw IOException("Not your PC's Tailscale address")
+                    }
                 }
             } else {
                 java.net.Socket().apply { connect(java.net.InetSocketAddress(url.host, url.port), 3000) }
@@ -143,7 +153,8 @@ class Aurora private constructor(context: Context) {
             val time = (System.currentTimeMillis() / 1000).toString()
             val nonce = ByteArray(12).also { random.nextBytes(it) }.joinToString("") { "%02x".format(it) }
             val signature = PhoneKey.sign(Protocol.canonical("GET", path, time, nonce, ByteArray(0)))
-            val request = "GET $path HTTP/1.1\r\nHost: ${url.host}:${url.port}\r\nAuthorization: Bearer $token\r\n" +
+            val hostHeader = if (url.port > 0) "${url.host}:${url.port}" else url.host
+            val request = "GET $path HTTP/1.1\r\nHost: $hostHeader\r\nAuthorization: Bearer $token\r\n" +
                 "X-Aurora-Time: $time\r\nX-Aurora-Nonce: $nonce\r\nX-Aurora-Signature: $signature\r\n" +
                 "Connection: Upgrade\r\nUpgrade: aurora-call\r\n\r\n"
             socket.getOutputStream().apply { write(request.toByteArray()); flush() }
@@ -175,7 +186,7 @@ class Aurora private constructor(context: Context) {
 
     /** Runs [block] on the first route where the PC answers (as [call] does). */
     private fun <T> onAnyRoute(block: (String) -> T): T {
-        for (base in Protocol.routes(route, wifiBase)) {
+        for (base in Protocol.routes(route, wifiBase, tailscaleBase)) {
             try { return block(base).also { remember(base) } } catch (error: NotConnected) { }
         }
         val found = discover()
@@ -242,7 +253,7 @@ class Aurora private constructor(context: Context) {
         } catch (error: IOException) {
             throw NotConnected()
         }
-        if (connection is HttpsURLConnection) pin(connection)
+        if (connection is HttpsURLConnection && !Protocol.isTailscale(base)) pin(connection)
         connection.requestMethod = method
         connection.connectTimeout = 3000
         connection.readTimeout = timeoutMs
@@ -273,7 +284,7 @@ class Aurora private constructor(context: Context) {
     /** Tries the routes in order (last good, USB, home Wi-Fi, then a discovery broadcast). */
     fun call(method: String, path: String, body: ByteArray = ByteArray(0), timeoutMs: Int = 10_000,
              type: String = "application/json"): Reply {
-        for (base in Protocol.routes(route, wifiBase)) {
+        for (base in Protocol.routes(route, wifiBase, tailscaleBase)) {
             try {
                 return sendAndRemember(base, method, path, body, timeoutMs, type)
             } catch (error: NotConnected) {
@@ -296,7 +307,7 @@ class Aurora private constructor(context: Context) {
                                 type: String): Reply {
         val reply = send(base, method, path, body, signed = true, timeoutMs = timeoutMs, type = type)
         remember(base)
-        if (path == "/api/status" || path == "/api/connection") learnWifi(reply)
+        if (path == "/api/connection" && reply.ok) learnRoutes(reply)
         return reply
     }
 
@@ -308,9 +319,17 @@ class Aurora private constructor(context: Context) {
         }
     }
 
-    private fun learnWifi(reply: Reply) {
-        val address = reply.json.optString("wifi_address", "")
-        if (address.isNotBlank()) prefs.edit().putString("wifi_address", address).apply()
+    /** What the PC says about its other routes: the Wi-Fi address while at home, the Tailscale name. */
+    private fun learnRoutes(reply: Reply) {
+        val json = reply.json
+        val edit = prefs.edit()
+        val address = json.optString("wifi_address", "")
+        if (address.isNotBlank() && address != "null") edit.putString("wifi_address", address)
+        if (json.has("tailscale_address")) {
+            val name = if (json.isNull("tailscale_address")) null else json.optString("tailscale_address")
+            edit.putString("tailscale_address", Protocol.tailscaleBase(name)?.removePrefix("https://"))
+        }
+        edit.apply()
     }
 
     /** Asks the home network "AURORA?"; returns the HTTPS address if our PC answers. */
@@ -344,7 +363,7 @@ class Aurora private constructor(context: Context) {
             throw NotConnected()
         }
         try {
-            if (connection is HttpsURLConnection) pin(connection)
+            if (connection is HttpsURLConnection && !Protocol.isTailscale(base)) pin(connection)
             connection.requestMethod = method
             connection.connectTimeout = 3000
             connection.readTimeout = timeoutMs

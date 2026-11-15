@@ -30,9 +30,18 @@ object Protocol {
     fun wifiBase(address: String?, port: Int): String? =
         if (address.isNullOrBlank() || port <= 0) null else "https://$address:$port"
 
-    /** Where to try, best first: the route that worked last time, then USB, then home Wi-Fi. */
-    fun routes(lastGood: String?, wifi: String?): List<String> =
-        listOfNotNull(lastGood, USB_BASE, wifi).distinct()
+    /** The PC's Tailscale address (``tailscale serve``), only for a proper *.ts.net host name. */
+    fun tailscaleBase(name: String?): String? {
+        val host = name?.trim()?.trimEnd('.')?.lowercase() ?: return null
+        return if (Regex("^[a-z0-9-]+(\\.[a-z0-9-]+)*\\.ts\\.net$").matches(host)) "https://$host" else null
+    }
+
+    /** Tailscale's certificate is a real one, checked as usual; the home Wi-Fi's is pinned instead. */
+    fun isTailscale(base: String?): Boolean = base != null && base.startsWith("https://") && base.endsWith(".ts.net")
+
+    /** Where to try, best first: the route that worked last time, then USB, home Wi-Fi, Tailscale. */
+    fun routes(lastGood: String?, wifi: String?, tailscale: String? = null): List<String> =
+        listOfNotNull(lastGood, USB_BASE, wifi, tailscale).distinct()
 
     /** The PC's answer to a discovery broadcast: its HTTPS port if the fingerprint prefix matches ours. */
     fun discoveryPort(answer: String, pinned: String?): Int? {
@@ -79,6 +88,7 @@ object Protocol {
     fun routeName(base: String?): String = when {
         base == null -> "Not connected"
         base == USB_BASE -> "USB cable"
+        isTailscale(base) -> "Tailscale"
         base.startsWith("https://") -> "Home Wi-Fi"
         else -> "Connected"
     }

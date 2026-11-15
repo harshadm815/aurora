@@ -18,6 +18,14 @@ object Files {
     const val MAX_BYTES = 500L * 1024 * 1024          // as MOBILE_MAX_FILE_BYTES on the PC
     const val FOLDER = "AURORA"
 
+    /** A plain file name: no folders, no hidden or invisible characters (the PC cleans it too). */
+    fun safeName(name: String): String {
+        val plain = name.substringAfterLast('/').substringAfterLast('\\')
+            .map { if (it < ' ' || it in "<>:\"|?*") ' ' else it }.joinToString("")
+            .trim().trim('.', ' ').take(120)
+        return plain.ifBlank { "file from PC" }
+    }
+
     fun mimeOf(name: String): String =
         MimeTypeMap.getSingleton().getMimeTypeFromExtension(name.substringAfterLast('.', "").lowercase())
             ?: "application/octet-stream"
@@ -59,7 +67,8 @@ object Files {
      * Saves a file from the PC in Downloads/AURORA (Android picks "name (1)" if it exists, so nothing is
      * overwritten). A file that arrives short is removed. Returns where it is, for opening.
      */
-    fun saveDownload(context: Context, name: String, size: Long, input: InputStream): Uri {
+    fun saveDownload(context: Context, given: String, size: Long, input: InputStream): Uri {
+        val name = safeName(given)
         if (size > MAX_BYTES) throw IOException("That file is too big for the phone (the limit is 500 MB).")
         if (Build.VERSION.SDK_INT >= 29) {
             val resolver = context.contentResolver

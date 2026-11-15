@@ -77,8 +77,14 @@ The app tries them in this order and switches when one appears or drops:
    fingerprint is part of the QR code, so the app trusts only *your* PC
    (no warning screens, nothing a stranger's device can impersonate),
    and every request still needs the phone's key.
-3. **Away from home: Tailscale**, as planned before (you install it). The
-   app needs no change; it just has one more address to try.
+3. **Away from home: Tailscale** (built in 0.51.0; you install it). AURORA
+   reads the PC's Tailscale name (`tailscale status`) and, after you press
+   "Set up away from home" in Settings → Phone, runs `tailscale serve
+   --bg 8765` (never `funnel`: only your own Tailscale devices can reach
+   it). The phone learns the `https://<pc>.<tailnet>.ts.net` address from
+   `/api/connection` (asked every 15 minutes) and tries it after the cable
+   and Wi-Fi; Tailscale's real certificate is checked as usual and the
+   host must end in `.ts.net`.
 
 The PC side gains a **live connection** (WebSocket) next to today's
 requests, so the PC can push things to the phone: replies, reminders,
@@ -193,9 +199,56 @@ Each ends with something you can use on the phone, tested.
    lands outside the folder, received files get Windows' "from another
    device" mark, and the PC offers a file only by a random id for an
    hour.
-6. **Away from home and audit**: Tailscale route, poor-network behaviour,
-   battery use over a day, a security review of everything the phone can
-   reach.
+6. **Away from home and audit** (**built, 0.51.0 / app 0.7.0**):
+   - **Tailscale route**, as in "Connecting" above. Waiting for you to
+     install Tailscale on both devices to try it for real.
+   - **Poor networks**: when the phone joins a network (Wi-Fi back, mobile
+     data back) it reconnects at once instead of waiting out the back-off
+     (5 s up to 60 s); every route has a 3 s connect timeout; files and
+     messages that fail say so instead of vanishing.
+   - **Battery**: Android's own battery statistics (`dumpsys batterystats
+     --charged`, AURORA's line only). First reading, 2026-11-15: **0.2 mAh
+     in 2.6 hours on battery** (CPU 0.12, radio 0.09), about 0.04 % of
+     the 559 mAh the phone used in that time; the waiting event request
+     costs almost nothing. A full day's reading is still to come.
+   - **Security review**, see "Security review (0.51.0)" below.
+
+## Security review (0.51.0)
+
+Everything the phone can reach, and what stops misuse:
+
+| Part | Reachable by | Protection |
+|---|---|---|
+| 127.0.0.1:8765 (cable, Tailscale) | programs on this PC, the cabled phone, your Tailscale devices | device key + phone signature on every call; Host check; pairing only from localhost with the on-screen code (5 tries) |
+| Wi-Fi :8766 (HTTPS) | devices on a network you marked as home | the above, plus TLS with the certificate the phone pinned over the cable; off on other networks |
+| UDP :8767 discovery | the home network | answers only its port and a fingerprint prefix; proves nothing alone |
+| `/api/chat`, calls | the paired phone | same engine, tools, permissions and confirmations as Chat; approving actions and memories need their own permission |
+| `/api/file` | the paired phone | signed SHA-256 checked byte for byte; cleaned names, never overwriting; Mark of the Web; 500 MB and free-space limits; PC files only by random id for an hour |
+| The app's share screen | other apps on the phone | sends only after you press Send; reads only `content://` shares |
+| The app's call service, boot receiver | Android itself | call service needs Android's telecom permission; the boot receiver only starts the link |
+
+Found and fixed in this review:
+
+1. **The share screen sent at once** when opened, so another app on the
+   phone could push files to the PC without you. It now asks first.
+2. **`file://` shares were read**, so a crafted share could make the app
+   read its own private settings (with the device key) and copy them to
+   the PC. Only `content://` shares are accepted now.
+3. **Web pages on the PC could send requests** to 127.0.0.1:8765 (they
+   couldn't read answers or pass the signature check, but could try
+   pairing codes while one was shown). Requests carrying a browser's
+   `Origin` or `Sec-Fetch-Site` header are now refused before anything
+   else.
+4. **Unlimited connections**: something on the home Wi-Fi could open
+   thousands and tie the server up. Each listener now keeps at most 16
+   open and closes extra ones at once.
+5. File names from the PC are cleaned on the phone too (defence in depth).
+
+Checked and fine: nonces are remembered only after a valid signature (no
+flooding the cache); signatures cover the query string; logs never hold
+messages, speech or file names; the token is kept only in the app's private
+storage with backups off; notifications show no content on the lock
+screen; pairing a second phone is impossible while one is paired.
 
 ## What the Calling Agent can't do
 

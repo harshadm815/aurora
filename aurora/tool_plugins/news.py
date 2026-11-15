@@ -61,7 +61,7 @@ class NewsTool(BaseTool):
         if query is None:
             if not request.strip():
                 return ToolResult(False, "What news should I look for?")
-            query = parse(request, feeds=self.service.feeds)
+            query = parse(request, today=self.service.now().date(), feeds=self.service.feeds)
         report = self.run(query)                 # a block goes to the executor, which asks you
         if not report.searched:
             return ToolResult(False, report_text(report, settings.NEWS_MAX_STORIES), report, retryable=True)

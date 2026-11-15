@@ -230,6 +230,12 @@ class SettingsView(BaseView):
                                          "from the phone land in Documents › From phone.")
         self.send_file_button.clicked.connect(self._send_file_to_phone)
         pair_row.addWidget(self.send_file_button)
+        self.away_button = QPushButton("Set up away from home")
+        self.away_button.setToolTip("Runs \"tailscale serve --bg\" for AURORA: only your own Tailscale devices can "
+                                    "reach it (never the public internet), and the phone still signs everything.")
+        self.away_button.clicked.connect(self._set_up_away)
+        self.away_button.setVisible(False)
+        pair_row.addWidget(self.away_button)
         pair_row.addStretch(1)
         phone.add_layout(pair_row)
         self.device_rows = QVBoxLayout()
@@ -240,7 +246,8 @@ class SettingsView(BaseView):
             "Only one phone can be paired, and only over the USB cable: plug it in (USB debugging on), open the "
             "AURORA app and type the code from \"Pair my phone…\". The phone keeps a key in its secure hardware "
             "and signs everything it sends, so nothing else can pretend to be it. Away from home, Tailscale "
-            "(tailscale serve --bg 8765) can carry the connection.", "Faint", wrap=True))
+            "(free, tailscale.com) carries it: install it on the PC and the phone, sign in to the same account, "
+            "then press \"Set up away from home\".", "Faint", wrap=True))
         self.body.addWidget(phone)
         backend.mobile_changed.connect(lambda _: self._refresh_phone())
         self._phone_timer = QTimer(self)
@@ -522,6 +529,7 @@ class SettingsView(BaseView):
         service = self.backend.mobile
         if service is None:
             self.mobile_status.setText("Off. Your phone can't reach AURORA.")
+            self.away_button.setVisible(False)
             return
         state = service.describe()
         usb = {"no adb": "USB: Android Platform Tools (adb) not found, so the cable link can't be set up",
@@ -537,7 +545,12 @@ class SettingsView(BaseView):
             wifi = f"Wi-Fi: not listening, \"{state['network']}\" isn't marked as home"
         else:
             wifi = "Wi-Fi: not listening (this PC isn't on Wi-Fi)"
-        self.mobile_status.setText(f"On.  {usb}.  {wifi}.")
+        away = {"not installed": "Away from home: Tailscale isn't installed",
+                "not connected": "Away from home: Tailscale is installed but not connected",
+                "not set up": "Away from home: Tailscale is connected; press \"Set up away from home\""}.get(
+            state["tailscale"], f"Away from home: through Tailscale at {state['tailscale']}")
+        self.mobile_status.setText(f"On.  {usb}.  {wifi}.  {away}.")
+        self.away_button.setVisible(state["tailscale"] == "not set up")
 
     def _add_home_network(self):
         from aurora.mobile.network import current_ssid
@@ -618,6 +631,17 @@ class SettingsView(BaseView):
         if self.backend.mobile is not None:
             self.backend.mobile.call_phone()
             self._status("Calling your phone… (it rings if the AURORA app is connected)")
+
+    def _set_up_away(self):
+        service = self.backend.mobile
+        if service is None:
+            return
+        problem = service.tailscale.serve()
+        if problem:
+            QMessageBox.information(self, "Away from home", problem)
+        else:
+            self._status("Away from home is set up. Open the AURORA app once at home so it learns the address.")
+        self._refresh_phone_status()
 
     def _send_file_to_phone(self):
         from PySide6.QtWidgets import QFileDialog

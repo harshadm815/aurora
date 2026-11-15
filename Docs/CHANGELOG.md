@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.51.0 — Away from home, and a security review (2026-11-15)
+
+### Added
+- **Away from home through Tailscale**: once Tailscale is on the PC and the
+  phone (same account), "Set up away from home" in Settings → Phone makes
+  AURORA reachable from your own Tailscale devices only (`tailscale serve`,
+  never `funnel`). The phone (app 0.7.0) learns the address and uses it
+  when the cable and home Wi-Fi aren't there. The status line says what
+  Tailscale is doing.
+- The phone reconnects as soon as it joins a network instead of waiting up
+  to a minute.
+
+### Security
+- The share screen now asks before sending (another app could otherwise
+  open it and send files to the PC), and reads only `content://` shares
+  (a `file://` link could have pointed at the app's own private settings).
+- Requests from web pages (with a browser's `Origin` / `Sec-Fetch-Site`
+  header) are refused; each phone listener keeps at most 16 connections.
+- File names from the PC are cleaned on the phone as well.
+- Full review in Docs/ANDROID_APP.md ("Security review").
+
 ## 0.50.0 — Files between the phone and the PC (2026-11-14)
 
 ### Added

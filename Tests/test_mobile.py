@@ -1118,3 +1118,118 @@ def test_a_large_file_streams_through_in_pieces(server, phone, received):
     status, answer, _ = _upload(server, phone, token, data, name="video.mp4")
     assert status == 200, answer
     assert (settings.MOBILE_FILES_DIR / "video.mp4").read_bytes() == data
+
+
+# --- Away from home: Tailscale (milestone 6) ----------------------------------------------
+
+from aurora.mobile import tailscale as phone_tailscale  # noqa: E402
+
+TS_STATUS = json.dumps({"BackendState": "Running", "Self": {"DNSName": "aurora-pc.tail1234.ts.net.", "Online": True}})
+TS_SERVE = json.dumps({"TCP": {"443": {"HTTPS": True}},
+                       "Web": {"aurora-pc.tail1234.ts.net:443": {"Handlers": {"/": {"Proxy": "http://127.0.0.1:8765"}}}}})
+
+
+def test_tailscale_status_and_serve_are_read():
+    assert phone_tailscale.parse_status(TS_STATUS) == "aurora-pc.tail1234.ts.net"
+    assert phone_tailscale.parse_status(json.dumps({"BackendState": "Stopped", "Self": {"DNSName": "a.ts.net."}})) is None
+    assert phone_tailscale.parse_status(json.dumps({"BackendState": "Running", "Self": {"DNSName": "evil.example."}})) is None
+    assert phone_tailscale.parse_status("not json") is None
+    assert phone_tailscale.parse_serve(TS_SERVE, 8765)
+    assert not phone_tailscale.parse_serve(TS_SERVE, 9999)
+    other = json.dumps({"Web": {"x:443": {"Handlers": {"/": {"Proxy": "http://192.168.1.5:8765"}}}}})
+    assert not phone_tailscale.parse_serve(other, 8765) and not phone_tailscale.parse_serve("", 8765)
+
+
+class FakeTailscaleCli:
+    def __init__(self, connected=True, serving=False):
+        self.connected, self.serving, self.ran = connected, serving, []
+
+    def __call__(self, command, timeout=10):
+        self.ran.append(command[1:])
+        if command[1:] == ["status", "--json"]:
+            return TS_STATUS if self.connected else ""
+        if command[1:] == ["serve", "status", "--json"]:
+            return TS_SERVE if self.serving else "{}"
+        if command[1:3] == ["serve", "--bg"]:
+            self.serving = command[3] == "8765"
+            return ""
+        raise AssertionError(f"unexpected tailscale command {command}")
+
+
+def test_the_phone_is_told_the_tailscale_address_only_when_it_leads_to_aurora():
+    cli = FakeTailscaleCli(serving=False)
+    ts = phone_tailscale.Tailscale(8765, "tailscale.exe", run=cli)
+    ts.check()
+    assert ts.name == "aurora-pc.tail1234.ts.net" and ts.address is None             # connected, not set up
+    assert ts.serve() == "" and ts.address == "aurora-pc.tail1234.ts.net"
+    assert ["serve", "--bg", "8765"] in cli.ran
+    assert not any("funnel" in part for command in cli.ran for part in command)       # never public
+    offline = phone_tailscale.Tailscale(8765, "tailscale.exe", run=FakeTailscaleCli(connected=False))
+    assert "isn't connected" in offline.serve() and offline.address is None
+    assert "isn't installed" in phone_tailscale.Tailscale(8765, None).serve()
+
+
+def test_the_service_reports_tailscale(tmp_path):
+    ts = phone_tailscale.Tailscale(8765, "tailscale.exe", run=FakeTailscaleCli(serving=True))
+    service = MobileService(FakeBridge(), DeviceStore(tmp_path / "m.db"), usb=FakeUsb(), check_seconds=0,
+                            speech=CallSpeech([]), tailscale=ts)
+    service.check_network()
+    assert service.connection()["tailscale_address"] == "aurora-pc.tail1234.ts.net"
+    assert service.describe()["tailscale"] == "aurora-pc.tail1234.ts.net"
+    plain = MobileService(FakeBridge(), DeviceStore(tmp_path / "n.db"), usb=FakeUsb(), check_seconds=0,
+                          speech=CallSpeech([]))
+    assert plain.describe()["tailscale"] == "not installed" and plain.connection()["tailscale_address"] is None
+
+
+def test_requests_through_tailscale_serve_work_but_cant_pair(server, phone):
+    token = _paired(server, phone)
+    host = "aurora-pc.tail1234.ts.net"                   # tailscale serve passes this Host on to 127.0.0.1
+    status, data, _ = call(server, "GET", "/api/status", token=token, phone=phone, host=host)
+    assert status == 200 and data["model"] == "tinyllama"
+    server.store.remove(server.store.devices()[0].id)
+    code = server.store.new_code()
+    status, data, _ = call(server, "POST", "/api/pair", {"code": code, "name": "x", "public_key": phone.public}, host=host)
+    assert status == 403 and "USB" in data["error"]
+
+
+# --- Security review (milestone 6) ---------------------------------------------------------
+
+@pytest.mark.parametrize("header", [{"Origin": "https://evil.example"}, {"Origin": "null"},
+                                    {"Sec-Fetch-Site": "cross-site"}])
+def test_requests_from_web_pages_are_refused(server, phone, header):
+    token = _paired(server, phone)
+    assert call(server, "GET", "/api/status", token=token, phone=phone)[0] == 200
+    status, _, _ = call(server, "GET", "/api/status", token=token, phone=phone, headers=header)
+    assert status == 403
+    code_status = call(server, "POST", "/api/pair", {"code": "AAAAAAAA", "name": "x", "public_key": phone.public},
+                       headers=header)[0]
+    assert code_status == 403 and server.store._wrong == 0            # never even counted as a pairing try
+
+
+def test_too_many_open_connections_are_closed_at_once(server, phone, monkeypatch):
+    from aurora.mobile import server as server_module
+    token = _paired(server, phone)
+    held = []
+    for _ in range(server_module.MAX_CONNECTIONS):
+        held.append(socket.create_connection(("127.0.0.1", server.port), timeout=5))   # open, never finish
+    try:
+        deadline = time.time() + 5
+        while server._http.slots._value and time.time() < deadline:
+            time.sleep(0.05)
+        extra = socket.create_connection(("127.0.0.1", server.port), timeout=5)
+        extra.sendall(b"GET / HTTP/1.1\r\nHost: localhost\r\n\r\n")
+        assert extra.recv(100) == b""                                   # closed without an answer
+        extra.close()
+    finally:
+        for s in held:
+            s.close()
+    deadline = time.time() + 40
+    while time.time() < deadline:                                       # the slots come back as they close
+        try:
+            if call(server, "GET", "/api/status", token=token, phone=phone)[0] == 200:
+                break
+        except OSError:
+            pass
+        time.sleep(0.2)
+    else:
+        raise AssertionError("the server didn't recover after the connections closed")

@@ -20,6 +20,8 @@ from aurora.mobile.files import Outbox
 from aurora.mobile.server import MobileServer
 from aurora.mobile.signing import NonceCache
 from aurora.mobile.speech import PhoneSpeech
+from aurora.mobile import tailscale as tailscale_module
+from aurora.mobile.tailscale import Tailscale
 from aurora.mobile import usb as usb_module
 from aurora.mobile.usb import UsbLink
 
@@ -30,7 +32,7 @@ class MobileService:
 
     def __init__(self, bridge, store: DeviceStore | None = None, wifi: bool = False,
                  home_networks: list[str] | None = None, ssid=None, address=None, usb: UsbLink | None = None,
-                 check_seconds: float | None = None, speech=None):
+                 check_seconds: float | None = None, speech=None, tailscale: Tailscale | None = None):
         self.bridge = bridge
         self.store = store or DeviceStore()
         self.nonces = NonceCache()
@@ -43,6 +45,8 @@ class MobileService:
         self.local = MobileServer(bridge, self.store, nonces=self.nonces, connection=self.connection,
                                   events=self.events, speech=self.speech, outbox=self.outbox)
         self.usb = usb if usb is not None else UsbLink(settings.MOBILE_PORT, usb_module.find_adb())
+        self.tailscale = tailscale if tailscale is not None else Tailscale(settings.MOBILE_PORT,
+                                                                           tailscale_module.find_tailscale())
         self.wifi_enabled = wifi
         self.home_networks = list(home_networks or [])
         self._ssid = ssid or (lambda: network.current_ssid())          # looked up when called (tests replace them)
@@ -68,6 +72,7 @@ class MobileService:
 
     def start(self) -> None:
         self.local.start()                        # raises OSError if the port is taken
+        self.tailscale.port = self.local.port
         self.usb.start()
         self._stop.clear()
         self.check_network()
@@ -105,7 +110,11 @@ class MobileService:
         return self.network is not None and self.network in self.home_networks
 
     def check_network(self) -> None:
-        """Opens or closes the Wi-Fi listener to match the network the PC is on now."""
+        """Opens or closes the Wi-Fi listener to match the network the PC is on now (and looks at Tailscale)."""
+        try:
+            self.tailscale.check()
+        except Exception:
+            logger.exception("Mobile: Tailscale check failed")
         with self._lock:
             self.network = self._ssid()
             address = self._address() if self.wifi_enabled and self.at_home else None
@@ -148,7 +157,8 @@ class MobileService:
         wifi = self.wifi
         return {"fingerprint": self.fingerprint, "wifi_port": settings.MOBILE_WIFI_PORT,
                 "discovery_port": settings.MOBILE_DISCOVERY_PORT,
-                "wifi_address": wifi.host if wifi is not None else None}
+                "wifi_address": wifi.host if wifi is not None else None,
+                "tailscale_address": self.tailscale.address}
 
     def call_phone(self) -> None:
         """Rings the paired phone (it calls back over its own connection)."""
@@ -169,4 +179,7 @@ class MobileService:
             "at_home": self.at_home,
             "wifi": f"{wifi.host}:{wifi.port}" if wifi is not None else None,
             "wifi_problem": self.wifi_problem,
+            "tailscale": ("not installed" if not self.tailscale.installed else
+                          "not connected" if self.tailscale.name is None else
+                          "not set up" if not self.tailscale.serving else self.tailscale.name),
         }

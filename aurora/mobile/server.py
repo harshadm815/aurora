@@ -13,7 +13,10 @@ Two listeners, the same API:
 Safety, in order:
   - requests must name this PC in their Host header (localhost, the Wi-Fi
     address, or a Tailscale *.ts.net name), so web pages can't reach it by
-    DNS tricks
+    DNS tricks; anything a browser sends from a web page (an Origin or
+    Sec-Fetch-Site header, which the app never sends) is refused outright
+  - at most MAX_CONNECTIONS open connections per listener, so something
+    on the home network can't tie AURORA up by opening thousands
   - every API call except pairing needs the phone's device key **and** a
     fresh signature from the key locked in that phone (signing.py)
   - only one phone can be paired (devices.py)
@@ -67,6 +70,7 @@ SECURITY_HEADERS = {
     "Content-Security-Policy": "default-src 'none'; frame-ancestors 'none'",
 }
 LOCAL_NAMES = ("localhost", "127.0.0.1", "::1")
+MAX_CONNECTIONS = 16           # the phone uses 2-3 at once (events, a request, a call)
 
 
 def host_name(host: str | None) -> str:
@@ -149,7 +153,9 @@ class Handler(BaseHTTPRequestHandler):
         return device
 
     def _guard(self) -> bool:
-        if not host_allowed(self.headers.get("Host"), self.server.extra_hosts):
+        from_a_web_page = self.headers.get("Origin") is not None or self.headers.get("Sec-Fetch-Site") is not None
+        if from_a_web_page or not host_allowed(self.headers.get("Host"), self.server.extra_hosts):
+            self.close_connection = True
             self._send(HTTPStatus.FORBIDDEN, b"Forbidden", "text/plain")
             return False
         return True
@@ -353,6 +359,26 @@ class Handler(BaseHTTPRequestHandler):
 class _Http(ThreadingHTTPServer):
     daemon_threads = True
     tls: ssl.SSLContext | None = None
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.slots = threading.BoundedSemaphore(MAX_CONNECTIONS)
+
+    def process_request(self, request, client_address):
+        if not self.slots.acquire(blocking=False):      # full: close at once instead of a new thread
+            self.shutdown_request(request)
+            return
+        try:
+            super().process_request(request, client_address)
+        except Exception:
+            self.slots.release()
+            raise
+
+    def process_request_thread(self, request, client_address):
+        try:
+            super().process_request_thread(request, client_address)
+        finally:
+            self.slots.release()
 
     def finish_request(self, request, client_address):
         if self.tls is not None:                      # TLS handshake on the request's own thread

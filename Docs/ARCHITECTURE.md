@@ -358,7 +358,8 @@ phone waits on: every finished exchange, from `Backend.exchanged`, and due remin
 (the phone's recordings to text with Vosk, replies and reminders to WAV with Piper), `call.py`
 (the Calling Agent: `GET /api/call` upgraded to a framed audio stream; turn-taking, interruption), `files.py` (the share menu's files
 into Documents\From phone, never overwriting, checked against the SHA-256 the phone signed; and
-files you send from the PC, offered by a random id for an hour).
+files you send from the PC, offered by a random id for an hour), `tailscale.py` (away from home:
+the PC's ts.net name and `tailscale serve`, passed to the phone in `/api/connection`).
 `aurora/interface/mobile_bridge.py` connects it to the Backend: chat goes
 through `send_message` like Chat (and appears there), plus status,
 history, briefing, reminders and memories. `Backend.set_mobile()`

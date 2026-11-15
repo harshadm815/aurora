@@ -25,6 +25,7 @@ class LinkService : Service(), Live.Listener {
         private const val CHANNEL_REPLIES = "replies"
         private const val WAIT_SECONDS = 25
         private val BACKOFF = longArrayOf(5_000, 10_000, 20_000, 30_000, 60_000)
+        private const val LEARN_EVERY_MS = 15 * 60 * 1000L       // ask the PC for its routes this often
 
         fun enabled(context: Context) = Aurora.get(context).prefs.getBoolean("stay_connected", true)
 
@@ -91,6 +92,7 @@ class LinkService : Service(), Live.Listener {
         if (!running) {
             running = true
             worker = thread(name = "aurora-link") { loop() }
+            if (networks == null) watchNetworks()
         }
         return START_STICKY
     }
@@ -98,6 +100,11 @@ class LinkService : Service(), Live.Listener {
     override fun onDestroy() {
         running = false
         worker?.interrupt()
+        networks?.let { callback ->
+            try { getSystemService(android.net.ConnectivityManager::class.java)?.unregisterNetworkCallback(callback) }
+            catch (error: RuntimeException) { }
+        }
+        networks = null
         Live.remove(this)
         super.onDestroy()
     }
@@ -106,11 +113,40 @@ class LinkService : Service(), Live.Listener {
         getSystemService(NotificationManager::class.java).notify(LINK_ID, linkNotification(base))
     }
 
+    private val wake = Object()
+    @Volatile private var networkChanged = false
+    private var networks: android.net.ConnectivityManager.NetworkCallback? = null
+
+    /** A new network (Wi-Fi joined, mobile data back): try again now instead of waiting out the back-off. */
+    private fun watchNetworks() {
+        val manager = getSystemService(android.net.ConnectivityManager::class.java) ?: return
+        val callback = object : android.net.ConnectivityManager.NetworkCallback() {
+            override fun onAvailable(network: android.net.Network) {
+                networkChanged = true
+                synchronized(wake) { wake.notifyAll() }
+            }
+        }
+        try {
+            manager.registerDefaultNetworkCallback(callback)
+            networks = callback
+        } catch (error: RuntimeException) {
+            // no callback: the back-off still retries
+        }
+    }
+
     private fun loop() {
         val aurora = Aurora.get(this)
         var failures = 0
+        var learned = 0L
         while (running) {
             if (!aurora.paired) break
+            if (System.currentTimeMillis() - learned > LEARN_EVERY_MS) {
+                try {
+                    if (aurora.get("/api/connection").ok) learned = System.currentTimeMillis()  // Tailscale name, Wi-Fi address
+                } catch (error: IOException) {
+                    // not reachable: the events request below waits with the back-off
+                }
+            }
             val session = aurora.prefs.getString("event_session", "") ?: ""
             val after = aurora.prefs.getInt("event_last", -1)
             try {
@@ -134,7 +170,10 @@ class LinkService : Service(), Live.Listener {
                 if (!running) break
                 val pause = BACKOFF[minOf(failures, BACKOFF.size - 1)]
                 failures++
-                try { Thread.sleep(pause) } catch (stop: InterruptedException) { break }
+                try {
+                    synchronized(wake) { if (!networkChanged) wake.wait(pause) }
+                } catch (stop: InterruptedException) { break }
+                if (networkChanged) { networkChanged = false; failures = 0 }
             }
         }
         if (!aurora.paired) stopSelf()

@@ -53,6 +53,8 @@ def isolated_database(tmp_path, monkeypatch):
     # The phone service never runs adb or netsh in tests (no USB link, "not on Wi-Fi").
     from aurora.mobile import network as mobile_network, usb as mobile_usb
     monkeypatch.setattr(mobile_usb, "find_adb", lambda: None)
+    from aurora.mobile import tailscale as mobile_tailscale
+    monkeypatch.setattr(mobile_tailscale, "find_tailscale", lambda: None)
     monkeypatch.setattr(mobile_network, "current_ssid", lambda run=None: None)
     monkeypatch.setattr(mobile_network, "lan_address", lambda: None)
 

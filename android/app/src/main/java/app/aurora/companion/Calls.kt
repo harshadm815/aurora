@@ -48,6 +48,16 @@ object Calls {
     @Volatile var heard = ""
     @Volatile var reply = ""
     @Volatile var ended = ""
+    @Volatile var muted = false
+    @Volatile var micLevel = 0f                  // 0-1, for the animations
+    @Volatile var voiceLevel = 0f
+    @Volatile var connectedAt = 0L               // SystemClock.elapsedRealtime() when the call connected
+    @Volatile var linked = false                 // the stream to the PC is up (false while reconnecting)
+    @Volatile var route = CallAudioState.ROUTE_EARPIECE
+    @Volatile var routes = CallAudioState.ROUTE_EARPIECE or CallAudioState.ROUTE_SPEAKER
+
+    /** What was said, in order (kept only in memory, for the after-call screen). */
+    val transcript = CallTranscript()
 
     fun changed() = main.post { listener?.onCallChanged() }
 
@@ -120,8 +130,15 @@ object Calls {
         connection?.setAudioRoute(if (on) CallAudioState.ROUTE_SPEAKER else CallAudioState.ROUTE_EARPIECE)
     }
 
-    fun setMuted(on: Boolean) {
+    /** Earpiece, speaker, Bluetooth headset or wired headset ([CallAudioState] route). */
+    fun useRoute(value: Int) {
+        connection?.setAudioRoute(value)
+    }
+
+    fun mute(on: Boolean) {
+        muted = on
         connection?.audio?.muted = on
+        changed()
     }
 
     fun screen(context: Context, incoming: Boolean): Intent =
@@ -170,6 +187,13 @@ object Calls {
             context.startActivity(screen(context, false))
         }
 
+        override fun onCallAudioStateChanged(audioState: CallAudioState?) {
+            if (audioState == null) return
+            route = audioState.route
+            routes = audioState.supportedRouteMask
+            changed()
+        }
+
         override fun onReject() = end(DisconnectCause(DisconnectCause.REJECTED))
         override fun onDisconnect() = end(DisconnectCause(DisconnectCause.LOCAL))
         override fun onAbort() = end(DisconnectCause(DisconnectCause.CANCELED))
@@ -178,11 +202,19 @@ object Calls {
             if (audio != null) return
             state_("connecting")
             audio = CallAudio(context, reason, text, object : CallAudio.Listener {
-                override fun onConnected() { if (!incoming) main.post { setActive() }; state_("listening") }
+                override fun onConnected() {
+                    if (!incoming) main.post { setActive() }
+                    linked = true
+                    if (connectedAt == 0L) connectedAt = android.os.SystemClock.elapsedRealtime()
+                    audio?.muted = muted
+                    state_("listening")
+                }
                 override fun onState(state: String) = state_(state)
                 override fun onPartial(text: String) { heard = "$text…"; changed() }
-                override fun onHeard(text: String) { heard = text; changed() }
-                override fun onReply(text: String) { reply = text; changed() }
+                override fun onHeard(text: String) { heard = text; transcript.you(text); changed() }
+                override fun onReply(text: String) { reply = text; transcript.aurora(text); changed() }
+                override fun onLevel(mic: Float, voice: Float) { micLevel = mic; voiceLevel = voice }
+                override fun onReconnecting() { linked = false; state_("reconnecting") }
                 override fun onEnded(reason: String) {
                     Calls.ended = when (reason) {
                         "goodbye", "ended", "hangup" -> "Call ended"
@@ -222,6 +254,8 @@ object Calls {
             connection = call
             state = if (incoming) "ringing" else "calling"
             heard = ""; reply = ""; ended = ""
+            muted = false; micLevel = 0f; voiceLevel = 0f; connectedAt = 0L; linked = false
+            transcript.clear()
             if (incoming) call.setRinging() else call.setDialing()
             changed()
             return call

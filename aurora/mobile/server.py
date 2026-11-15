@@ -37,6 +37,10 @@ API (JSON):
     POST /api/chat       {"text"}          → {"reply", "needs_confirmation", "sources"}
     GET  /api/today                        → {"briefing", "reminders"}
     GET  /api/memories                     → saved facts (if allowed)
+    POST /api/memories   {"value"}         → adds a note to AURORA's memory (if allowed)
+    POST /api/memories/edit {"id", "value"} / POST /api/memories/delete {"id"}   (if allowed)
+    POST /api/clear                        → clears the shared conversation (memories stay)
+    POST /api/control    {"action"}        → "pause", "start" or "stop_speaking" only
     POST /api/unpair                       → this phone disconnects itself
     POST /api/file?name=N  (the file)      → {"saved", "folder"}: kept in "From phone", never overwriting
     GET  /api/file?id=I                    → a file you sent from the PC (files.py)
@@ -245,7 +249,8 @@ class Handler(BaseHTTPRequestHandler):
                 except SpeechError as error:
                     raise ApiError(HTTPStatus.UNPROCESSABLE_ENTITY, str(error))
             elif (method, path) == ("GET", "/api/status"):
-                result = bridge.status()
+                result = {**bridge.status(),
+                          "permissions": {"memories": device.allow_memories, "actions": device.allow_actions}}
             elif (method, path) == ("GET", "/api/connection"):
                 result = server.connection()
             elif (method, path) == ("GET", "/api/history"):
@@ -266,6 +271,41 @@ class Handler(BaseHTTPRequestHandler):
                     raise ApiError(HTTPStatus.FORBIDDEN, "This phone isn't allowed to see your memories. "
                                                          "Allow it on the PC's Phone page.")
                 result = {"memories": bridge.memories()}
+            elif path in ("/api/memories", "/api/memories/edit", "/api/memories/delete") and method == "POST":
+                if not device.allow_memories:
+                    raise ApiError(HTTPStatus.FORBIDDEN, "This phone isn't allowed to change your memories. "
+                                                         "Allow \"Memories\" on the PC's Phone page.")
+                data = self._parse(raw)
+                value = " ".join(str(data.get("value", "")).split())[:500]
+                try:
+                    if path == "/api/memories":
+                        if not value:
+                            raise ApiError(HTTPStatus.BAD_REQUEST, "Type what AURORA should remember.")
+                        done = bridge.add_memory(value)
+                    else:
+                        memory_id = int(data.get("id"))
+                        if path.endswith("/edit"):
+                            if not value:
+                                raise ApiError(HTTPStatus.BAD_REQUEST, "A memory can't be empty.")
+                            done = bridge.edit_memory(memory_id, value)
+                        else:
+                            done = bridge.forget_memory(memory_id)
+                except (TypeError, ValueError):
+                    raise ApiError(HTTPStatus.BAD_REQUEST, "Bad request.")
+                except RuntimeError as error:
+                    raise ApiError(HTTPStatus.SERVICE_UNAVAILABLE, str(error))
+                if not done:
+                    raise ApiError(HTTPStatus.NOT_FOUND, "That memory isn't there any more.")
+                result = {"ok": True}
+            elif (method, path) == ("POST", "/api/clear"):
+                bridge.clear_conversation()
+                result = {"ok": True}
+            elif (method, path) == ("POST", "/api/control"):
+                action = str(self._parse(raw).get("action", ""))
+                if action not in ("pause", "start", "stop_speaking"):
+                    raise ApiError(HTTPStatus.BAD_REQUEST, "The phone can only pause or start AURORA, or stop it speaking.")
+                result = {"message": bridge.control(action)}
+                what = f"control: {action}"
             elif (method, path) == ("POST", "/api/unpair"):
                 store.remove(device.id)
                 result = {"ok": True}

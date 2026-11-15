@@ -31,6 +31,10 @@ class CallAudio(private val context: Context, private val reason: String, privat
         fun onReply(text: String) {}
         fun onConnected() {}
         fun onEnded(reason: String) {}
+        /** Loudness 0-1 for the animations: [mic] your voice (0 while muted), [voice] AURORA's. */
+        fun onLevel(mic: Float, voice: Float) {}
+        /** The link dropped and the phone is trying again (once). */
+        fun onReconnecting() {}
     }
 
     companion object {
@@ -68,20 +72,44 @@ class CallAudio(private val context: Context, private val reason: String, privat
         }
     }
 
+    @Volatile private var voiceLevel = 0f
+
     private fun run() {
         var ended = "ended"
+        var attempt = 0
+        var callReason = reason
+        var micThread: Thread? = null
         try {
-            val query = "reason=" + URLEncoder.encode(reason, "UTF-8") + "&text=" + URLEncoder.encode(text.take(300), "UTF-8")
-            socket = Aurora.get(context).openCall("/api/call?$query")
-            socket!!.soTimeout = 0                         // the PC talks when it has something to say
-            listener.onConnected()
-            val microphone = thread(name = "aurora-call-mic") { microphone() }
-            ended = receive()
-            microphone.join(1000)
+            while (true) {
+                try {
+                    val query = "reason=" + URLEncoder.encode(callReason, "UTF-8") + "&text=" +
+                        URLEncoder.encode(text.take(300), "UTF-8")
+                    socket = Aurora.get(context).openCall("/api/call?$query")
+                    socket!!.soTimeout = 0                         // the PC talks when it has something to say
+                    listener.onConnected()
+                    micThread = thread(name = "aurora-call-mic") { microphone() }
+                    ended = receive()
+                    micThread?.join(1000)
+                    break
+                } catch (error: IOException) {
+                    // The link dropped in the middle of the call (Wi-Fi changed, PC busy): try once more.
+                    val dropped = running && error !is NotConnected && attempt == 0
+                    try { socket?.close() } catch (e: IOException) { }
+                    micThread?.join(2000)                         // the old microphone lets go first
+                    if (!dropped) throw error
+                    attempt++
+                    callReason = "reconnect"
+                    listener.onReconnecting()
+                    Thread.sleep(1500)
+                    if (!running) { ended = "ended"; break }
+                }
+            }
         } catch (error: NotConnected) {
-            ended = "Can't reach your PC."
+            ended = if (attempt > 0) "The connection to your PC was lost." else "Can't reach your PC."
         } catch (error: IOException) {
             ended = if (running) (error.message ?: "The call was cut off.") else "ended"
+        } catch (error: InterruptedException) {
+            ended = "ended"
         } finally {
             running = false
             try { socket?.close() } catch (e: IOException) { }
@@ -109,6 +137,8 @@ class CallAudio(private val context: Context, private val reason: String, privat
                     filled += read
                 }
                 send('A'.code.toByte(), if (muted) SILENCE else buffer.copyOf(filled))
+                listener.onLevel(if (muted) 0f else Levels.of(buffer, filled), voiceLevel)
+                voiceLevel *= 0.6f                          // fades unless AURORA keeps speaking
             }
         } catch (error: IOException) {
             // the call ended
@@ -134,6 +164,7 @@ class CallAudio(private val context: Context, private val reason: String, privat
                 when (kind.toInt().toChar()) {
                     'P' -> {
                         val track = player ?: speakerTrack(rate).also { player = it; it.play() }
+                        voiceLevel = maxOf(voiceLevel, Levels.of(payload))
                         track.write(payload, 0, payload.size)
                     }
                     'J' -> {

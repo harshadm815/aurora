@@ -66,6 +66,7 @@
         <activity
             android:name=".CallActivity"
             android:exported="false"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize"
             android:excludeFromRecents="true"
             android:launchMode="singleTop"
             android:taskAffinity=""

@@ -1255,3 +1255,118 @@ def test_tailscale_installed_while_aurora_runs_is_noticed(monkeypatch):
     monkeypatch.setattr(phone_tailscale, "find_tailscale", lambda: "tailscale.exe")   # you install it
     ts.check()
     assert ts.installed and ts.address == "aurora-pc.tail1234.ts.net"
+
+
+# --- Redesigned app (R3): memories, clear, control ----------------------------------------
+
+class EditingBridge(FakeBridge):
+    def __init__(self):
+        super().__init__()
+        self.notes = {1: "likes tea"}
+        self.cleared = 0
+        self.commands = []
+
+    def memories(self):
+        return [{"id": k, "value": v, "category": "Note"} for k, v in self.notes.items()]
+
+    def add_memory(self, value):
+        self.notes[max(self.notes, default=0) + 1] = value
+        return True
+
+    def edit_memory(self, memory_id, value):
+        if memory_id not in self.notes:
+            return False
+        self.notes[memory_id] = value
+        return True
+
+    def forget_memory(self, memory_id):
+        return self.notes.pop(memory_id, None) is not None
+
+    def clear_conversation(self):
+        self.cleared += 1
+
+    def control(self, action):
+        self.commands.append(action)
+        return f"did {action}"
+
+
+@pytest.fixture
+def editing(tmp_path):
+    bridge = EditingBridge()
+    server = MobileServer(bridge, DeviceStore(tmp_path / "m.db"), port=0)
+    server.start()
+    _ALLOWED_PORTS.add(server.port)
+    server.fake = bridge
+    yield server
+    server.stop()
+
+
+def test_memories_can_be_changed_only_with_permission(editing, phone):
+    token = _paired(editing, phone)
+    status, data, _ = call(editing, "POST", "/api/memories", {"value": "my sister is Asha"}, token=token, phone=phone)
+    assert status == 403 and "Memories" in data["error"]
+    assert call(editing, "POST", "/api/memories/delete", {"id": 1}, token=token, phone=phone)[0] == 403
+    device = editing.store.devices()[0]
+    editing.store.set_permissions(device.id, memories=True)
+    assert call(editing, "POST", "/api/memories", {"value": "  my sister   is Asha "}, token=token, phone=phone)[0] == 200
+    assert editing.fake.notes[2] == "my sister is Asha"
+    assert call(editing, "POST", "/api/memories/edit", {"id": 2, "value": "my sister is Asha Rao"},
+                token=token, phone=phone)[0] == 200
+    assert editing.fake.notes[2] == "my sister is Asha Rao"
+    listed = call(editing, "GET", "/api/memories", token=token, phone=phone)[1]["memories"]
+    assert {"id": 2, "value": "my sister is Asha Rao", "category": "Note"} in listed
+    assert call(editing, "POST", "/api/memories/delete", {"id": 1}, token=token, phone=phone)[0] == 200
+    assert 1 not in editing.fake.notes
+    assert call(editing, "POST", "/api/memories/delete", {"id": 1}, token=token, phone=phone)[0] == 404
+    assert call(editing, "POST", "/api/memories/edit", {"id": "x", "value": "y"}, token=token, phone=phone)[0] == 400
+    assert call(editing, "POST", "/api/memories", {"value": "   "}, token=token, phone=phone)[0] == 400
+    log = " ".join(" ".join(map(str, row)) for row in editing.store.recent_log(30))
+    assert "Asha" not in log and "tea" not in log                         # what was remembered is never logged
+
+
+def test_clear_control_and_status_details(editing, phone):
+    token = _paired(editing, phone)
+    assert call(editing, "POST", "/api/clear", {}, token=token, phone=phone)[0] == 200
+    assert editing.fake.cleared == 1
+    for action in ("pause", "start", "stop_speaking"):
+        status, data, _ = call(editing, "POST", "/api/control", {"action": action}, token=token, phone=phone)
+        assert status == 200 and data["message"] == f"did {action}"
+    status, data, _ = call(editing, "POST", "/api/control", {"action": "shutdown"}, token=token, phone=phone)
+    assert status == 400 and editing.fake.commands == ["pause", "start", "stop_speaking"]   # nothing else
+    assert call(editing, "POST", "/api/control", {"action": "pause"}, token=token)[0] == 401  # unsigned
+    status = call(editing, "GET", "/api/status", token=token, phone=phone)[1]
+    assert status["permissions"] == {"memories": False, "actions": False}
+    assert any(row[2] == "control: pause" for row in editing.store.recent_log(30))
+
+
+def test_the_bridge_adds_edits_and_forgets_through_aurora(backend, qapp):
+    from aurora.interface.mobile_bridge import MobileBridge
+    bridge = MobileBridge(backend)
+    assert bridge.add_memory("The spare key is in the blue box")
+    found = [m for m in bridge.memories() if m["value"] == "The spare key is in the blue box"]
+    assert found and found[0]["id"]
+    assert bridge.edit_memory(found[0]["id"], "The spare key is in the red box")
+    assert any(m["value"] == "The spare key is in the red box" for m in bridge.memories())
+    assert bridge.forget_memory(found[0]["id"])
+    assert not any("spare key" in m["value"] for m in bridge.memories())
+    services = bridge.status()["services"]
+    assert isinstance(services, list) and all(isinstance(s["running"], bool) for s in services)
+
+
+def test_service_states_are_read_whatever_their_case():
+    from aurora.interface.mobile_bridge import MobileBridge
+
+    class Engine:
+        def status(self):
+            return {"services": {"Brain": "Running", "Sensors": "Stopped"}, "model": "tinyllama"}
+
+    class Backend:
+        engine, ai_state, state, last_sample = Engine(), "idle", "running", {}
+
+    services = MobileBridge(Backend()).status()["services"]
+    assert services == [{"name": "Brain", "running": True}, {"name": "Sensors", "running": False}]
+
+
+def test_a_dropped_call_is_greeted_again_briefly():
+    from aurora.mobile.call import greeting_for
+    assert "line dropped" in greeting_for("reconnect", "")

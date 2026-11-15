@@ -18,6 +18,17 @@ object Live {
     fun add(listener: Listener) = listeners.add(listener)
     fun remove(listener: Listener) = listeners.remove(listener)
 
-    fun event(event: JSONObject) = listeners.forEach { it.onEvent(event) }
+    /** The last few events this session (Home's "Recent" and Control's notifications); memory only. */
+    private val recent = java.util.ArrayDeque<JSONObject>()
+
+    fun recent(): List<JSONObject> = synchronized(recent) { recent.toList().reversed() }
+
+    fun event(event: JSONObject) {
+        synchronized(recent) {
+            recent.addLast(event)
+            while (recent.size > 30) recent.removeFirst()
+        }
+        listeners.forEach { it.onEvent(event) }
+    }
     fun routeChanged(base: String?) = listeners.forEach { it.onRoute(base) }
 }

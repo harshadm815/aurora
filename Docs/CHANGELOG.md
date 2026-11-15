@@ -1,5 +1,37 @@
 # Changelog
 
+## 0.53.0 — AURORA Call and a redesigned phone app (2026-11-15)
+
+### Changed
+- **The phone app is redesigned** (app 0.8.0) with five sections in a
+  bottom bar: **Home** (the animated AURORA core, greeting, connection,
+  model, coming up, recent, quick actions, a big Call button), **Chat**
+  (typed conversation: bubbles, code blocks, copy, attach a file, clear),
+  **Call**, **Memory** (search, categories, add, edit, delete) and
+  **Control** (desktop status, CPU and RAM, services, pending reminders,
+  notifications, this phone, commands, phone settings, dark or light
+  theme). Drawn in code in AURORA's navy and cyan, matching the Command
+  Centre.
+- **Hold-to-talk is gone from Chat**: speaking to AURORA is now a call.
+
+### Added
+- **AURORA Call**: a full-screen call with the core showing what AURORA is
+  doing (connecting rings, listening waves that follow your voice, a
+  pulsing net while thinking, a waveform while speaking, muted,
+  reconnecting, disconnected), the duration, a waveform, an optional live
+  transcript, Mute, audio output (earpiece, speaker, Bluetooth or wired
+  headset), End, and a landscape layout. If the link drops, the call
+  reconnects once by itself.
+- **After the call**: what AURORA said, tasks you asked for, open
+  questions, the transcript, and a choice of what to save to AURORA's
+  memory (nothing is saved unless you pick it) or to save the transcript
+  to the PC. Over the lock screen it shows nothing from the call until
+  you unlock.
+- PC side: `POST /api/memories` (add), `/api/memories/edit`,
+  `/api/memories/delete` (all need the phone's "Memories" permission),
+  `POST /api/clear`, `POST /api/control` (pause, start, stop speaking
+  only), services and the phone's permissions in `/api/status`.
+
 ## 0.52.0 — A Phone page of its own (2026-11-15)
 
 ### Changed

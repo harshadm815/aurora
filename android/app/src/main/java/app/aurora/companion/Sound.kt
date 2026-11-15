@@ -3,78 +3,14 @@ package app.aurora.companion
 import android.content.Context
 import android.media.AudioAttributes
 import android.media.AudioFormat
-import android.media.AudioRecord
 import android.media.AudioTrack
-import android.media.MediaRecorder
 import android.speech.tts.TextToSpeech
-import java.io.ByteArrayOutputStream
 import java.util.Locale
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import kotlin.concurrent.thread
 
-/**
- * Recording while you hold the talk button (16 kHz mono, nothing saved), and playing AURORA's voice.
- * The microphone is open only between [Recorder.start] and [Recorder.stop].
- */
-class Recorder {
-    companion object {
-        const val RATE = 16000
-        const val MAX_SECONDS = 30
-    }
-
-    @Volatile private var recording = false
-    private var worker: Thread? = null
-    private val audio = ByteArrayOutputStream()
-
-    val active get() = recording
-
-    /** Starts recording; [onLevel] gets the loudness (0..1) a few times a second. */
-    @android.annotation.SuppressLint("MissingPermission")     // checked by the caller before starting
-    fun start(onLevel: (Float) -> Unit = {}) {
-        if (recording) return
-        audio.reset()
-        val size = maxOf(AudioRecord.getMinBufferSize(RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT), RATE)
-        val record = AudioRecord(MediaRecorder.AudioSource.VOICE_RECOGNITION, RATE,
-            AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, size)
-        if (record.state != AudioRecord.STATE_INITIALIZED) {
-            record.release()
-            throw IllegalStateException("The microphone isn't available.")
-        }
-        recording = true
-        record.startRecording()
-        worker = thread(name = "aurora-record") {
-            val buffer = ByteArray(RATE / 5)               // 0.1 s
-            try {
-                while (recording && audio.size() < RATE * 2 * MAX_SECONDS) {
-                    val read = record.read(buffer, 0, buffer.size)
-                    if (read <= 0) break
-                    audio.write(buffer, 0, read)
-                    var peak = 0
-                    for (i in 0 until read - 1 step 2) {
-                        val sample = (buffer[i].toInt() and 0xff) or (buffer[i + 1].toInt() shl 8)
-                        peak = maxOf(peak, kotlin.math.abs(sample.toShort().toInt()))
-                    }
-                    onLevel(peak / 32768f)
-                }
-            } finally {
-                record.stop()
-                record.release()
-                recording = false
-            }
-        }
-    }
-
-    /** Stops and returns the recording as a WAV file (empty if too short to be speech). */
-    fun stop(): ByteArray {
-        recording = false
-        worker?.join(2000)
-        worker = null
-        val pcm = audio.toByteArray()
-        return if (pcm.size < RATE / 2) ByteArray(0) else Protocol.wav(pcm, RATE)   // under 0.25 s: a slip
-    }
-}
-
+/** Playing AURORA's voice (reminders said aloud), with Android's own voice when the PC can't speak. */
 object Speech {
     @Volatile private var stopped = false
 

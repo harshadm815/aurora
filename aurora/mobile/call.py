@@ -79,6 +79,8 @@ def greeting_for(reason: str, text: str) -> str:
         return f"Hi, it's AURORA with your reminder: {text.strip()}. Anything else?"
     if reason == "pc":
         return "Hi, it's AURORA. You asked me to call. How can I help?"
+    if reason == "reconnect":
+        return "Sorry, the line dropped. I'm back. Go on."
     return GREETING
 
 

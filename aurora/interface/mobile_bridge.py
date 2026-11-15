@@ -51,7 +51,15 @@ class MobileBridge:
         sample = self.backend.last_sample or {}
         memory = sample.get("memory")
         engine = self.backend.engine
+        services = []
+        if engine is not None:
+            try:
+                services = [{"name": name, "running": str(value).lower() == "running"}
+                            for name, value in (engine.status().get("services") or {}).items()]
+            except Exception:
+                services = []
         return {
+            "services": services,
             "ai": self.backend.ai_state,
             "state": self.backend.state,
             "model": engine.status().get("model", settings.DEFAULT_MODEL) if engine else settings.DEFAULT_MODEL,
@@ -99,4 +107,45 @@ class MobileBridge:
         engine = self.backend.engine
         if engine is None:
             return []
-        return [{"value": f.value, "category": f.category} for f in engine.memory.memories()[:300]]
+        return [{"id": f.id, "value": f.value, "category": f.category} for f in engine.memory.memories()[:300]]
+
+    # --- Changes from the phone (the server checks the "Memories" permission first) ---------------
+
+    def _memory(self):
+        engine = self.backend.engine
+        if engine is None:
+            raise RuntimeError("AURORA is still starting.")
+        return engine.memory
+
+    def add_memory(self, value: str) -> bool:
+        """A note you chose to keep (the Memory tab's Add, or picked after a call)."""
+        from aurora.knowledge.fact import EXPLICIT, Fact
+        self._memory().learn(Fact("Note", "User", "Note", value, 3), source=EXPLICIT, source_text=value)
+        return True
+
+    def edit_memory(self, memory_id: int, value: str) -> bool:
+        return self._memory().edit(memory_id, value)
+
+    def forget_memory(self, memory_id: int) -> bool:
+        return self._memory().forget(memory_id)
+
+    def clear_conversation(self) -> None:
+        self.backend.on_gui(lambda _: self.backend.clear_conversation())
+
+    def control(self, action: str) -> str:
+        """The phone's few remote commands. Returns what happened, in words."""
+        backend = self.backend
+        if action == "pause":
+            if backend.state != "running":
+                return "AURORA isn't running."
+            backend.on_gui(lambda _: backend.pause())
+            return "Pausing AURORA (the model is unloaded to free memory)."
+        if action == "start":
+            if backend.state == "running":
+                return "AURORA is already running."
+            backend.on_gui(lambda _: backend.resume())
+            return "Starting AURORA."
+        if action == "stop_speaking":
+            backend.on_gui(lambda _: backend.voice.stop())
+            return "AURORA stopped speaking on the PC."
+        raise ValueError(action)

@@ -66,7 +66,7 @@ class CallActivity : Activity(), Calls.Listener {
             val listening = Calls.state == "listening" && !Calls.muted
             wave.color = if (Calls.state == "speaking") p.accent2 else p.accent
             wave.push(if (listening) Calls.micLevel else if (Calls.state == "speaking") Calls.voiceLevel else 0f)
-            if (Calls.connectedAt > 0 && Calls.connection != null)
+            if (Calls.connectedAt > 0 && Calls.active)
                 timeLabel.text = CallSummary.duration(SystemClock.elapsedRealtime() - Calls.connectedAt)
             ticker.postDelayed(this, 100)
         }
@@ -238,14 +238,15 @@ class CallActivity : Activity(), Calls.Listener {
     override fun onCallChanged() {
         if (summaryShown) return
         val call = Calls.connection
+        val on = Calls.active
         val ringingNow = call != null && call.incoming && Calls.state == "ringing"
         ringingRow.visibility = if (ringingNow) View.VISIBLE else View.GONE
-        callRow.visibility = if (call != null && !ringingNow) View.VISIBLE else View.GONE
-        val coreState = if (call == null) CoreState.DISCONNECTED
+        callRow.visibility = if (on && !ringingNow) View.VISIBLE else View.GONE
+        val coreState = if (!on) CoreState.DISCONNECTED
                         else CoreStates.of(Calls.state, Calls.muted, Calls.linked)
         core.state = coreState
         stateLabel.text = when {
-            call == null -> Calls.ended.ifBlank { "Call ended" }
+            !on -> Calls.ended.ifBlank { "Call ended" }
             ringingNow -> "is calling you…"
             else -> CoreStates.label(coreState)
         }
@@ -254,7 +255,11 @@ class CallActivity : Activity(), Calls.Listener {
             CoreState.MUTED, CoreState.RECONNECTING -> p.warn
             else -> p.accent
         })
-        linkLabel.text = if (call != null && Calls.linked) "· " + Protocol.routeName(Aurora.get(this).route) else ""
+        linkLabel.text = when {
+            on && Calls.local?.offline == true && Calls.linked -> "· on your phone (offline)"
+            on && Calls.linked -> "· " + Protocol.routeName(Aurora.get(this).route)
+            else -> ""
+        }
         if (Calls.connectedAt == 0L) timeLabel.text = if (ringingNow) "Incoming call" else ""
         muteButton.text = if (Calls.muted) "⦸" else "◉"
         muteCaption.text = if (Calls.muted) "Unmute" else "Mute"
@@ -280,7 +285,7 @@ class CallActivity : Activity(), Calls.Listener {
             Calls.reply.isNotBlank() -> Calls.reply
             else -> ""
         }
-        if (call == null && !isFinishing) ticker.postDelayed({ if (Calls.connection == null) afterCall() }, 900)
+        if (!on && !isFinishing) ticker.postDelayed({ if (!Calls.active) afterCall() }, 900)
     }
 
     private fun transcriptLine(turn: Turn): View {

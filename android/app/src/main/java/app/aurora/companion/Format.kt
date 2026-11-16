@@ -18,6 +18,15 @@ object Format {
         return result
     }
 
+    private val PC_ONLY = Regex(
+        """\b(remind|reminder|alarm|timer|schedule|open|launch|close|turn (on|off)|switch (on|off)|lights?|fan|""" +
+            """volume|play|pause|file|folder|document|download|search|browse|look up|website|weather|news|email|""" +
+            """mail|send|remember|forget|my memor\w*|screenshot|camera|sensor|temperature in|room)\b""",
+        RegexOption.IGNORE_CASE)
+
+    /** True when a message asks for something only AURORA on the PC can do (its tools, files, devices, memory). */
+    fun needsPc(message: String): Boolean = PC_ONLY.containsMatchIn(message)
+
     /** "Good morning" / "Good afternoon" / "Good evening" for the hour 0-23. */
     fun greeting(hour: Int): String = when (hour) {
         in 5..11 -> "Good morning"

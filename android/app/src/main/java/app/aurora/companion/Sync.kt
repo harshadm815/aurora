@@ -16,7 +16,8 @@ import java.io.IOException
 object Sync {
     private const val PULL_EVERY_MS = 10 * 60 * 1000L
     private val PATHS = mapOf("chat" to "/api/chat", "memory_add" to "/api/memories",
-        "memory_edit" to "/api/memories/edit", "memory_delete" to "/api/memories/delete")
+        "memory_edit" to "/api/memories/edit", "memory_delete" to "/api/memories/delete",
+        "history_import" to "/api/history/import")
 
     @Volatile private var running = false
     @Volatile private var lastPull = 0L

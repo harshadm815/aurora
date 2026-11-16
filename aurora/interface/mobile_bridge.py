@@ -148,6 +148,20 @@ class MobileBridge:
             return "kept"
         return self._memory().forget(memory_id)
 
+    def import_exchange(self, text: str, reply: str, device: str) -> None:
+        """A conversation the phone had on its own (offline model) joins the shared one, without asking AURORA
+        again: AURORA on the PC then knows what was said, and it appears in Chat ("phone, offline")."""
+        engine = self.backend.engine
+        if engine is None:
+            raise RuntimeError("AURORA is still starting.")
+
+        def add(_):
+            engine.conversation.add_user(text)
+            engine.conversation.add_assistant(reply)
+            self.backend.remote_exchange.emit(f"{device}, offline", text, reply)
+
+        self.backend.on_gui(add)
+
     def clear_conversation(self) -> None:
         self.backend.on_gui(lambda _: self.backend.clear_conversation())
 

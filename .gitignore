@@ -40,3 +40,4 @@ android/**/build/
 # The phone link's own TLS certificate and private key (made on this PC)
 aurora_mobile_tls.pem
 aurora_mobile_tls.key
+android/app/.cxx/

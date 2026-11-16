@@ -54,6 +54,25 @@ class RedesignTest {
         assertEquals("16 Nov 09:30", Format.due("2026-11-16T09:30", "2026-11-15"))
     }
 
+    // --- AURORA on the phone (offline plan C)
+
+    @Test
+    fun only_pc_requests_wait_for_the_pc() {
+        assertTrue(Format.needsPc("Remind me to call Mum at 6"))
+        assertTrue(Format.needsPc("turn on the light"))
+        assertTrue(Format.needsPc("what's the weather in Pune?"))
+        assertTrue(Format.needsPc("what are my memories about work"))
+        assertFalse(Format.needsPc("Explain photosynthesis simply"))
+        assertFalse(Format.needsPc("Help me write a birthday message for my sister"))
+    }
+
+    @Test
+    fun thinking_is_never_shown() {
+        assertEquals("Hello!", Thinking.strip("<think>\n\n</think>\n\nHello!"))
+        assertEquals("", Thinking.strip("<think>still working on it"))
+        assertEquals("Plain answer.", Thinking.strip("Plain answer."))
+    }
+
     // --- Offline reminders
 
     @Test

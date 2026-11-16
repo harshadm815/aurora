@@ -59,6 +59,71 @@ object Calls {
     /** What was said, in order (kept only in memory, for the after-call screen). */
     val transcript = CallTranscript()
 
+    /**
+     * A call you start from the phone. It doesn't go through Android's call service: OPPO's ColorOS refuses
+     * calls that apps start there ("Call not sent"). It connects to AURORA on the PC, or, when the PC can't
+     * be reached, to AURORA on the phone itself (LocalCall). The sound uses Android's "in a call" audio mode
+     * (echo cancelling, earpiece or speaker). Calls AURORA makes to you still ring through the call service.
+     */
+    @Volatile var local: CallAudio? = null
+        private set
+
+    /** True while any call with AURORA is on (through Android's call service or on the phone itself). */
+    val active: Boolean get() = connection != null || local != null
+
+    fun startDirect(context: Context): String? {
+        if (active) return "You're already on a call with AURORA."
+        val app = context.applicationContext
+        state = "connecting"; heard = ""; reply = ""; ended = ""
+        muted = false; micLevel = 0f; voiceLevel = 0f; connectedAt = 0L; linked = false
+        route = CallAudioState.ROUTE_EARPIECE
+        routes = CallAudioState.ROUTE_EARPIECE or CallAudioState.ROUTE_SPEAKER
+        transcript.clear()
+        val audio = app.getSystemService(android.media.AudioManager::class.java)
+        audio.mode = android.media.AudioManager.MODE_IN_COMMUNICATION
+        @Suppress("DEPRECATION")
+        audio.isSpeakerphoneOn = false
+        @Suppress("DEPRECATION")
+        speaker = { on -> audio.isSpeakerphoneOn = on }
+        local = CallAudio(app, "", "", events { reason ->
+            main.post {
+                audio.mode = android.media.AudioManager.MODE_NORMAL
+                @Suppress("DEPRECATION")
+                audio.isSpeakerphoneOn = false
+                local = null
+                Calls.state = "ended"
+                changed()
+            }
+        }).also { it.start() }
+        changed()
+        app.startActivity(screen(app, false))
+        return null
+    }
+
+    /** What a call's sound reports, shown on the call screen; [ended] runs when the call is over. */
+    private fun events(ended: (String) -> Unit) = object : CallAudio.Listener {
+        override fun onConnected() {
+            linked = true
+            if (connectedAt == 0L) connectedAt = android.os.SystemClock.elapsedRealtime()
+            local?.muted = muted
+            state = "listening"; changed()
+        }
+        override fun onState(state: String) { Calls.state = state; changed() }
+        override fun onPartial(text: String) { heard = "$text…"; changed() }
+        override fun onHeard(text: String) { heard = text; transcript.you(text); changed() }
+        override fun onReply(text: String) { reply = text; transcript.aurora(text); changed() }
+        override fun onLevel(mic: Float, voice: Float) { micLevel = mic; voiceLevel = voice }
+        override fun onReconnecting() { linked = false; state = "reconnecting"; changed() }
+        override fun onEnded(reason: String) {
+            Calls.ended = when (reason) {
+                "goodbye", "ended", "hangup" -> "Call ended"
+                "silence" -> "Call ended (nothing was said)"
+                else -> reason
+            }
+            ended(reason)
+        }
+    }
+
     fun changed() = main.post { listener?.onCallChanged() }
 
     private fun handle(context: Context) =
@@ -124,7 +189,7 @@ object Calls {
     }
 
     fun answer(context: Context) = connection?.onAnswer()
-    fun hangUp() = connection?.onDisconnect()
+    fun hangUp() { connection?.onDisconnect() ?: local?.hangUp() }
 
     fun setSpeaker(on: Boolean) {
         connection?.setAudioRoute(if (on) CallAudioState.ROUTE_SPEAKER else CallAudioState.ROUTE_EARPIECE)
@@ -132,12 +197,22 @@ object Calls {
 
     /** Earpiece, speaker, Bluetooth headset or wired headset ([CallAudioState] route). */
     fun useRoute(value: Int) {
+        if (local != null) {                             // the phone's own call: speaker or earpiece
+            route = if (value == CallAudioState.ROUTE_SPEAKER) value else CallAudioState.ROUTE_EARPIECE
+            speaker?.invoke(route == CallAudioState.ROUTE_SPEAKER)
+            changed()
+            return
+        }
         connection?.setAudioRoute(value)
     }
+
+    /** Set by startOffline's audio: turns the loudspeaker on or off for the phone's own call. */
+    private var speaker: ((Boolean) -> Unit)? = null
 
     fun mute(on: Boolean) {
         muted = on
         connection?.audio?.muted = on
+        local?.muted = on
         changed()
     }
 

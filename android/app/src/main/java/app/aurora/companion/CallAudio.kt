@@ -43,6 +43,8 @@ class CallAudio(private val context: Context, private val reason: String, privat
     }
 
     @Volatile var muted = false
+    /** True once the call is with AURORA on the phone (the PC couldn't be reached). */
+    @Volatile var offline = false
     @Volatile private var running = false
     private var socket: Socket? = null
     private val sendLock = Any()
@@ -105,7 +107,12 @@ class CallAudio(private val context: Context, private val reason: String, privat
                 }
             }
         } catch (error: NotConnected) {
-            ended = if (attempt > 0) "The connection to your PC was lost." else "Can't reach your PC."
+            ended = when {
+                attempt > 0 -> "The connection to your PC was lost."
+                // The PC can't be reached at all: talk with AURORA on the phone itself (offline plan C).
+                LocalCall.possible(context) -> { offline = true; LocalCall(context, listener, { running }, { muted }).run() }
+                else -> "Can't reach your PC."
+            }
         } catch (error: IOException) {
             ended = if (running) (error.message ?: "The call was cut off.") else "ended"
         } catch (error: InterruptedException) {

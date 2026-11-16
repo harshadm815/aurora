@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.55.0 — AURORA on the phone itself (2026-11-16)
+
+### Added
+- **Offline chat on the phone** (app 0.10.0): when the PC can't be
+  reached, the phone's own model answers (Qwen3 0.6B, Apache 2.0, run by
+  llama.cpp b12414 built into the app). Answers appear as they're written
+  and are marked "offline, on your phone". Measured on the Snapdragon 665:
+  model loads in 2.5 s, first words after about 4 s, then about 12-13
+  pieces a second. Requests only the PC can do (reminders, devices, files,
+  the web, memories) still wait for the PC.
+- **Offline calls**: Vosk hears you on the phone (the same small English
+  model as the PC, copied over the cable), the phone's model answers,
+  Android's voice speaks; talking over AURORA stops it, "goodbye" ends it.
+- **The PC learns what was said offline**: `POST /api/history/import`
+  adds the phone's offline exchanges to the shared conversation (once
+  each) without asking AURORA again; they show in Chat as "phone, offline".
+
+### Changed
+- **Calls you start from the phone no longer go through Android's call
+  service**: OPPO's ColorOS began refusing them ("Call not sent", no reason
+  given). The app opens the call screen itself and connects to the PC, or
+  to the offline AURORA when the PC can't be reached; earpiece or speaker.
+  AURORA calling you still rings through the call service (works over the
+  lock screen).
+
 ## 0.54.0 — The phone starts AURORA; the phone on its own (2026-11-15)
 
 ### Added

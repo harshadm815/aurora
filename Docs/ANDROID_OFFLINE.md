@@ -45,10 +45,44 @@ Without a model on the phone (no downloads):
   retry never adds anything twice; when both sides changed the same memory,
   the newer change wins.
 
-## C. AURORA's mind on the phone (needs your go-ahead for downloads)
+## C. AURORA's mind on the phone — built in 0.55.0 (app 0.10.0)
 
 A small language model on the phone (llama.cpp, 0.5-1.5 B parameters,
 0.4-1 GB) for offline chat and calls, Vosk on the phone for hearing, Android's
 voice for speaking. Needs Android's native build tools (NDK, about 1 GB) on
 the PC. Offline answers are clearly marked and much simpler than the PC's.
 I'll ask before downloading anything.
+
+**Built (2026-11-16)**, with your approval of the downloads:
+
+| What | Where | Checked |
+|---|---|---|
+| Android NDK r27d LTS (27.3.13750724) | D:\Android\sdk\ndk | Google's published SHA-1 |
+| CMake 3.22.1 | D:\Android\sdk\cmake | sdkmanager |
+| llama.cpp release b12414 (commit 278a89cb), MIT | D:\Android\src (not in this repo; `llama.dir` in android/local.properties) | git |
+| Qwen3 0.6B Q4_K_M (bartowski's GGUF of Qwen/Qwen3-0.6B, Apache 2.0), 484 MB | D:\Android\models, copied to the phone | published SHA-256, on the PC and on the phone |
+| Vosk Android 0.3.75 and JNA 5.18.1 (Apache 2.0) | Gradle | Maven Central |
+| Vosk's small English model | copied from Models\ on the PC (no download) | — |
+
+llama.cpp is built without tools, servers or network code and without
+anything fetched during the build (KleidiAI off), always optimised even in
+test builds (an unoptimised runner is several times slower). The app grew
+from 0.9 MB to 18 MB; the models live in the app's own folder on the phone
+(about 550 MB).
+
+Measured on your phone (Snapdragon 665, 4 threads): model load 2.5 s, first
+words about 4.3 s (mostly reading its instructions), then 12.6 pieces a
+second; a two-sentence answer in about 6 s. Possible later: keep the
+instructions ready between messages (first words in about 1 s).
+
+Offline chat: requests only the PC can do (reminders, devices, files, the
+web, memories; `Format.needsPc`) wait for the PC as before; the rest is
+answered on the phone and the exchange is added to the PC's conversation
+when it's back (`/api/history/import`, applied once). Offline calls: Vosk
+hears, the phone's model answers, Android's voice speaks; what's heard while
+AURORA itself speaks is ignored unless you talked over it (echo).
+
+OPPO's ColorOS began refusing calls started by apps ("Call not sent", no
+reason logged), so calls you start now open AURORA's own call screen and
+audio (Android's in-call audio mode) instead of Android's call service;
+AURORA calling you still rings through the call service.

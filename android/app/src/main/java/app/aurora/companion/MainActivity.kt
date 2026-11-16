@@ -42,6 +42,8 @@ class MainActivity : Activity(), Live.Listener {
         private const val PICK_FILE = 7
         private const val MIC_FOR_CALL = 4
         private const val QUEUED = "⏳ Kept on this phone. AURORA gets it as soon as your PC is back, and the reply comes as a notification."
+        private const val NEEDS_PC = "⏳ That needs your PC, so it's kept on this phone and goes to AURORA as soon as your PC is back."
+        private const val OFFLINE_TAG = "\n\n· offline, on your phone"
     }
 
     private lateinit var aurora: Aurora
@@ -56,6 +58,7 @@ class MainActivity : Activity(), Live.Listener {
     private var tab = "home"
 
     // Chat
+    private val talk = mutableListOf<Pair<String, String>>()       // the conversation, for the phone's own model
     private var chatList: LinearLayout? = null
     private var chatScroll: ScrollView? = null
     private var chatLoaded = false
@@ -256,9 +259,10 @@ class MainActivity : Activity(), Live.Listener {
             requestPermissions(arrayOf(android.Manifest.permission.RECORD_AUDIO), MIC_FOR_CALL)
             return
         }
-        // Is AURORA open on the PC? If it's closed, the phone helper can start it first.
-        startAurora(then = {
-            Calls.dial(this)?.let { problem -> AlertDialog.Builder(this).setMessage(problem).setPositiveButton("OK", null).show() }
+        // Is AURORA open on the PC? If it's closed, the phone helper can start it first. If the PC can't be
+        // reached at all, AURORA answers on the phone itself (offline), without Android's call service.
+        startAurora(forCall = true, then = {
+            Calls.startDirect(this)?.let { problem -> AlertDialog.Builder(this).setMessage(problem).setPositiveButton("OK", null).show() }
         })
     }
 
@@ -268,7 +272,7 @@ class MainActivity : Activity(), Live.Listener {
      * Makes sure AURORA is running on the PC, starting it through the phone helper if it's closed (the
      * PC's Phone page: "Let my phone start AURORA"), then runs [then] on the screen's thread.
      */
-    private fun startAurora(then: () -> Unit) {
+    private fun startAurora(forCall: Boolean = false, then: () -> Unit) {
         if (starting) return
         starting = true
         val status = kit.text("Checking your PC…", Ui.BODY, p.text)
@@ -308,7 +312,16 @@ class MainActivity : Activity(), Live.Listener {
                 }
                 finish(if (starting) "AURORA didn't start in time. Look at the PC, or try again." else null)
             } catch (error: IOException) {
-                finish("Can't reach your PC. If AURORA is closed there, switch on \"Let my phone start AURORA\" on " +
+                // No PC at all: the call can still happen with AURORA on the phone (offline plan C).
+                if (forCall && LocalCall.possible(this)) ui {
+                    starting = false
+                    content.removeCallbacks(shown)
+                    if (dialog.isShowing) dialog.dismiss()
+                    Calls.startDirect(this)?.let { problem ->
+                        AlertDialog.Builder(this).setMessage(problem).setPositiveButton("OK", null).show()
+                    }
+                }
+                else finish("Can't reach your PC. If AURORA is closed there, switch on \"Let my phone start AURORA\" on " +
                     "the PC's Phone page (the PC must be on, not asleep).")
             }
         }
@@ -550,11 +563,13 @@ class MainActivity : Activity(), Live.Listener {
             chatLoaded = false
         }) { data ->
             chatList?.removeAllViews()
+            talk.clear()
             val messages = data.optJSONArray("messages")
             if (messages == null || messages.length() == 0) bubble("note", "Say hello to AURORA.")
             for (i in 0 until (messages?.length() ?: 0)) {
                 val m = messages!!.getJSONObject(i)
                 bubble(m.optString("role"), m.optString("text"))
+                talk += m.optString("role") to m.optString("text")
             }
         }
     }
@@ -566,34 +581,72 @@ class MainActivity : Activity(), Live.Listener {
         send.alpha = 0.5f
         val op = Offline.newId()
         background {
-            val (reply, problem) = try {
+            var reply: JSONObject? = null
+            var problem: String? = null
+            var away = false
+            try {
                 val r = aurora.post("/api/chat", JSONObject().put("text", message).put("op", op), timeoutMs = 300_000)
                 when {
-                    r.ok -> r.json to null
-                    r.status == 503 -> {                          // AURORA is closed on the PC: keep it for later
-                        Offline.enqueue(this, "chat", JSONObject().put("text", message), op)
-                        null to QUEUED
-                    }
-                    else -> null to r.error
+                    r.ok -> reply = r.json
+                    r.status == 503 -> away = true                // AURORA is closed on the PC
+                    else -> problem = r.error
                 }
             } catch (error: IOException) {
-                Offline.enqueue(this, "chat", JSONObject().put("text", message), op)
-                null to QUEUED
+                away = true
+            }
+            if (away) {
+                // The PC can't answer: the phone's own model does, unless it's something only the PC can do.
+                if (LocalBrain.available(this) && !Format.needsPc(message)) {
+                    problem = answerOffline(message, answer)
+                } else {
+                    Offline.enqueue(this, "chat", JSONObject().put("text", message), op)
+                    problem = if (LocalBrain.available(this)) NEEDS_PC else QUEUED
+                }
             }
             ui {
                 send.isEnabled = true
                 send.alpha = 1f
                 showRoute(aurora.route)
                 if (reply != null) {
-                    val sources = reply.optString("sources", "")
-                    fill(answer, reply.optString("reply") + if (sources.isNotBlank()) "\n\n$sources" else "", p.text)
+                    val text = reply!!.optString("reply")
+                    val sources = reply!!.optString("sources", "")
+                    fill(answer, text + if (sources.isNotBlank()) "\n\n$sources" else "", p.text)
+                    talk += "user" to message
+                    talk += "assistant" to text
                     chatScroll?.post { chatScroll?.fullScroll(View.FOCUS_DOWN) }
-                } else {
-                    fill(answer, problem ?: "Something went wrong.", if (problem == QUEUED) p.muted else p.warn)
+                } else if (problem != null) {
+                    fill(answer, problem!!, if (problem == QUEUED || problem == NEEDS_PC) p.muted else p.warn)
                     if (!aurora.paired) show()
                 }
             }
         }
+    }
+
+    /**
+     * Answers on the phone itself while the PC is away (LocalBrain): the reply appears as it's written,
+     * and the exchange goes to the PC's conversation later (so AURORA there knows what was said).
+     * Returns a problem to show, or null when the bubble already shows the answer. Runs off the screen's thread.
+     */
+    private fun answerOffline(message: String, answer: LinearLayout): String? {
+        ui { fill(answer, "AURORA is thinking (offline, on your phone)…", p.muted) }
+        var shownAt = 0L
+        val text = try {
+            LocalBrain.reply(this, talk + ("user" to message)) { soFar ->
+                val now = System.currentTimeMillis()
+                if (soFar.isNotBlank() && now - shownAt > 150) {
+                    shownAt = now
+                    ui { fill(answer, soFar + OFFLINE_TAG, p.text); chatScroll?.post { chatScroll?.fullScroll(View.FOCUS_DOWN) } }
+                }
+            }
+        } catch (error: Exception) {
+            return "The phone's offline AURORA couldn't answer: ${error.message}"
+        }
+        if (text.isBlank()) return "The phone's offline AURORA had no answer. Try asking differently."
+        talk += "user" to message
+        talk += "assistant" to text
+        Offline.enqueue(this, "history_import", JSONObject().put("text", message).put("reply", text))
+        ui { fill(answer, text + OFFLINE_TAG, p.text) }
+        return null
     }
 
     private fun confirmClear() {

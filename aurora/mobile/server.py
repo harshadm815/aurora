@@ -40,6 +40,7 @@ API (JSON):
     POST /api/memories   {"value"}         → adds a note to AURORA's memory (if allowed)
     POST /api/memories/edit {"id", "value"} / POST /api/memories/delete {"id"}   (if allowed)
     POST /api/clear                        → clears the shared conversation (memories stay)
+    POST /api/history/import {"text", "reply"} → an exchange the phone had offline joins the conversation
     POST /api/control    {"action"}        → "pause", "start" or "stop_speaking" only
     (While AURORA is closed, the phone helper answers only status, connection and "start": launcher.py.)
     POST /api/unpair                       → this phone disconnects itself
@@ -267,7 +268,8 @@ class Handler(BaseHTTPRequestHandler):
             elif (method, path) == ("GET", "/api/history"):
                 result = {"messages": bridge.history(40)}
             elif (method, path) in (("POST", "/api/chat"), ("POST", "/api/memories"), ("POST", "/api/memories/edit"),
-                                    ("POST", "/api/memories/delete")) and self._already_applied(raw):
+                                    ("POST", "/api/memories/delete"), ("POST", "/api/history/import")) \
+                    and self._already_applied(raw):
                 result = {"ok": True, "duplicate": True, "reply": ""}
             elif (method, path) == ("POST", "/api/chat"):
                 text = " ".join(str(self._parse(raw).get("text", "")).split())[:4000]
@@ -314,6 +316,18 @@ class Handler(BaseHTTPRequestHandler):
                     raise ApiError(HTTPStatus.NOT_FOUND, "That memory isn't there any more.")
                 self._mark_applied(raw)
                 result = {"ok": True, "kept_pc": done == "kept"}
+            elif (method, path) == ("POST", "/api/history/import"):
+                data = self._parse(raw)
+                text = " ".join(str(data.get("text", "")).split())[:4000]
+                reply = str(data.get("reply", "")).strip()[:8000]
+                if not text or not reply:
+                    raise ApiError(HTTPStatus.BAD_REQUEST, "Bad request.")
+                try:
+                    bridge.import_exchange(text, reply, device.name)
+                except RuntimeError as error:
+                    raise ApiError(HTTPStatus.SERVICE_UNAVAILABLE, str(error))
+                self._mark_applied(raw)
+                result = {"ok": True}
             elif (method, path) == ("POST", "/api/clear"):
                 bridge.clear_conversation()
                 result = {"ok": True}

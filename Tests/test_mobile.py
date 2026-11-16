@@ -1533,3 +1533,47 @@ def test_reminders_carry_their_id_to_the_phone(backend, qapp):
     assert events == [("reminder", {"text": "call home", "reminder": 7})]
     for reminder in MobileBridge(backend).reminders():
         assert "id" in reminder
+
+
+# --- Offline plan C: conversations the phone had on its own --------------------------------
+
+class ImportingBridge(EditingBridge):
+    def __init__(self):
+        super().__init__()
+        self.imported = []
+
+    def import_exchange(self, text, reply, device):
+        self.imported.append((text, reply, device))
+
+
+def test_offline_exchanges_join_the_conversation_once(tmp_path, phone):
+    bridge = ImportingBridge()
+    server = MobileServer(bridge, DeviceStore(tmp_path / "m.db"), port=0)
+    server.start()
+    _ALLOWED_PORTS.add(server.port)
+    try:
+        token = _paired(server, phone)
+        body = {"text": "what is a black hole?", "reply": "A place where gravity is so strong...", "op": "op-cccc3333"}
+        assert call(server, "POST", "/api/history/import", body, token=token, phone=phone)[0] == 200
+        assert call(server, "POST", "/api/history/import", body, token=token, phone=phone)[1]["duplicate"]
+        assert bridge.imported == [("what is a black hole?", "A place where gravity is so strong...", "Pixel")]
+        assert bridge.said == []                                       # AURORA wasn't asked again
+        assert call(server, "POST", "/api/history/import", {"text": "x"}, token=token, phone=phone)[0] == 400
+        log = " ".join(" ".join(map(str, row)) for row in server.store.recent_log(20))
+        assert "black hole" not in log
+    finally:
+        server.stop()
+
+
+def test_imported_exchanges_reach_aurora_and_chat(backend, qapp):
+    from aurora.interface.mobile_bridge import MobileBridge
+    shown = []
+    backend.remote_exchange.connect(lambda device, text, reply: shown.append((device, text, reply)))
+    MobileBridge(backend).import_exchange("hi from the train", "Hello! I'm offline on your phone.", "Pixel")
+    deadline = time.time() + 5
+    while not shown and time.time() < deadline:
+        qapp.processEvents()
+        time.sleep(0.02)
+    assert shown == [("Pixel, offline", "hi from the train", "Hello! I'm offline on your phone.")]
+    contents = [m["content"] for m in backend.engine.conversation.messages]
+    assert "hi from the train" in contents and "Hello! I'm offline on your phone." in contents

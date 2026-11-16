@@ -56,6 +56,8 @@ object Sync {
                         }
                     }
                     reply.status == 503 || reply.status == 401 -> return sent   // AURORA closed or not ready
+                    // An older AURORA on the PC that doesn't know this kind of change yet: keep it for later.
+                    reply.status == 404 && kind == "history_import" -> return sent
                     else -> {                                         // refused for good: don't retry forever
                         Offline.remove(context, item.optString("op"))
                         problem = reply.error

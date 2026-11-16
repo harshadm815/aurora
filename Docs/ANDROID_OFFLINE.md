@@ -72,8 +72,16 @@ from 0.9 MB to 18 MB; the models live in the app's own folder on the phone
 
 Measured on your phone (Snapdragon 665, 4 threads): model load 2.5 s, first
 words about 4.3 s (mostly reading its instructions), then 12.6 pieces a
-second; a two-sentence answer in about 6 s. Possible later: keep the
-instructions ready between messages (first words in about 1 s).
+second; a two-sentence answer in about 6 s.
+
+**Faster since 0.55.1**: the model keeps what it has read (llama.cpp's
+memory, trimmed with `llama_memory_seq_rm` to what the new prompt has in
+common) and reads only the new part; its answers go back into the prompt
+exactly as written (with Qwen3's empty thinking block), and "/no_think"
+stays on every message, so earlier parts stay identical. It also reads its
+instructions ahead of time (`LocalBrain.warm`, about 4.8 s, in the
+background). Measured over four questions: first words 0.7-1.0 s, a short
+answer in 1.7-2.7 s.
 
 Offline chat: requests only the PC can do (reminders, devices, files, the
 web, memories; `Format.needsPc`) wait for the PC as before; the rest is

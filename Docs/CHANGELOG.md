@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.55.1 — The offline AURORA answers four times sooner (2026-11-16)
+
+### Changed
+- The phone's model keeps what it has already read (its instructions and
+  the conversation so far) and reads only your new message; its own
+  answers go back into the next prompt exactly as it wrote them, so
+  nothing has to be read twice. While the PC is away it also gets ready in
+  advance (when Chat finds the PC unreachable, and while an offline call
+  greets you). Measured on the phone: first words after 0.7-1.0 s instead
+  of 4.3 s; a short answer in 1.7-2.7 s; writing speed unchanged (11-13
+  pieces a second).
+
 ## 0.55.0 — AURORA on the phone itself (2026-11-16)
 
 ### Added

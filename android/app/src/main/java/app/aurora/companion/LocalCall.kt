@@ -75,6 +75,7 @@ class LocalCall(private val context: Context, private val listener: CallAudio.Li
             listener.onConnected()
             record.startRecording()
             say(GREETING)
+            kotlin.concurrent.thread(name = "aurora-warm") { LocalBrain.warm(context) }   // while AURORA greets you
             val buffer = ByteArray(RATE / 10 * 2)                    // 0.1 s
             var lastSpeech = System.currentTimeMillis()
             while (running()) {

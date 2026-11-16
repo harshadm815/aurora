@@ -561,6 +561,7 @@ class MainActivity : Activity(), Live.Listener {
             bubble("note", "$message\n\nYou can still write: messages wait on this phone and go to AURORA when your PC is back.")
             for (waiting in Offline.queuedMessages(this)) bubble("user", "⏳ $waiting")
             chatLoaded = false
+            if (LocalBrain.available(this)) kotlin.concurrent.thread(name = "aurora-warm") { LocalBrain.warm(this) }
         }) { data ->
             chatList?.removeAllViews()
             talk.clear()

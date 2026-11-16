@@ -31,12 +31,22 @@ object LocalBrain {
     private var handle = 0L
     private val lock = Any()
     private val main = Handler(Looper.getMainLooper())
+
+    /**
+     * AURORA's recent answers exactly as the model wrote them (with Qwen3's empty "thinking" block), keyed by
+     * the cleaned text the app shows. Putting the exact text back into the next prompt keeps it identical to
+     * what the model already holds in memory, so only your new message has to be read.
+     */
+    private val written = object : LinkedHashMap<String, String>() {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, String>?) = size > 16
+    }
     private val release = Runnable { synchronized(lock) { if (handle != 0L) { nativeFree(handle); handle = 0L } } }
 
     @JvmStatic private external fun nativeLoad(path: String, threads: Int, context: Int): Long
     @JvmStatic private external fun nativeFormat(handle: Long, roles: Array<String>, contents: Array<String>): ByteArray
     @JvmStatic private external fun nativeGenerate(handle: Long, prompt: String, maxTokens: Int, listener: PieceListener): ByteArray
     @JvmStatic private external fun nativeStop(handle: Long)
+    @JvmStatic private external fun nativePrime(handle: Long, prompt: String): Boolean
     @JvmStatic private external fun nativeFree(handle: Long)
 
     fun modelFile(context: Context): File = File(context.getExternalFilesDir("models"), MODEL_FILE)
@@ -58,12 +68,7 @@ object LocalBrain {
         }
         if (handle == 0L) throw IllegalStateException("The offline model couldn't be loaded.")
         try {
-            val turns = listOf("system" to SYSTEM) + history.takeLast(8).mapIndexed { i, (role, text) ->
-                // Qwen3: "/no_think" asks for a direct answer (no long reasoning first): much faster here.
-                role to if (i == history.takeLast(8).size - 1 && role == "user") "$text /no_think" else text
-            }
-            val prompt = String(nativeFormat(handle, turns.map { it.first }.toTypedArray(),
-                turns.map { it.second }.toTypedArray()), Charsets.UTF_8)
+            val prompt = format(history.takeLast(8))
             val bytes = java.io.ByteArrayOutputStream()
             var pieces = 0
             var first = 0L
@@ -77,8 +82,38 @@ object LocalBrain {
             // Timing only (never what was said): how long the first word took, and pieces per second after it.
             android.util.Log.i("AuroraBrain", "reply first_ms=$first pieces=$pieces total_ms=$total " +
                 "rate=${if (total > first && pieces > 1) "%.1f".format((pieces - 1) * 1000.0 / (total - first)) else "-"}/s")
-            Thinking.strip(String(raw, Charsets.UTF_8))
+            val exact = String(raw, Charsets.UTF_8)
+            Thinking.strip(exact).also { shown -> if (shown.isNotEmpty()) written[shown] = exact }
         } finally {
+            main.postDelayed(release, IDLE_MS)
+        }
+    }
+
+    /**
+     * The conversation in the model's own chat format. Qwen3: "/no_think" on every message of yours asks
+     * for a direct answer (no long reasoning first), and keeping it on all of them keeps earlier parts of
+     * the prompt identical from one message to the next, so the model reuses what it has already read.
+     */
+    private fun format(history: List<Pair<String, String>>): String {
+        val turns = listOf("system" to SYSTEM) + history.map { (role, text) ->
+            role to if (role == "user") "$text /no_think" else (written[text] ?: text)
+        }
+        return String(nativeFormat(handle, turns.map { it.first }.toTypedArray(),
+            turns.map { it.second }.toTypedArray()), Charsets.UTF_8)
+    }
+
+    /**
+     * Gets ready while you're still typing or AURORA is greeting you: loads the model and reads its
+     * instructions, so the first answer starts in about a second. Blocking; call it off the screen's thread.
+     */
+    fun warm(context: Context) {
+        if (!available(context)) return
+        synchronized(lock) {
+            main.removeCallbacks(release)
+            val started = System.currentTimeMillis()
+            if (handle == 0L) handle = nativeLoad(modelFile(context).path, THREADS, CONTEXT)
+            if (handle != 0L) nativePrime(handle, format(emptyList()))
+            android.util.Log.i("AuroraBrain", "warm ms=${System.currentTimeMillis() - started}")
             main.postDelayed(release, IDLE_MS)
         }
     }

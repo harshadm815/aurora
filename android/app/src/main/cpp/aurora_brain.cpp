@@ -21,7 +21,46 @@ struct Session {
     llama_sampler * sampler = nullptr;
     const llama_vocab * vocab = nullptr;
     std::atomic<bool> stop{false};
+    std::vector<llama_token> cached;     // what the model has already read (its memory), in order
 };
+
+std::vector<llama_token> tokenize(Session * s, const std::string & text) {
+    std::vector<llama_token> tokens(text.size() + 16);
+    int32_t n = llama_tokenize(s->vocab, text.c_str(), (int32_t) text.size(), tokens.data(), (int32_t) tokens.size(),
+                               false, true);
+    if (n < 0) {
+        tokens.resize(-n);
+        n = llama_tokenize(s->vocab, text.c_str(), (int32_t) text.size(), tokens.data(), (int32_t) tokens.size(),
+                           false, true);
+    }
+    tokens.resize(n > 0 ? n : 0);
+    return tokens;
+}
+
+// Makes the model's memory hold exactly [tokens], reading only what differs from what it already holds
+// (the instructions and earlier messages are usually the same: the main saving). False if stopped or failed.
+bool prefill(Session * s, const std::vector<llama_token> & tokens) {
+    size_t common = 0;
+    while (common < s->cached.size() && common < tokens.size() && s->cached[common] == tokens[common]) common++;
+    if (common == tokens.size() && common > 0) common--;          // the last one is read again, for its logits
+    llama_memory_t mem = llama_get_memory(s->ctx);
+    if (common == 0 || !llama_memory_seq_rm(mem, 0, (llama_pos) common, -1)) {
+        llama_memory_clear(mem, true);
+        common = 0;
+    }
+    s->cached.assign(tokens.begin(), tokens.begin() + common);
+    for (size_t at = common; at < tokens.size(); at += 256) {       // the rest, in pieces of the batch size
+        const int32_t count = (int32_t) std::min<size_t>(256, tokens.size() - at);
+        if (llama_decode(s->ctx, llama_batch_get_one(const_cast<llama_token *>(tokens.data()) + at, count)) != 0) {
+            llama_memory_clear(mem, true);
+            s->cached.clear();
+            return false;
+        }
+        s->cached.insert(s->cached.end(), tokens.begin() + at, tokens.begin() + at + count);
+        if (s->stop) return false;
+    }
+    return true;
+}
 
 jbyteArray bytes(JNIEnv * env, const std::string & text) {
     jbyteArray out = env->NewByteArray((jsize) text.size());
@@ -94,25 +133,13 @@ Java_app_aurora_companion_LocalBrain_nativeGenerate(JNIEnv * env, jobject, jlong
                                                     jint max_tokens, jobject listener) {
     auto * s = reinterpret_cast<Session *>(handle);
     s->stop = false;
-    llama_memory_clear(llama_get_memory(s->ctx), true);  // each reply starts afresh (the prompt has the history)
     llama_sampler_reset(s->sampler);
 
-    const std::string text = str(env, prompt);
-    std::vector<llama_token> tokens(text.size() + 16);
-    int32_t n = llama_tokenize(s->vocab, text.c_str(), (int32_t) text.size(), tokens.data(), (int32_t) tokens.size(),
-                               false, true);
-    if (n < 0) { tokens.resize(-n); n = llama_tokenize(s->vocab, text.c_str(), (int32_t) text.size(), tokens.data(),
-                                                       (int32_t) tokens.size(), false, true); }
-    if (n <= 0) return bytes(env, "");
-    tokens.resize(n);
+    std::vector<llama_token> tokens = tokenize(s, str(env, prompt));
+    if (tokens.empty()) return bytes(env, "");
     const int32_t room = (int32_t) llama_n_ctx(s->ctx) - max_tokens - 8;
-    if (n > room) tokens.erase(tokens.begin(), tokens.begin() + (n - room));   // keep the end (the question)
-
-    for (size_t at = 0; at < tokens.size(); at += 256) {     // the prompt, in pieces of the batch size
-        const int32_t count = (int32_t) std::min<size_t>(256, tokens.size() - at);
-        if (llama_decode(s->ctx, llama_batch_get_one(tokens.data() + at, count)) != 0) return bytes(env, "");
-        if (s->stop) return bytes(env, "");
-    }
+    if ((int32_t) tokens.size() > room) tokens.erase(tokens.begin(), tokens.begin() + ((int32_t) tokens.size() - room));
+    if (!prefill(s, tokens)) return bytes(env, "");
 
     jclass type = env->GetObjectClass(listener);
     jmethodID on_piece = env->GetMethodID(type, "onPiece", "([B)V");
@@ -129,8 +156,18 @@ Java_app_aurora_companion_LocalBrain_nativeGenerate(JNIEnv * env, jobject, jlong
             env->DeleteLocalRef(chunk);
         }
         if (llama_decode(s->ctx, llama_batch_get_one(&token, 1)) != 0) break;
+        s->cached.push_back(token);
     }
     return bytes(env, reply);
+}
+
+// Reads [prompt] ahead of time (the instructions), so the first real question starts quickly.
+extern "C" JNIEXPORT jboolean JNICALL
+Java_app_aurora_companion_LocalBrain_nativePrime(JNIEnv * env, jobject, jlong handle, jstring prompt) {
+    auto * s = reinterpret_cast<Session *>(handle);
+    s->stop = false;
+    std::vector<llama_token> tokens = tokenize(s, str(env, prompt));
+    return (jboolean) (!tokens.empty() && prefill(s, tokens));
 }
 
 extern "C" JNIEXPORT void JNICALL

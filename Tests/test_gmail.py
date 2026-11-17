@@ -390,3 +390,15 @@ def test_other_messages_dont(text):
 
 def test_gmail_has_only_what_it_needs():
     assert settings.PERMISSION_GRANTS["Gmail"] == ["network", "email.read"]
+
+
+def test_the_internet_gate_lets_gmail_reach_only_google(monkeypatch):
+    from aurora.network.gate import NetworkGate
+    monkeypatch.setattr(settings, "INTERNET_ACCESS", "ask")
+    gate = NetworkGate()
+    for host in ("oauth2.googleapis.com", "gmail.googleapis.com"):
+        kind, reason, can_ask = gate.decide("Gmail", host)
+        assert can_ask and "approved" in reason                    # "ask": asks first, then allowed
+    gate.approve("Gmail")
+    assert gate.decide("Gmail", "gmail.googleapis.com")[1] == ""
+    assert "isn't one of" in gate.decide("Gmail", "evil.example")[1]   # nowhere else

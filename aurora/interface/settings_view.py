@@ -476,6 +476,8 @@ class SettingsView(BaseView):
         self.gmail_disconnect.setEnabled(connected)
 
     def _connect_gmail(self):
+        from aurora.network import gate
+        gate.approve("Gmail")                     # pressing Connect is your yes to contacting Google (this session)
         self.gmail_connect.setEnabled(False)
         self.gmail_status.setText("Waiting for you to sign in in the browser (up to 5 minutes)…")
         self.backend.run_io(lambda: self._gmail_auth().connect(),
@@ -486,6 +488,8 @@ class SettingsView(BaseView):
         if QMessageBox.question(self, "Disconnect Gmail", "Disconnect AURORA from Gmail? Google will revoke its "
                                 "access and the sign-in is deleted from this PC.") != QMessageBox.Yes:
             return
+        from aurora.network import gate
+        gate.approve("Gmail")                     # to ask Google to revoke AURORA's access
         self.backend.run_io(lambda: self._gmail_auth().disconnect(), lambda message: self._refresh_gmail(message),
                             lambda error: self._refresh_gmail(f"Couldn't disconnect: {error}"))
 

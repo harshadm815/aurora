@@ -214,6 +214,11 @@ NETWORK_SERVICES = {
                 "sends": "nothing (it only reads)"},
     "Devices": {"name": "the device controller", "hosts": [], "purpose": "switching devices",
                 "sends": "the device and the command"},
+    # Gmail Assistant (read-only): Google's token service and the Gmail API. The sign-in page itself opens in
+    # your own browser, not through AURORA.
+    "Gmail": {"name": "Gmail", "hosts": ["oauth2.googleapis.com", "gmail.googleapis.com"],
+              "purpose": "your Gmail, read-only",
+              "sends": "AURORA's Google sign-in and which emails to read; nothing else about you"},
     # Publisher feeds (NEWS_FEEDS below) are added to News's hosts at start.
     "News": {"name": "News", "hosts": ["api.gdeltproject.org", "news.google.com", "api.search.brave.com"],
              "purpose": "the news search you asked for",

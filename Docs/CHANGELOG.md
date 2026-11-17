@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.56.0 — Gmail Assistant, read-only (2026-11-17)
+
+### Added
+- **Gmail Assistant** (Docs/GMAIL_SETUP.md, plan in Docs/COMMUNICATIONS_PLAN.md): connect in
+  Settings → Gmail; Google's sign-in opens in your browser (AURORA never sees your password),
+  read-only permission only, OAuth with PKCE, tokens encrypted with Windows' per-user encryption
+  (DPAPI), Disconnect revokes access at Google. Everything goes through the internet gate.
+- In Chat: "check my Gmail", "today's important emails", "unanswered emails", "find the email
+  about …", "summarise email 2". Sorting uses Gmail's labels then rules; possible phishing is
+  flagged with reasons (failed SPF/DKIM/DMARC, look-alike senders, mismatched links, pressure about
+  accounts or payments), never as a verdict. Dates, deadlines and requests are shown as "found in
+  the email". Email contents are never followed as instructions.
+- New permission `email.read`; the Gmail component gets only `network` and `email.read`.
+
+### Fixed
+- A News test that depended on today's date.
+
 ## 0.55.1 — The offline AURORA answers four times sooner (2026-11-16)
 
 ### Changed

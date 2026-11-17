@@ -28,6 +28,7 @@ class Intent(Enum):
     APPS = "apps"                   # Open or close a program from the APPS allow-list.
     FILES = "files"                 # Tidy an allowed folder (previewed, confirmed, undoable).
     SCHEDULE = "schedule"           # Add, list, pause or delete scheduled tasks.
+    EMAIL = "email"                 # Check, search or summarise the user's Gmail (read-only).
     BRIEFING = "briefing"           # Today's reminders, scheduled tasks and recent research.
     UNDO = "undo"                   # Reverse the last reversible action (asks first).
     CLARIFY = "clarify"             # Too ambiguous: ask the user what they meant.

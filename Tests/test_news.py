@@ -401,7 +401,7 @@ def test_going_online_is_asked_for_first(monkeypatch):
         return httpx.Response(200, content=GOOGLE_RSS)
 
     client = gate.client("News", transport=httpx.MockTransport(handler))
-    tool = NewsTool(NewsService(feeds=[], sources=[GoogleNewsSource(client)]))
+    tool = NewsTool(NewsService(feeds=[], sources=[GoogleNewsSource(client)], now=lambda: NOW))   # the RSS's week
     tools = ToolManager(PermissionManager({"News": ["network"]}))
     tools.register(tool)
     executor = ToolExecutor(tools, network=gate)

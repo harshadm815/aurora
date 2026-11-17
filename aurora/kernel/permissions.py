@@ -28,6 +28,7 @@ class Permission(Enum):
     HARDWARE_CONTROL = "hardware_control"
     APPS_LAUNCH = "apps.launch"          # open programs from APPS (an allow-list)
     AUTOMATION = "automation"            # scheduled tasks that run without asking each time
+    EMAIL_READ = "email.read"            # read your Gmail (after you connect it; read-only)
 
 
 class PermissionDeniedError(PermissionError):

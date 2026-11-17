@@ -9,7 +9,7 @@ import sys
 from pathlib import Path
 
 APP_NAME = "AURORA"
-VERSION = "0.55.0"
+VERSION = "0.56.0"
 
 USER_NAME = "Harry"
 
@@ -129,6 +129,9 @@ PERMISSION_GRANTS: dict[str, list[str]] = {
     "Weather": ["network"],   # Sends place names to open-meteo.com.
     # News searches you ask for: search terms only (see NEWS_* below).
     "News": ["network"],
+    # Gmail Assistant, read-only (after you connect it in Settings → Gmail): talks only to Google's
+    # sign-in and Gmail servers. Remove the line to switch it off.
+    "Gmail": ["network", "email.read"],
     "Wikipedia": ["network"],  # Sends the topic to en.wikipedia.org.
     "arXiv": ["network"],      # Sends the topic to export.arxiv.org.
     # Reads .txt/.md/.pdf files, only inside DOCUMENTS_DIR.
@@ -289,6 +292,15 @@ BROWSER_SAVED_FOLDER = "Web pages"
 EXPLORER_PLACES: list[tuple[str, str]] | None = None
 # Favourites and recent files, on this PC only.
 EXPLORER_DATABASE_PATH = PROJECT_ROOT / "aurora_explorer.db"
+
+# Gmail Assistant (aurora/email, Docs/GMAIL_SETUP.md)
+#
+# GMAIL_CLIENT_FILE: the "Desktop app" OAuth client you download from your Google Cloud project.
+# GMAIL_TOKEN_FILE: AURORA's sign-in, encrypted with Windows' per-user encryption (DPAPI).
+# GMAIL_WORK_DOMAINS: senders at these domains count as School / Work, e.g. ("school.edu", "company.com").
+GMAIL_CLIENT_FILE = DATA_DIR / "google_oauth_client.json"
+GMAIL_TOKEN_FILE = DATA_DIR / "gmail_signin.bin"
+GMAIL_WORK_DOMAINS: tuple[str, ...] = ()
 
 # Weather
 #

@@ -50,6 +50,9 @@ def isolated_database(tmp_path, monkeypatch):
     monkeypatch.setattr(settings, "MOBILE_WIFI_PORT", 0)
     monkeypatch.setattr(settings, "MOBILE_DISCOVERY_PORT", 0)
     monkeypatch.setattr(settings, "MOBILE_FILES_DIR", tmp_path / "From phone")
+    # Gmail: never the real sign-in or OAuth client.
+    monkeypatch.setattr(settings, "GMAIL_CLIENT_FILE", tmp_path / "google_oauth_client.json")
+    monkeypatch.setattr(settings, "GMAIL_TOKEN_FILE", tmp_path / "gmail_signin.bin")
     # The phone service never runs adb or netsh in tests (no USB link, "not on Wi-Fi").
     from aurora.mobile import network as mobile_network, usb as mobile_usb
     monkeypatch.setattr(mobile_usb, "find_adb", lambda: None)

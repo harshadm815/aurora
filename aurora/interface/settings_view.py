@@ -195,6 +195,25 @@ class SettingsView(BaseView):
                         "and files).", "Faint", wrap=True))
         self.body.addWidget(phone)
 
+        gmail = Panel("Gmail (read-only: AURORA can read and sort your mail, never send)")
+        self.gmail_status = gmail.add(label("", "Faint", wrap=True))
+        gmail_row = QHBoxLayout()
+        self.gmail_connect = QPushButton("Connect Gmail…")
+        self.gmail_connect.setToolTip("Opens Google's sign-in in your browser. AURORA never sees your password; it "
+                                      "asks only for permission to read your mail.")
+        self.gmail_connect.clicked.connect(self._connect_gmail)
+        self.gmail_disconnect = QPushButton("Disconnect")
+        self.gmail_disconnect.setObjectName("Danger")
+        self.gmail_disconnect.clicked.connect(self._disconnect_gmail)
+        gmail_row.addWidget(self.gmail_connect)
+        gmail_row.addWidget(self.gmail_disconnect)
+        gmail_row.addStretch(1)
+        gmail.add_layout(gmail_row)
+        gmail.add(label("Then ask in Chat: \"check my Gmail\", \"today's important emails\", \"unanswered emails\", "
+                        "\"find the email about …\". Setup: Docs/GMAIL_SETUP.md.", "Faint", wrap=True))
+        self.body.addWidget(gmail)
+        self._refresh_gmail()
+
         network = Panel("Internet and network")
         form = QFormLayout()
         self.internet = QComboBox()
@@ -437,6 +456,38 @@ class SettingsView(BaseView):
     def save(self):
         """The "Save now" button: saves at once (changes also save themselves)."""
         self.auto_save()
+
+    # --- Gmail ------------------------------------------------------------------------
+
+    def _gmail_auth(self):
+        from aurora.tool_plugins.gmail import service
+        return service()[0]
+
+    def _refresh_gmail(self, note: str = ""):
+        from aurora.email.oauth import AuthError
+        try:
+            auth = self._gmail_auth()
+            connected = auth.connected
+            text = ("Connected (read-only)." if connected else "Not connected.")
+        except AuthError as error:
+            connected, text = False, str(error)
+        self.gmail_status.setText(text + (f"  {note}" if note else ""))
+        self.gmail_connect.setEnabled(not connected and "missing" not in text and "isn't a" not in text)
+        self.gmail_disconnect.setEnabled(connected)
+
+    def _connect_gmail(self):
+        self.gmail_connect.setEnabled(False)
+        self.gmail_status.setText("Waiting for you to sign in in the browser (up to 5 minutes)…")
+        self.backend.run_io(lambda: self._gmail_auth().connect(),
+                            lambda granted: self._refresh_gmail("Gmail is ready: ask \"check my Gmail\" in Chat."),
+                            lambda error: self._refresh_gmail(f"Not connected: {error}"))
+
+    def _disconnect_gmail(self):
+        if QMessageBox.question(self, "Disconnect Gmail", "Disconnect AURORA from Gmail? Google will revoke its "
+                                "access and the sign-in is deleted from this PC.") != QMessageBox.Yes:
+            return
+        self.backend.run_io(lambda: self._gmail_auth().disconnect(), lambda message: self._refresh_gmail(message),
+                            lambda error: self._refresh_gmail(f"Couldn't disconnect: {error}"))
 
     def on_shown(self):
         self.model.setCurrentText(settings.DEFAULT_MODEL)

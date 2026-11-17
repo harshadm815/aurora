@@ -148,6 +148,13 @@ class MobileBridge:
             return "kept"
         return self._memory().forget(memory_id)
 
+    def email_report(self) -> dict | None:
+        """The latest end-of-day email report, for the phone (the server checks its Email permission)."""
+        report = self.backend.email_reporter.latest()
+        if report is None:
+            return None
+        return {"day": report.day, "made": report.made, "headline": report.headline(), "text": report.text()}
+
     def import_exchange(self, text: str, reply: str, device: str) -> None:
         """A conversation the phone had on its own (offline model) joins the shared one, without asking AURORA
         again: AURORA on the PC then knows what was said, and it appears in Chat ("phone, offline")."""

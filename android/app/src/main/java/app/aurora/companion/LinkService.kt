@@ -192,6 +192,10 @@ class LinkService : Service(), Live.Listener {
                 } else Alarms.remind(this, event.optString("text"))
             }
             "call" -> Calls.ring(this, event.optString("reason", "pc"), "")
+            "email_report" -> notify(CHANNEL_REPLIES, "Your email report", event.optString("headline"),
+                PendingIntent.getActivity(this, 2, Intent(this, MainActivity::class.java)
+                    .putExtra(MainActivity.OPEN, "email_report").addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP),
+                    PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT))
             "file" -> fetch(event.optString("file"), event.optString("name", "file"))
             "message" -> if (event.optString("source") == "phone" && !Live.visible)
                 notify(CHANNEL_REPLIES, "AURORA replied", event.optString("reply"))

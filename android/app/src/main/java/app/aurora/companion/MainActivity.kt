@@ -39,6 +39,7 @@ import java.util.concurrent.Executors
  */
 class MainActivity : Activity(), Live.Listener {
     companion object {
+        const val OPEN = "open"                        // "email_report": open it (from its notification)
         private const val PICK_FILE = 7
         private const val MIC_FOR_CALL = 4
         private const val QUEUED = "⏳ Kept on this phone. AURORA gets it as soon as your PC is back, and the reply comes as a notification."
@@ -77,6 +78,31 @@ class MainActivity : Activity(), Live.Listener {
         Calls.register(this)
         tab = savedInstanceState?.getString("tab") ?: "home"
         setUp()
+        if (intent?.getStringExtra(OPEN) == "email_report") showEmailReport()
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        if (intent.getStringExtra(OPEN) == "email_report") showEmailReport()
+    }
+
+    /** The end-of-day email report, made on the PC (only if this phone is allowed to see it). */
+    private fun showEmailReport() {
+        load("/api/email/report", timeoutMs = 20_000, failed = { message ->
+            AlertDialog.Builder(this).setTitle("Email report").setMessage(message).setPositiveButton("OK", null).show()
+        }) { data ->
+            val report = data.optJSONObject("report")
+            val text = report?.optString("text") ?: "No email report yet. It's made at the time set in AURORA's " +
+                "Settings → Gmail on the PC."
+            AlertDialog.Builder(this)
+                .setTitle("Email report")
+                .setView(ScrollView(this).apply {
+                    setPadding(kit.px(20), kit.px(8), kit.px(20), kit.px(8))
+                    addView(kit.text(text, Ui.SMALL, p.text).apply { setTextIsSelectable(true) })
+                })
+                .setPositiveButton("Close", null)
+                .show()
+        }
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
@@ -453,9 +479,24 @@ class MainActivity : Activity(), Live.Listener {
             startRow,
             kit.primary("✆   Call AURORA") { callAurora() },
             kit.card(kit.overline("Coming up"), coming),
+            emailCard(),
             quick,
             kit.card(kit.overline("Recent"), recent),
         )
+    }
+
+    /** Home's email report card: shown only when the PC lets this phone see the report. */
+    private fun emailCard(): View {
+        val headline = kit.note("Loading…")
+        val card = kit.card(kit.overline("Email report"), headline,
+            kit.secondary("Read", p.accent) { showEmailReport() }).apply { visibility = View.GONE }
+        load("/api/email/report", timeoutMs = 20_000, failed = { card.visibility = View.GONE }) { data ->
+            val report = data.optJSONObject("report")
+            card.visibility = View.VISIBLE
+            headline.text = if (report == null) "None yet: it's made at the time set in Settings → Gmail on the PC."
+                            else "${report.optString("day")}: ${report.optString("headline")}"
+        }
+        return card
     }
 
     private fun quickTile(symbol: String, label: String, onClick: () -> Unit): View {

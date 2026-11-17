@@ -34,6 +34,8 @@ _FIND = re.compile(r"\b(find|search|look for|where is|which email|the e-?mail (a
 _SUMMARY = re.compile(r"\b(summari[sz]e|summary of|explain|what does (it|this|the email) say|read)\b", re.I)
 _NUMBER = re.compile(r"\b(?:email|mail|message|number|no\.?|#)\s*(\d{1,2})\b|\b(\d{1,2})(?:st|nd|rd|th)? (?:e-?mail|one)\b",
                      re.I)
+_REPORT = re.compile(r"\b(e-?mail|mail|inbox|gmail) (report|digest|briefing)\b|\bend[- ]of[- ](the[- ])?day\b",
+                     re.I)
 _DISCONNECT = re.compile(r"\b(disconnect|sign out of|log out of|revoke|unlink)\b.*\b(g-?mail|e-?mail|google)\b", re.I)
 
 
@@ -68,6 +70,8 @@ class GmailTool(BaseTool):
         try:
             if _DISCONNECT.search(text):
                 return self._disconnect()
+            if _REPORT.search(text):
+                return self._report()
             if _UNANSWERED.search(text):
                 return self._list(self.inbox().unanswered(), "Conversations waiting for your reply (last 7 days)",
                                   "Nothing is waiting for your reply from the last 7 days.")
@@ -148,6 +152,16 @@ class GmailTool(BaseTool):
             lines += ["", "⚠ Possibly suspicious:"] + [f"  – {s}" for s in signs]
         lines += ["", "Found in the email's text, not checked: dates and requests may be read wrongly."]
         return ToolResult(True, "\n".join(lines))
+
+    def _report(self) -> ToolResult:
+        """Today's end-of-day report: the one already made, or made now."""
+        from datetime import date as today_
+        from aurora.email.daily import EmailReporter
+        reporter = EmailReporter(inbox_factory=self.inbox)
+        report = reporter.latest()
+        if report is None or report.day != today_.today().isoformat():
+            report = reporter.make(scheduled=False)
+        return ToolResult(True, report.text(), data={"headline": report.headline()})
 
     def _disconnect(self) -> ToolResult:
         def go():

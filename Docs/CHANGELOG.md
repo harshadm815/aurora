@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.57.0 — End-of-day email report, on the PC and the phone (2026-11-17)
+
+### Added
+- **End-of-day email report** (Settings → Gmail): at the time you choose, AURORA reads today's mail
+  and prepares a report: what came (by category, unread), the important emails, meetings, what's
+  asked of you, deadlines found, conversations waiting for your reply, anything possibly suspicious,
+  and tomorrow's priorities. Made when the time has passed and AURORA runs (also after the PC wakes
+  up later that day); never twice. "Make it now" in Settings, or "email report" in Chat.
+- Announced on this PC (notification), your phone (app 0.11.0: notification, a Home card and the full
+  report), or both. The phone sees it only with the new **Email report** permission on the Phone
+  page (off until you allow it); the phone's notification carries only the headline.
+- Honest about what AURORA can't see: replies are listed as not available (AURORA can't send email
+  yet), and dates and requests are marked as found in the text.
+- The latest report is kept encrypted (DPAPI), like the Gmail sign-in.
+
 ## 0.56.0 — Gmail Assistant, read-only (2026-11-17)
 
 ### Added

@@ -1335,7 +1335,7 @@ def test_clear_control_and_status_details(editing, phone):
     assert status == 400 and editing.fake.commands == ["pause", "start", "stop_speaking"]   # nothing else
     assert call(editing, "POST", "/api/control", {"action": "pause"}, token=token)[0] == 401  # unsigned
     status = call(editing, "GET", "/api/status", token=token, phone=phone)[1]
-    assert status["permissions"] == {"memories": False, "actions": False}
+    assert status["permissions"] == {"memories": False, "actions": False, "email": False}
     assert any(row[2] == "control: pause" for row in editing.store.recent_log(30))
 
 
@@ -1395,7 +1395,7 @@ def test_while_closed_the_phone_can_only_ask_and_start(closed, phone, tmp_path):
     assert status == 503 and "Open AURORA" in data["error"]                      # no pairing while closed
     token, _device = closed.store.pair(closed.store.new_code(), "Pixel", phone.public)
     status, data, _ = call(closed, "GET", "/api/status", token=token, phone=phone)
-    assert status == 200 and data["state"] == "closed" and data["permissions"] == {"memories": False, "actions": False}
+    assert status == 200 and data["state"] == "closed" and data["permissions"] == {"memories": False, "actions": False, "email": False}
     assert call(closed, "GET", "/api/connection", token=token, phone=phone)[0] == 200
     for method, path, body in [("POST", "/api/chat", {"text": "hi"}), ("GET", "/api/events?after=-1", None),
                                ("GET", "/api/history", None), ("GET", "/api/memories", None),
@@ -1577,3 +1577,16 @@ def test_imported_exchanges_reach_aurora_and_chat(backend, qapp):
     assert shown == [("Pixel, offline", "hi from the train", "Hello! I'm offline on your phone.")]
     contents = [m["content"] for m in backend.engine.conversation.messages]
     assert "hi from the train" in contents and "Hello! I'm offline on your phone." in contents
+
+
+def test_the_email_report_reaches_only_a_phone_allowed_to_see_it(editing, phone):
+    editing.fake.email_report = lambda: {"day": "2026-11-17", "headline": "3 new, 1 important.", "text": "Email report"}
+    token = _paired(editing, phone)
+    status, data, _ = call(editing, "GET", "/api/email/report", token=token, phone=phone)
+    assert status == 403 and "Email report" in data["error"]
+    device = editing.store.devices()[0]
+    assert device.allow_email is False                                       # off until you allow it
+    editing.store.set_permissions(device.id, email=True)
+    status, data, _ = call(editing, "GET", "/api/email/report", token=token, phone=phone)
+    assert status == 200 and data["report"]["headline"] == "3 new, 1 important."
+    assert call(editing, "GET", "/api/status", token=token, phone=phone)[1]["permissions"]["email"] is True

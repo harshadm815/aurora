@@ -12,9 +12,10 @@ with it); the rest still is.
 import logging
 from datetime import datetime
 
-from PySide6.QtCore import QTimer
+from PySide6.QtCore import QTime, QTimer
 from PySide6.QtWidgets import (
     QCheckBox, QComboBox, QFormLayout, QHBoxLayout, QLineEdit, QMessageBox, QPlainTextEdit, QPushButton, QSpinBox,
+    QTimeEdit,
 )
 
 from aurora.config import preferences, settings
@@ -209,6 +210,31 @@ class SettingsView(BaseView):
         gmail_row.addWidget(self.gmail_disconnect)
         gmail_row.addStretch(1)
         gmail.add_layout(gmail_row)
+        report_row = QHBoxLayout()
+        self.report_on = QCheckBox("End-of-day email report at")
+        self.report_on.setChecked(bool(values.get("email_report")))
+        self.report_on.setToolTip("Every day at this time AURORA reads today's mail and prepares a report: what "
+                                  "came, what's important, what needs a reply, deadlines, and tomorrow. Switching it "
+                                  "on lets AURORA contact Gmail for it each day, also when internet access is \"ask\". "
+                                  "AURORA must be running (the notification area is enough).")
+        self.report_time = QTimeEdit()
+        self.report_time.setDisplayFormat("HH:mm")
+        hour, minute = (values.get("email_report_time") or "21:00").split(":")
+        self.report_time.setTime(QTime(int(hour), int(minute)))
+        self.report_where = QComboBox()
+        for label_text, key in (("on this PC and my phone", "both"), ("on this PC", "pc"), ("on my phone", "phone")):
+            self.report_where.addItem(label_text, key)
+        self.report_where.setCurrentIndex(max(0, self.report_where.findData(values.get("email_report_where", "both"))))
+        self.report_now = QPushButton("Make it now")
+        self.report_now.clicked.connect(self._report_now)
+        for widget in (self.report_on, self.report_time, self.report_where, self.report_now):
+            report_row.addWidget(widget)
+        report_row.addStretch(1)
+        gmail.add_layout(report_row)
+        self.report_on.toggled.connect(lambda _: self._save_report())
+        self.report_time.timeChanged.connect(lambda _: self._save_report())
+        self.report_where.currentIndexChanged.connect(lambda _: self._save_report())
+        self.report_note = gmail.add(label("", "Faint", wrap=True))
         gmail.add(label("Then ask in Chat: \"check my Gmail\", \"today's important emails\", \"unanswered emails\", "
                         "\"find the email about …\". Setup: Docs/GMAIL_SETUP.md.", "Faint", wrap=True))
         self.body.addWidget(gmail)
@@ -474,6 +500,32 @@ class SettingsView(BaseView):
         self.gmail_status.setText(text + (f"  {note}" if note else ""))
         self.gmail_connect.setEnabled(not connected and "missing" not in text and "isn't a" not in text)
         self.gmail_disconnect.setEnabled(connected)
+
+    def _save_report(self):
+        self.backend.save_preferences({"email_report": self.report_on.isChecked(),
+                                       "email_report_time": self.report_time.time().toString("HH:mm"),
+                                       "email_report_where": self.report_where.currentData()})
+        latest = self.backend.email_reporter.latest()
+        self.report_note.setText(("Next report today or tomorrow at " + self.report_time.time().toString("HH:mm") +
+                                  ". " if self.report_on.isChecked() else "") +
+                                 (f"Latest: {latest.day}, {latest.headline()}" if latest else ""))
+
+    def _report_now(self):
+        from aurora.network import gate
+        gate.approve("Gmail")                     # pressing the button is your yes to contacting Gmail
+        self.report_now.setEnabled(False)
+        self.report_note.setText("Reading today's mail…")
+
+        def done(report):
+            self.report_now.setEnabled(True)
+            self.report_note.setText(f"Made: {report.headline()} Ask \"email report\" in Chat to read it.")
+            self.backend._email_report_made(report)
+
+        def failed(error):
+            self.report_now.setEnabled(True)
+            self.report_note.setText(f"Couldn't make the report: {error}")
+
+        self.backend.run_io(lambda: self.backend.email_reporter.make(scheduled=False), done, failed)
 
     def _connect_gmail(self):
         from aurora.network import gate

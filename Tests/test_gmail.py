@@ -420,3 +420,83 @@ def test_chat_requests_reach_the_gmail_tool_through_the_executor():
     assert executor.can_handle(decision)
     result = executor.execute(decision)
     assert result.success and "3 new" in result.message
+
+
+# --- The end-of-day email report ------------------------------------------------------------------
+
+from aurora.email.daily import EmailReporter, parse_time  # noqa: E402
+from aurora.email.report import Report, build  # noqa: E402
+
+
+def _inbox():
+    return Inbox(FakeClient(), today=lambda: date(2026, 11, 16))
+
+
+def test_the_report_says_what_came_needs_you_and_is_due():
+    report = build(_inbox(), datetime(2026, 11, 16, 21, 0))
+    assert report.day == "2026-11-16" and report.total == 3 and report.unread == 1
+    assert {i["from"] for i in report.important} == {"Alex Rao", "Sam"}
+    assert report.requests[0]["from"] == "Alex Rao" and "slides" in report.requests[0]["asks"]
+    assert report.deadlines[0]["when"] == "2026-11-20"                      # "before Friday"
+    assert [a["from"] for a in report.awaiting] == ["Alex Rao"]             # you replied to Sam
+    assert any("Reply to Alex Rao" in t for t in report.tomorrow)
+    text = report.text()
+    for part in ("Inbox", "Important", "Asked of you", "Deadlines mentioned", "Waiting for your reply", "Tomorrow"):
+        assert part in text
+    assert "can't send email yet" in text and "sent" not in report.headline()   # nothing claimed that didn't happen
+    assert Report.from_dict(report.to_dict()).text() == text
+
+
+def test_the_report_is_made_once_a_day_after_its_time():
+    store = MemoryStore()
+    approved = []
+    reporter = EmailReporter(store, inbox_factory=_inbox, approve=lambda: approved.append(1))
+    prefs = {"email_report": True, "email_report_time": "21:00"}
+    assert parse_time("21:00") == (21, 0) and parse_time("25:00") is None
+    assert not reporter.due({**prefs, "email_report": False}, datetime(2026, 11, 16, 22, 0))
+    assert not reporter.due(prefs, datetime(2026, 11, 16, 20, 59))           # not yet
+    assert reporter.due(prefs, datetime(2026, 11, 16, 21, 0))
+    reporter.make(datetime(2026, 11, 16, 21, 0))
+    assert approved == [1] and store.value["made_on_schedule"] is True
+    assert not reporter.due(prefs, datetime(2026, 11, 16, 23, 0))            # already made today
+    assert reporter.due(prefs, datetime(2026, 11, 17, 8, 0)) is False        # tomorrow, but before 21:00
+    assert reporter.due(prefs, datetime(2026, 11, 17, 21, 5))                # the next day: again
+    asked = EmailReporter(MemoryStore(), inbox_factory=_inbox)
+    asked.make(datetime(2026, 11, 16, 12, 0), scheduled=False)               # asked for in Chat at noon…
+    assert asked.due(prefs, datetime(2026, 11, 16, 21, 1))                   # …the evening one still comes
+
+
+def test_the_report_is_announced_where_you_chose():
+    from aurora.interface.backend import Backend
+
+    class Hub:
+        def __init__(self):
+            self.events = []
+
+        def publish(self, kind, **data):
+            self.events.append((kind, data))
+
+    class Fake:
+        def __init__(self, where):
+            self.preferences = {"email_report_where": where}
+            self.mobile = type("M", (), {"events": Hub()})()
+            self.shown = []
+            self.email_report_ready = type("S", (), {"emit": lambda _, r: self.shown.append(r)})()
+
+    report = build(_inbox(), datetime(2026, 11, 16, 21, 0))
+    for where, pc, phone in (("both", 1, 1), ("pc", 1, 0), ("phone", 0, 1)):
+        fake = Fake(where)
+        Backend._email_report_made(fake, report)
+        assert len(fake.shown) == pc and len(fake.mobile.events.events) == phone
+        if phone:
+            kind, data = fake.mobile.events.events[0]
+            assert kind == "email_report" and data["headline"] == report.headline()
+            assert "slides" not in str(data)                                   # only the headline travels in the event
+
+
+def test_email_report_in_chat(tmp_path):
+    from aurora.tool_plugins.gmail import GmailTool
+    tool = GmailTool(inbox_factory=_inbox)
+    result = tool.execute(request="show me my email report")
+    assert result.success and result.message.startswith("Email report")
+    assert Router().route("what's in my email report?").intent is Intent.EMAIL

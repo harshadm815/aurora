@@ -20,8 +20,8 @@ android {
         // 26: Android 8, the first with self-managed calls (ConnectionService) for the Calling Agent.
         minSdk = 26
         targetSdk = 34
-        versionCode = 11
-        versionName = "0.10.0"
+        versionCode = 12
+        versionName = "0.11.0"
         ndk { abiFilters += "arm64-v8a" }                  // the phone's processor; keeps the app small
         if (llamaDir != null) {
             externalNativeBuild {

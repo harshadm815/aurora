@@ -41,6 +41,7 @@ API (JSON):
     POST /api/memories/edit {"id", "value"} / POST /api/memories/delete {"id"}   (if allowed)
     POST /api/clear                        → clears the shared conversation (memories stay)
     POST /api/history/import {"text", "reply"} → an exchange the phone had offline joins the conversation
+    GET  /api/email/report                 → the latest end-of-day email report (if this phone may see it)
     POST /api/control    {"action"}        → "pause", "start" or "stop_speaking" only
     (While AURORA is closed, the phone helper answers only status, connection and "start": launcher.py.)
     POST /api/unpair                       → this phone disconnects itself
@@ -262,7 +263,8 @@ class Handler(BaseHTTPRequestHandler):
                     raise ApiError(HTTPStatus.UNPROCESSABLE_ENTITY, str(error))
             elif (method, path) == ("GET", "/api/status"):
                 result = {**bridge.status(),
-                          "permissions": {"memories": device.allow_memories, "actions": device.allow_actions}}
+                          "permissions": {"memories": device.allow_memories, "actions": device.allow_actions,
+                                          "email": device.allow_email}}
             elif (method, path) == ("GET", "/api/connection"):
                 result = server.connection()
             elif (method, path) == ("GET", "/api/history"):
@@ -283,6 +285,11 @@ class Handler(BaseHTTPRequestHandler):
             elif (method, path) == ("GET", "/api/today"):
                 result = {"briefing": bridge.briefing(), "reminders": bridge.reminders(),
                           "earlier": bridge.earlier_reminders()}
+            elif (method, path) == ("GET", "/api/email/report"):
+                if not device.allow_email:
+                    raise ApiError(HTTPStatus.FORBIDDEN, "This phone isn't allowed to see your email report. "
+                                                         "Allow \"Email report\" on the PC's Phone page.")
+                result = {"report": bridge.email_report()}
             elif (method, path) == ("GET", "/api/memories"):
                 if not device.allow_memories:
                     raise ApiError(HTTPStatus.FORBIDDEN, "This phone isn't allowed to see your memories. "

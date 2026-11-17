@@ -63,6 +63,11 @@ INTERFACE = {
     "mobile_enabled": (bool, False, lambda v: True),      # serve the phone app (see aurora/mobile)
     "mobile_wifi": (bool, False, lambda v: True),         # also listen on Wi-Fi, on home networks only
     "mobile_launcher": (bool, False, lambda v: True),     # the phone may start AURORA while it's closed
+    # The end-of-day email report (aurora/email/daily.py): on/off, at what time, announced where.
+    "email_report": (bool, False, lambda v: True),
+    "email_report_time": (str, "21:00", lambda v: __import__("aurora.email.daily", fromlist=["x"]).parse_time(v)
+                          is not None),
+    "email_report_where": (str, "both", lambda v: v in ("pc", "phone", "both")),
     "mobile_home_networks": (list, [], lambda v: len(v) <= 5 and all(isinstance(n, str) and 0 < len(n) <= 64
                                                                     for n in v)),
 }

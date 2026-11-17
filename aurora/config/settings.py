@@ -9,7 +9,7 @@ import sys
 from pathlib import Path
 
 APP_NAME = "AURORA"
-VERSION = "0.56.0"
+VERSION = "0.57.0"
 
 USER_NAME = "Harry"
 
@@ -306,6 +306,8 @@ EXPLORER_DATABASE_PATH = PROJECT_ROOT / "aurora_explorer.db"
 GMAIL_CLIENT_FILE = DATA_DIR / "google_oauth_client.json"
 GMAIL_TOKEN_FILE = DATA_DIR / "gmail_signin.bin"
 GMAIL_WORK_DOMAINS: tuple[str, ...] = ()
+# The latest end-of-day email report (encrypted like the sign-in: it lists senders and subjects).
+EMAIL_REPORT_FILE = DATA_DIR / "email_report.bin"
 
 # Weather
 #

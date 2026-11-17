@@ -69,6 +69,8 @@ class Tray(QObject):
         # Reminders and scheduled tasks are always shown (you asked for them).
         backend.reminder_due.connect(lambda data: self.notify("AURORA: reminder", f"⏰ {data.get('text', '')}"))
         backend.reminders_missed.connect(self.missed)
+        backend.email_report_ready.connect(lambda report: self.notify(
+            "AURORA: your email report", report.headline() + " Ask \"email report\" in Chat to read it."))
         backend.phone_file.connect(lambda path, device: self.notify(
             "AURORA: from your phone", f"📎 {Path(path).name} is in Documents › {Path(path).parent.name}"))
         backend.task_ran.connect(self.task_ran)

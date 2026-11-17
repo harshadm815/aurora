@@ -283,10 +283,15 @@ class PhoneView(BaseView):
             actions.setToolTip("Let this phone answer \"yes\" to actions (switching devices, opening apps, "
                                "moving files). Otherwise answer those on the PC.")
             actions.toggled.connect(lambda on, d=device.id: store.set_permissions(d, actions=on))
+            email = QCheckBox("Email report")
+            email.setChecked(device.allow_email)
+            email.setToolTip("Send this phone your end-of-day email report (senders, subjects, deadlines). "
+                             "Set the time in Settings → Gmail.")
+            email.toggled.connect(lambda on, d=device.id: store.set_permissions(d, email=on))
             remove = QPushButton("Disconnect")
             remove.setObjectName("Danger")
             remove.clicked.connect(lambda _=False, d=device.id: (store.remove(d), self._refresh_phone()))
-            for widget in (memories, actions, remove):
+            for widget in (memories, actions, email, remove):
                 line.addWidget(widget)
             self.device_rows.addWidget(row)
         self.phone_activity.setText(

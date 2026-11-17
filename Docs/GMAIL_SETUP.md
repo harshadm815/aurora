@@ -40,6 +40,13 @@ Google's own page, and you can revoke AURORA's access at any time.
     connected to Gmail." Close the tab.
 12. In Chat: "check my Gmail".
 
+## End-of-day report
+
+Settings → Gmail → tick **End-of-day email report at**, choose the time and where it's announced
+(this PC, your phone, or both). For the phone, also tick **Email report** for your phone on the
+Phone page. AURORA must be running at that time (the notification area is enough); if the PC was
+asleep, the report is made when it's back that day. Ask "email report" in Chat to read it.
+
 ## Good to know
 
 - **Every 7 days** Google ends the sign-in while the project is in Testing. AURORA then says so, and

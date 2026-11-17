@@ -16,7 +16,7 @@ from aurora.routing.decision import RouteDecision
 from aurora.routing.intent import Intent
 
 # Your mail, not email in general ("what is email?" is a question for the Brain).
-_EMAIL = re.compile(r"\b(g-?mail|inbox|mailbox)\b|\b(my|any|new|unread|today'?s|important|unanswered|latest|"
+_EMAIL = re.compile(r"\b(g-?mail|inbox|mailbox)\b|\be-?mail (report|digest|briefing)\b|\b(my|any|new|unread|today'?s|important|unanswered|latest|"
                     r"recent)\b[\w\s']{0,20}\be-?mails?\b|\bthe e-?mails? (about|from|regarding|on)\b", re.I)
 _ASK = re.compile(r"\b(check|show|list|any|new|unread|important|unanswered|find|search|look|summari[sz]e|"
                   r"what('s| is| are)|do i have|read|open|explain|disconnect|sign out|revoke|today'?s)\b", re.I)

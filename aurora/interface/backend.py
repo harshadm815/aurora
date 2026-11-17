@@ -176,6 +176,7 @@ class Backend(QObject):
     exchanged = Signal(str, str, str)         # every finished exchange: source ("pc" | "phone"), text, reply
     mobile_changed = Signal(bool)             # the phone server started / stopped
     phone_file = Signal(str, str)             # a file shared from the phone was saved: path, device
+    email_report_ready = Signal(object)       # the end-of-day email report was made (aurora.email.report.Report)
 
     def __init__(self, engine_factory: Callable | None = None, parent=None):
         super().__init__(parent)
@@ -223,6 +224,13 @@ class Backend(QObject):
         self._sample_timer = QTimer(self)
         self._sample_timer.timeout.connect(self._sample)
         self._sample_timer.start(2000)
+        # The end-of-day email report: checked once a minute (aurora/email/daily.py).
+        from aurora.email.daily import EmailReporter
+        from aurora.network import gate as network_gate
+        self.email_reporter = EmailReporter(approve=lambda: network_gate.approve("Gmail"))
+        self._report_timer = QTimer(self)
+        self._report_timer.timeout.connect(self.check_email_report)
+        self._report_timer.start(60_000)
         self.mobile = None                      # the Mobile Companion's server, while switched on
         self.pressure = performance.Pressure()
         self.performance_reduced = False
@@ -649,6 +657,22 @@ class Backend(QObject):
                 if helper_asked:
                     logger.info("Mobile: asked the phone helper to step aside")
                 time.sleep(pause)
+
+    def check_email_report(self, now=None) -> bool:
+        """Makes the daily email report in the background if it's due. True if it was started."""
+        if not self.email_reporter.due(self.preferences, now):
+            return False
+        self.email_reporter.busy = True
+        self.run_io(lambda: self.email_reporter.make(now), self._email_report_made,
+                    lambda error: logger.warning("Email report couldn't be made: %s", type(error).__name__))
+        return True
+
+    def _email_report_made(self, report) -> None:
+        where = self.preferences.get("email_report_where", "both")
+        if where in ("pc", "both"):
+            self.email_report_ready.emit(report)          # the tray shows it
+        if where in ("phone", "both") and self.mobile is not None:
+            self.mobile.events.publish("email_report", day=report.day, headline=report.headline())
 
     def _tell_phone_exchange(self, source: str, text: str, reply: str) -> None:
         if self.mobile is not None:

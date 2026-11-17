@@ -54,6 +54,7 @@ class Device:
     allow_memories: bool
     allow_actions: bool
     public_key: str = ""
+    allow_email: bool = False          # the end-of-day email report on the phone (off until you allow it)
 
 
 class PairingError(Exception):
@@ -81,6 +82,8 @@ class DeviceStore:
             columns = {row[1] for row in db.execute("PRAGMA table_info(devices)")}
             if "public_key" not in columns:
                 db.execute("ALTER TABLE devices ADD COLUMN public_key TEXT NOT NULL DEFAULT ''")
+            if "allow_email" not in {row[1] for row in db.execute("PRAGMA table_info(devices)")}:
+                db.execute("ALTER TABLE devices ADD COLUMN allow_email INTEGER NOT NULL DEFAULT 0")
             # Phones paired before signing keys (the 0.45 web app) can't prove who they are: unpair them.
             removed = db.execute("DELETE FROM devices WHERE public_key = ''").rowcount
             if removed:
@@ -158,12 +161,13 @@ class DeviceStore:
 
     def _row(self, row) -> Device:
         return Device(row[0], row[1], datetime.fromisoformat(row[2]),
-                      datetime.fromisoformat(row[3]) if row[3] else None, bool(row[4]), bool(row[5]), row[6])
+                      datetime.fromisoformat(row[3]) if row[3] else None, bool(row[4]), bool(row[5]), row[6],
+                      bool(row[7]) if len(row) > 7 else False)
 
     def devices(self) -> list[Device]:
         with self._connect() as db:
-            rows = db.execute("SELECT id, name, created, last_seen, allow_memories, allow_actions, public_key FROM devices "
-                              "ORDER BY id").fetchall()
+            rows = db.execute("SELECT id, name, created, last_seen, allow_memories, allow_actions, public_key, allow_email "
+                              "FROM devices ORDER BY id").fetchall()
         return [self._row(r) for r in rows]
 
     def authenticate(self, token: str | None) -> Device | None:
@@ -172,15 +176,18 @@ class DeviceStore:
         if not token or len(token) > 200:
             return None
         with self._connect() as db:
-            row = db.execute("SELECT id, name, created, last_seen, allow_memories, allow_actions, public_key FROM devices "
-                             "WHERE token_hash = ?", (_hash(token),)).fetchone()
+            row = db.execute("SELECT id, name, created, last_seen, allow_memories, allow_actions, public_key, allow_email "
+                             "FROM devices WHERE token_hash = ?", (_hash(token),)).fetchone()
             if row is None:
                 return None
             db.execute("UPDATE devices SET last_seen = ? WHERE id = ?", (self.clock().isoformat(), row[0]))
         return self._row(row)
 
-    def set_permissions(self, device_id: int, memories: bool | None = None, actions: bool | None = None) -> None:
+    def set_permissions(self, device_id: int, memories: bool | None = None, actions: bool | None = None,
+                        email: bool | None = None) -> None:
         with self._connect() as db:
+            if email is not None:
+                db.execute("UPDATE devices SET allow_email = ? WHERE id = ?", (int(email), device_id))
             if memories is not None:
                 db.execute("UPDATE devices SET allow_memories = ? WHERE id = ?", (int(memories), device_id))
             if actions is not None:

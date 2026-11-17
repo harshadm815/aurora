@@ -42,6 +42,7 @@ INTENT_TOOLS = {
     Intent.KNOWLEDGE: "Wikipedia",
     Intent.PAPERS: "arXiv",
     Intent.NEWS: "News",
+    Intent.EMAIL: "Gmail",
     Intent.DOCUMENTS: "Documents",
     Intent.KNOWLEDGE_BASE: "Knowledge",
     Intent.VISION: "Camera",

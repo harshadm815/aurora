@@ -402,3 +402,21 @@ def test_the_internet_gate_lets_gmail_reach_only_google(monkeypatch):
     gate.approve("Gmail")
     assert gate.decide("Gmail", "gmail.googleapis.com")[1] == ""
     assert "isn't one of" in gate.decide("Gmail", "evil.example")[1]   # nowhere else
+
+
+def test_chat_requests_reach_the_gmail_tool_through_the_executor():
+    """The whole path Chat uses: router → executor → Gmail tool (the tool alone isn't enough)."""
+    from aurora.kernel.permissions import PermissionManager
+    from aurora.tool_plugins.gmail import GmailTool
+    from aurora.tools.executor import INTENT_TOOLS, ToolExecutor
+    from aurora.tools.tool_manager import ToolManager
+
+    assert INTENT_TOOLS[Intent.EMAIL] == "Gmail"
+    client = FakeClient()
+    tools = ToolManager(PermissionManager({"Gmail": ["network", "email.read"]}))
+    tools.register(GmailTool(inbox_factory=lambda: Inbox(client, today=lambda: date(2026, 11, 16))))
+    executor = ToolExecutor(tools)
+    decision = Router().route("Aurora, check my Gmail")
+    assert executor.can_handle(decision)
+    result = executor.execute(decision)
+    assert result.success and "3 new" in result.message

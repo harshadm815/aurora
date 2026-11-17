@@ -81,6 +81,8 @@ def summarize(decision: RouteDecision) -> str | None:
         return "Checked the room sensors"
     if intent is Intent.REMINDER:
         return "Managed your reminders"
+    if intent is Intent.EMAIL:
+        return "Checked Gmail"               # never which emails or what was searched
     if intent is Intent.DEVICES:
         return "Controlled a device"
     if intent is Intent.RESEARCH:

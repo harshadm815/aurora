@@ -65,6 +65,11 @@ class GmailTool(BaseTool):
                 self._inbox = Inbox(client, tuple(settings.GMAIL_WORK_DOMAINS))
         return self._inbox
 
+    def auth(self):
+        """The Google sign-in in use (None when an inbox was given directly, as in tests)."""
+        self.inbox()
+        return self._auth
+
     def execute(self, request: str = "", **arguments) -> ToolResult:
         text = (request or "").strip()
         try:

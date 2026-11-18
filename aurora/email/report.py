@@ -32,6 +32,8 @@ class Report:
     unaddressed: int = 0                           # important and still unread
     tomorrow: list = field(default_factory=list)   # one line each
     made_on_schedule: bool = False                 # made at your daily time (not just asked for in Chat)
+    sent_today: int = 0                            # from the audit trail: replies Gmail accepted after your yes
+    unsent_drafts: int = 0                         # drafted today, never sent
 
     def to_dict(self) -> dict:
         return dict(self.__dict__)
@@ -80,7 +82,7 @@ class Report:
                 f"  · {s['from']} — {s['subject']}: {s['why']}" for s in self.suspicious[:4]]
         lines += ["", "Email activity",
                   f"  {self.unaddressed} important email{'s' if self.unaddressed != 1 else ''} still unread.",
-                  "  Replies: AURORA can't send email yet (read-only), so none were sent or drafted."]
+                  f"  Replies sent with your approval today: {self.sent_today}. Drafts not sent: {self.unsent_drafts}."]
         lines += ["", "Tomorrow"] + ([f"  · {t}" for t in self.tomorrow] or ["  · Nothing found that's due."])
         lines += ["", "Dates and requests are found in the emails' text, not checked."]
         return "\n".join(lines)
@@ -128,6 +130,11 @@ def build(inbox: Inbox, now: datetime | None = None) -> Report:
                                          "subject": _subject(item), "words": one_line(found.text)[:40]})
     report.deadlines.sort(key=lambda d: (d["when"], d["time"]))
     report.awaiting = [{"from": _who(i), "subject": _subject(i)} for i in inbox.unanswered()]
+    from aurora.email import audit
+    events = audit.entries(today.isoformat())
+    sent = {e.get("fingerprint") for e in events if e.get("event") == "sent"}
+    report.sent_today = len(sent)
+    report.unsent_drafts = len({e.get("fingerprint") for e in events if e.get("event") == "drafted"} - sent)
     tomorrow = (today + timedelta(days=1)).isoformat()
     report.tomorrow = ([f"Due tomorrow: {d['subject']} ({d['from']})" for d in report.deadlines if d["when"] == tomorrow]
                        + [f"Reply to {a['from']} — {a['subject']}" for a in report.awaiting[:3]]

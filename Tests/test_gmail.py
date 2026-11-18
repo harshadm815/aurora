@@ -443,7 +443,7 @@ def test_the_report_says_what_came_needs_you_and_is_due():
     text = report.text()
     for part in ("Inbox", "Important", "Asked of you", "Deadlines mentioned", "Waiting for your reply", "Tomorrow"):
         assert part in text
-    assert "can't send email yet" in text and "sent" not in report.headline()   # nothing claimed that didn't happen
+    assert "Replies sent with your approval today: 0" in text and "sent" not in report.headline()   # nothing claimed that didn't happen
     assert Report.from_dict(report.to_dict()).text() == text
 
 
@@ -500,3 +500,118 @@ def test_email_report_in_chat(tmp_path):
     result = tool.execute(request="show me my email report")
     assert result.success and result.message.startswith("Email report")
     assert Router().route("what's in my email report?").intent is Intent.EMAIL
+
+
+# --- Replies: drafted from your words, sent only after your yes ---------------------------------
+
+import email as email_parser  # noqa: E402
+
+from aurora.email import audit  # noqa: E402
+from aurora.email.oauth import READ_ONLY, SEND  # noqa: E402
+from aurora.email.reply import draft, words  # noqa: E402
+
+
+class SendingClient(FakeClient):
+    def __init__(self):
+        super().__init__()
+        self.mail["m1"] = message("m1", "t1", subject="Can you send the slides?", labels=("INBOX", "IMPORTANT"),
+                                  text="Hi, can you send the slides before Friday? Thanks.",
+                                  extra_headers=[("Message-ID", "<abc@example.com>")])
+
+    def send(self, raw, thread_id=""):
+        self.sent.append((raw, thread_id))
+        return f"sent{len(self.sent)}"
+
+
+class Signed:
+    def __init__(self, scopes):
+        self.scopes = scopes
+
+
+def _reply_tools(scopes=(READ_ONLY, SEND)):
+    from aurora.tool_plugins.gmail import GmailTool
+    from aurora.tool_plugins.gmail_reply import GmailReplyTool
+    client = SendingClient()
+    reader = GmailTool(inbox_factory=lambda: Inbox(client, today=lambda: date(2026, 11, 16)))
+    reader.auth = lambda: Signed(list(scopes))
+    reader.execute(request="check my gmail")                  # lists email 1 = Alex's
+    return client, reader, GmailReplyTool(reader, signature="Best regards,\nMeena")
+
+
+def test_reply_words_come_from_you():
+    assert words("saying that I will attend the meeting") == "I will attend the meeting."
+    assert words("say thanks, I'll send it tomorrow!") == "Thanks, I'll send it tomorrow!"
+
+
+def test_nothing_is_sent_without_your_yes_to_that_exact_message():
+    client, _, tool = _reply_tools()
+    result = tool.execute(request="Reply to email 1 saying that I will send them tonight")
+    assert result.needs_confirmation and client.sent == []                      # drafted, not sent
+    for shown in ("To: Alex Rao <alex@example.com>", "Subject: Re: Can you send the slides?", "Hi Alex,",
+                  "I will send them tonight.", "Best regards,", "(yes / no)"):
+        assert shown in result.message
+    sent = result.confirm()                                                    # your yes
+    assert sent.success and "Sent to alex@example.com" in sent.message and "can't tell whether it has been read" in sent.message
+    raw, thread = client.sent[0]
+    mail = email_parser.message_from_bytes(base64.urlsafe_b64decode(raw))
+    assert mail["To"] == "Alex Rao <alex@example.com>" and mail["Subject"] == "Re: Can you send the slides?"
+    assert mail["In-Reply-To"] == "<abc@example.com>" and thread == "t1"
+    assert not mail.is_multipart() and mail.get_content_type() == "text/plain"   # no attachments
+    log = audit.entries()
+    assert [e["event"] for e in log] == ["drafted", "approved", "sent"]
+    assert "send them tonight" not in json.dumps(log)                          # the text isn't logged
+
+
+def test_a_changed_draft_needs_a_new_yes():
+    client, _, tool = _reply_tools()
+    first = tool.execute(request="reply to email 1 saying yes")
+    second = tool.execute(request="change the reply to: Sorry, I can't make it on Tuesday")
+    assert "Sorry, I can't make it on Tuesday." in second.message and second.needs_confirmation
+    assert first.data["fingerprint"] != second.data["fingerprint"]
+    stale = first.confirm()                                                    # a yes to the old draft
+    assert not stale.success and client.sent == []
+    assert second.confirm().success and len(client.sent) == 1
+
+
+def test_no_sending_without_googles_permission_or_aurora_s():
+    client, _, tool = _reply_tools(scopes=(READ_ONLY,))
+    result = tool.execute(request="reply to email 1 saying yes")
+    assert not result.success and "Allow replies" in result.message and client.sent == []
+
+    from aurora.kernel.permissions import PermissionManager
+    from aurora.tools.executor import ToolExecutor
+    from aurora.tools.tool_manager import ToolManager
+    _, reader, reply = _reply_tools()
+    tools = ToolManager(PermissionManager({"GmailReply": ["network", "email.read"]}))   # no email.send
+    tools.register(reply)
+    outcome = ToolExecutor(tools).execute(Router().route("reply to email 1 saying yes"))
+    assert not outcome.success and not outcome.needs_confirmation
+
+
+def test_a_reply_to_elsewhere_is_shown_and_not_used():
+    original = parse(message(sender="Bank <help@bank.example>", subject="Verify",
+                             extra_headers=[("Reply-To", "collect@other.example")]))
+    item = draft(original, "saying no thanks", "me@example.com")
+    assert item.to == "help@bank.example" and "collect@other.example" in item.note
+
+
+def test_reply_routing_and_yes_phrases():
+    from aurora.kernel.engine import _YES
+    for text in ("reply to email 2 saying that I will attend the meeting", "Reply to Alex saying thanks",
+                 "change the reply to: see you at 10"):
+        decision = Router().route(text)
+        assert decision.intent is Intent.EMAIL_REPLY and decision.target == "GmailReply"
+    assert Router().route("check my gmail").intent is Intent.EMAIL
+    for yes in ("yes", "Yes, send it.", "send it", "yes send it now"):
+        assert _YES.match(yes)
+    for not_yes in ("yes but change it", "maybe", "send it to Bob instead"):
+        assert not _YES.match(not_yes)
+
+
+def test_the_report_counts_only_what_was_really_sent():
+    client, _, tool = _reply_tools()
+    tool.execute(request="reply to email 1 saying one").confirm()
+    tool.execute(request="reply to email 1 saying two")                       # drafted, never approved
+    report = build(Inbox(client, today=lambda: date.today()), datetime.now())
+    assert report.sent_today == 1 and report.unsent_drafts == 1
+    assert "Replies sent with your approval today: 1" in report.text()

@@ -18,6 +18,7 @@ from aurora.tool_plugins.routines_tool import RoutinesTool
 from aurora.tool_plugins.numbers import NumbersTool
 from aurora.tool_plugins.news import NewsTool
 from aurora.tool_plugins.gmail import GmailTool
+from aurora.tool_plugins.gmail_reply import GmailReplyTool
 from aurora.tool_plugins.research import ArxivTool, WikipediaTool
 from aurora.tool_plugins.sensors import HealthTool, SensorsTool
 from aurora.sensors.hub import SensorHub
@@ -44,7 +45,8 @@ def default_tools(
         WikipediaTool(http_client),
         ArxivTool(http_client),
         NewsTool(),
-        GmailTool(),
+        gmail := GmailTool(),
+        GmailReplyTool(gmail),
         DocumentsTool(),
         KnowledgeTool(),
         CameraTool(),

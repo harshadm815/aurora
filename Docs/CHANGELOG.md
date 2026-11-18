@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.58.0 — Email replies, one yes per email (2026-11-18)
+
+### Added
+- **Replies** ("reply to email 1 saying I'll attend the meeting", "reply to Alex saying thanks"):
+  drafted from your own words, shown in full (recipient, subject, text) and sent only after your
+  yes to that exact message ("yes" or "yes, send it"); anything else sends nothing. "change the
+  reply to: …" makes a new draft that needs a new yes; a yes to an older draft is refused.
+- Two locks: AURORA's `email.send` permission (the new GmailReply tool) and Google's send
+  permission (Settings → Gmail → Allow replies…). No attachments. A Reply-To at another domain (a
+  phishing sign) is shown and not used.
+- Audit trail `Data\email_audit.jsonl`: drafted, approved, sent, refused, failed (who, when,
+  Gmail's id, a fingerprint of the text; never the text). The end-of-day report counts replies
+  really sent and drafts not sent.
+
+### Fixed
+- "change the reply to: see you at 10" was taken for a device command.
+
 ## 0.57.0 — End-of-day email report, on the PC and the phone (2026-11-17)
 
 ### Added

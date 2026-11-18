@@ -40,6 +40,24 @@ Google's own page, and you can revoke AURORA's access at any time.
     connected to Gmail." Close the tab.
 12. In Chat: "check my Gmail".
 
+## Replies (optional)
+
+AURORA can send replies you approve, one yes per email. To allow it:
+
+1. Google Cloud → **Google Auth Platform → Data access → Add or remove scopes** → also tick
+   `https://www.googleapis.com/auth/gmail.send` (send email on your behalf) → Update → Save.
+2. AURORA → **Settings → Gmail → Allow replies…** → approve in the browser (Google lists reading
+   and sending).
+3. In Chat: "check my Gmail", then "reply to email 1 saying I'll be there". AURORA shows the
+   recipient, subject and the whole text, and sends only when you answer **yes** (or "yes, send
+   it"). Anything else sends nothing; "change the reply to: …" makes a new draft that needs a new
+   yes. No attachments. Every draft, approval and send is listed in `Data\email_audit.jsonl`
+   (who, when, Gmail's id; never the text).
+4. Optional signature: in `aurora/config/local_settings.py`, `GMAIL_SIGNATURE = "Best regards,\nYour name"`.
+
+To stop sending: Settings → Gmail → Disconnect, then Connect again (read-only), or remove the
+`"GmailReply"` line from PERMISSION_GRANTS.
+
 ## End-of-day report
 
 Settings → Gmail → tick **End-of-day email report at**, choose the time and where it's announced

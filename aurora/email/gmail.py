@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 
 API = "https://gmail.googleapis.com/gmail/v1/users/me"
 KEEP_HEADERS = ("From", "To", "Cc", "Subject", "Date", "Reply-To", "List-Unsubscribe", "List-Id",
-                "Authentication-Results", "Return-Path", "Message-ID", "In-Reply-To")
+                "Authentication-Results", "Return-Path", "Message-ID", "In-Reply-To", "References")
 MAX_BODY = 20_000
 
 
@@ -169,6 +169,29 @@ class GmailClient:
     def message(self, message_id: str, full: bool = False) -> Email:
         params = {"format": "full"} if full else {"format": "metadata", "metadataHeaders": list(KEEP_HEADERS)}
         return parse(self._get(f"/messages/{message_id}", params))
+
+    def send(self, raw: str, thread_id: str = "") -> str:
+        """Sends one email (base64url RFC 822, made by reply.mime). Returns Gmail's id for it.
+        Called only by the reply tool after your yes to that exact message; never retried on its own."""
+        try:
+            token = self.auth.access_token()
+        except AuthError as error:
+            raise GmailError(str(error))
+        body = {"raw": raw, **({"threadId": thread_id} if thread_id else {})}
+        try:
+            response = self.http.post(API + "/messages/send", json=body, timeout=30,
+                                      headers={"Authorization": f"Bearer {token}"})
+        except NetworkBlocked as error:
+            raise GmailError(str(error))
+        except httpx.HTTPError as error:
+            raise GmailError(f"Couldn't reach Gmail ({type(error).__name__}); the email was NOT sent.", retryable=True)
+        if response.status_code == 200:
+            return response.json().get("id", "")
+        if response.status_code == 403:
+            raise GmailError("Gmail refused to send: AURORA doesn't have permission to send (Settings → Gmail → "
+                             "Allow replies…). The email was NOT sent.")
+        raise GmailError(f"Gmail refused to send ({response.status_code}); the email was NOT sent.",
+                         retryable=response.status_code >= 500)
 
     def thread(self, thread_id: str) -> list[Email]:
         data = self._get(f"/threads/{thread_id}", {"format": "full"})

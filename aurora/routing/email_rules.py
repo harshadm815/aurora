@@ -26,8 +26,15 @@ _NOT_THIS = re.compile(r"\b(remind me|every (day|morning|evening|week)|send|repl
                        re.I)
 
 
+_REPLY = re.compile(r"^\s*(?:aurora,?\s+)?(?:please\s+)?(?:reply|respond|write back)\b(?!\s+all)"
+                    r"|^\s*(?:please\s+)?(?:change|edit|rewrite)\s+(?:the|my|that)?\s*(?:reply|draft)\b", re.I)
+
+
 def email_rule(original: str, body: str) -> RouteDecision | None:
     text = (body or original).strip()
+    if _REPLY.search(text):
+        return RouteDecision(Intent.EMAIL_REPLY, 0.93, targets.GMAIL_REPLY, {"request": text},
+                             "The user wants to reply to an email (it's drafted and needs their yes).")
     if _FOLLOW_UP.search(text):
         return RouteDecision(Intent.EMAIL, 0.9, targets.GMAIL, {"request": text},
                              "A follow-up about an email AURORA listed.")

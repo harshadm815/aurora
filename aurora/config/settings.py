@@ -9,7 +9,7 @@ import sys
 from pathlib import Path
 
 APP_NAME = "AURORA"
-VERSION = "0.57.0"
+VERSION = "0.58.0"
 
 USER_NAME = "Harry"
 
@@ -132,6 +132,9 @@ PERMISSION_GRANTS: dict[str, list[str]] = {
     # Gmail Assistant, read-only (after you connect it in Settings → Gmail): talks only to Google's
     # sign-in and Gmail servers. Remove the line to switch it off.
     "Gmail": ["network", "email.read"],
+    # Replies you approve, one yes per email (Settings → Gmail → Allow replies… asks Google too).
+    # Remove the line and AURORA can't send email at all.
+    "GmailReply": ["network", "email.read", "email.send"],
     "Wikipedia": ["network"],  # Sends the topic to en.wikipedia.org.
     "arXiv": ["network"],      # Sends the topic to export.arxiv.org.
     # Reads .txt/.md/.pdf files, only inside DOCUMENTS_DIR.
@@ -219,6 +222,9 @@ NETWORK_SERVICES = {
     "Gmail": {"name": "Gmail", "hosts": ["oauth2.googleapis.com", "gmail.googleapis.com"],
               "purpose": "your Gmail, read-only",
               "sends": "AURORA's Google sign-in and which emails to read; nothing else about you"},
+    "GmailReply": {"name": "Gmail (replies)", "hosts": ["oauth2.googleapis.com", "gmail.googleapis.com"],
+                   "purpose": "sending a reply you approved",
+                   "sends": "that one reply, exactly as you approved it"},
     # Publisher feeds (NEWS_FEEDS below) are added to News's hosts at start.
     "News": {"name": "News", "hosts": ["api.gdeltproject.org", "news.google.com", "api.search.brave.com"],
              "purpose": "the news search you asked for",
@@ -306,6 +312,10 @@ EXPLORER_DATABASE_PATH = PROJECT_ROOT / "aurora_explorer.db"
 GMAIL_CLIENT_FILE = DATA_DIR / "google_oauth_client.json"
 GMAIL_TOKEN_FILE = DATA_DIR / "gmail_signin.bin"
 GMAIL_WORK_DOMAINS: tuple[str, ...] = ()
+# Your name or sign-off under replies AURORA drafts ("" = none), e.g. "Best regards,\nMeena".
+GMAIL_SIGNATURE = ""
+# Every draft, approval and send (who, when, Gmail's id, a fingerprint of the text; never the text).
+EMAIL_AUDIT_FILE = DATA_DIR / "email_audit.jsonl"
 # The latest end-of-day email report (encrypted like the sign-in: it lists senders and subjects).
 EMAIL_REPORT_FILE = DATA_DIR / "email_report.bin"
 

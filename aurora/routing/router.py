@@ -608,6 +608,8 @@ def devices_rule(original: str, body: str) -> RouteDecision | None:
         match = pattern.match(text)
         if not match:
             continue
+        if re.search(r"\b(?:reply|draft|e-?mail|message)\b", match.group("device"), re.I):
+            continue                     # "change the reply to: see you at 10" is an email draft, not a device
         action = fixed_action or match.group("action").lower()
         arguments = {"action": action, "device": match.group("device").strip()}
         if action == "set":

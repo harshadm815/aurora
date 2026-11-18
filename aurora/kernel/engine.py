@@ -62,7 +62,8 @@ def is_factual_question(message: str) -> bool:
     return bool(text) and bool(text.endswith("?") or _QUESTION_START.match(text)) and not _PERSONAL.search(text)
 
 
-_YES = re.compile(r"^(?:y|yes|yeah|yep|sure|ok|okay|confirm|do it|go ahead)[.!]*$", re.I)
+_YES = re.compile(r"^(?:y|yes|yeah|yep|sure|ok|okay|confirm|do it|go ahead|send it|yes,?\s+(?:send|do) it(?: now)?)[.!]*$",
+                  re.I)
 _NO = re.compile(r"^(?:n|no|nope|cancel|stop|don'?t|never ?mind)[.!]*$", re.I)
 
 

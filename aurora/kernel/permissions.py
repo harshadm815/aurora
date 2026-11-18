@@ -29,6 +29,7 @@ class Permission(Enum):
     APPS_LAUNCH = "apps.launch"          # open programs from APPS (an allow-list)
     AUTOMATION = "automation"            # scheduled tasks that run without asking each time
     EMAIL_READ = "email.read"            # read your Gmail (after you connect it; read-only)
+    EMAIL_SEND = "email.send"            # send replies you approved, one yes per email
 
 
 class PermissionDeniedError(PermissionError):

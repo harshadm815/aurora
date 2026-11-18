@@ -126,7 +126,7 @@ about B will be claimed working until tested with a test number.
 2. ✔ (0.56.0) Gmail read-only: setup guide, OAuth (PKCE, DPAPI), inbox, sorting,
    search, summaries, the Gmail page on the PC, commands in Chat, tests with
    recorded API responses (no real mail in tests).
-3. Replies with per-message approval and the audit log.
+3. ✔ (0.58.0) Replies with per-message approval and the audit log.
 4. ✔ (0.57.0, built before 3 at your request) Daily email report (PC and phone),
    tried on your real mail: notifications arrived on the PC and the phone.
 5. Call screening, Approach A: the phone's screening role, rules,

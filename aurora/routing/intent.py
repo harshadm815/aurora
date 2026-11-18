@@ -29,6 +29,7 @@ class Intent(Enum):
     FILES = "files"                 # Tidy an allowed folder (previewed, confirmed, undoable).
     SCHEDULE = "schedule"           # Add, list, pause or delete scheduled tasks.
     EMAIL = "email"                 # Check, search or summarise the user's Gmail (read-only).
+    EMAIL_REPLY = "email_reply"     # Draft a reply to an email; sent only after the user's yes.
     BRIEFING = "briefing"           # Today's reminders, scheduled tasks and recent research.
     UNDO = "undo"                   # Reverse the last reversible action (asks first).
     CLARIFY = "clarify"             # Too ambiguous: ask the user what they meant.

@@ -206,7 +206,12 @@ class SettingsView(BaseView):
         self.gmail_disconnect = QPushButton("Disconnect")
         self.gmail_disconnect.setObjectName("Danger")
         self.gmail_disconnect.clicked.connect(self._disconnect_gmail)
+        self.gmail_replies = QPushButton("Allow replies…")
+        self.gmail_replies.setToolTip("Asks Google (in your browser) to let AURORA send replies. Even then, AURORA "
+                                      "sends nothing unless you say yes to each exact email it shows you.")
+        self.gmail_replies.clicked.connect(lambda: self._connect_gmail(replies=True))
         gmail_row.addWidget(self.gmail_connect)
+        gmail_row.addWidget(self.gmail_replies)
         gmail_row.addWidget(self.gmail_disconnect)
         gmail_row.addStretch(1)
         gmail.add_layout(gmail_row)
@@ -491,14 +496,19 @@ class SettingsView(BaseView):
 
     def _refresh_gmail(self, note: str = ""):
         from aurora.email.oauth import AuthError
+        from aurora.email.oauth import SEND
+        replies = False
         try:
             auth = self._gmail_auth()
             connected = auth.connected
-            text = ("Connected (read-only)." if connected else "Not connected.")
+            replies = connected and SEND in auth.scopes
+            text = ("Connected (read and reply: every email needs your yes)." if replies else
+                    "Connected (read-only)." if connected else "Not connected.")
         except AuthError as error:
             connected, text = False, str(error)
         self.gmail_status.setText(text + (f"  {note}" if note else ""))
         self.gmail_connect.setEnabled(not connected and "missing" not in text and "isn't a" not in text)
+        self.gmail_replies.setEnabled(connected and not replies)
         self.gmail_disconnect.setEnabled(connected)
 
     def _save_report(self):
@@ -527,12 +537,15 @@ class SettingsView(BaseView):
 
         self.backend.run_io(lambda: self.backend.email_reporter.make(scheduled=False), done, failed)
 
-    def _connect_gmail(self):
+    def _connect_gmail(self, replies: bool = False):
+        from aurora.email.oauth import READ_ONLY, SEND
         from aurora.network import gate
         gate.approve("Gmail")                     # pressing Connect is your yes to contacting Google (this session)
         self.gmail_connect.setEnabled(False)
+        self.gmail_replies.setEnabled(False)
         self.gmail_status.setText("Waiting for you to sign in in the browser (up to 5 minutes)…")
-        self.backend.run_io(lambda: self._gmail_auth().connect(),
+        scopes = (READ_ONLY, SEND) if replies else (READ_ONLY,)
+        self.backend.run_io(lambda: self._gmail_auth().connect(scopes),
                             lambda granted: self._refresh_gmail("Gmail is ready: ask \"check my Gmail\" in Chat."),
                             lambda error: self._refresh_gmail(f"Not connected: {error}"))
 

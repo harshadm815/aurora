@@ -38,6 +38,7 @@ AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 TOKEN_URL = "https://oauth2.googleapis.com/token"
 REVOKE_URL = "https://oauth2.googleapis.com/revoke"
 READ_ONLY = "https://www.googleapis.com/auth/gmail.readonly"
+SEND = "https://www.googleapis.com/auth/gmail.send"           # replies you approve (asked for separately)
 SIGN_IN_SECONDS = 300
 
 

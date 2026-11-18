@@ -43,6 +43,7 @@ INTENT_TOOLS = {
     Intent.PAPERS: "arXiv",
     Intent.NEWS: "News",
     Intent.EMAIL: "Gmail",
+    Intent.EMAIL_REPLY: "GmailReply",
     Intent.DOCUMENTS: "Documents",
     Intent.KNOWLEDGE_BASE: "Knowledge",
     Intent.VISION: "Camera",
